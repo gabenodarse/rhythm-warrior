@@ -1,0 +1,7 @@
+****music_mercenary.js uses workaround because instantiateStreaming doesn't function correctly (MIME type not working??)
+	https://stackoverflow.com/questions/52239924/webassembly-instantiatestreaming-wrong-mime-type 
+	-- defaulting to using "instantiate" instead of "instantiateStreaming"
+
+****
+Make sure things work in all browsers
+	Especially ESModules, a newer software

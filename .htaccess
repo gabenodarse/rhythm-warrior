@@ -1,0 +1,7 @@
+
+ErrorDocument 404 /music-mercenary/notfound.html
+
+AddType application/json json
+#AddType application/wasm wasm
+#AddHandler application/wasm wasm
+
