@@ -1,4 +1,4 @@
 {
-  "BALL": "./images/ball.jpg",
-  "BRICK": "./images/brick.jpg"
+  "Player": "./images/player.png",
+  "Brick": "./images/brick.jpg"
 }
