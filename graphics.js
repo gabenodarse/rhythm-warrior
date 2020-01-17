@@ -1,4 +1,4 @@
-import * as myWasm from "./pkg/music_mercenary.js"; //>:< split into modules and change import name from myWasm
+import * as myWasm from "./pkg/music_mercenary.js"; // !!! split into modules and change import name from myWasm
 
 
 // >:< working with memory
@@ -7,7 +7,7 @@ import * as myWasm from "./pkg/music_mercenary.js"; //>:< split into modules and
 // let inputArray = new Uint8Array(foo.memory.buffer, myWasm.get_array_ptr(), 6);
 
 
-const NUM_GRAPHICS = 3; // >:< make a derivative of the rust source code
+const NUM_GRAPHICS = 2; // >:< derive from the rust source code
 
 
 let g_gameCanvas = document.createElement('canvas');
@@ -20,10 +20,9 @@ g_gameCanvas.width = 1000;
 g_gameCanvas.height = 600;
 
 
-// >:< refactor to a file other than graphics
+// !!! refactor to a file other than graphics
 function initGame() {
 	// !!! throw any errors
-	// myWasm.init_game(5); // >:<
 	let myGame = myWasm.Game.new();
 	
 	document.addEventListener("keydown", event => {
@@ -59,12 +58,7 @@ function initGame() {
 
 //load all images from files into canvas contexts
 async function load_images(resourceLocations){
-	console.log("begin load");
 	let results = [];
-	// >:< get from initialized universe
-	// let sizes = new Uint8Array(memory.memory.buffer, myWasm.get_array(), 3); 
-	// console.log(sizes[0]);
-	
 	
 	function loadImage(imgKey, canvasID) {
 		return new Promise(r => {
@@ -73,12 +67,12 @@ async function load_images(resourceLocations){
 			img.onload = (() => {
 				console.log("loaded 1");
 				g_canvases[canvasID] = document.createElement('canvas'); // !!! make sure canvas can be created
-				// >:< arbitrary dimensions
+				
 				let size = myWasm.get_graphic_size(canvasID);
 				g_canvases[canvasID].height = size.y;
 				g_canvases[canvasID].width = size.x;
 				g_canvases[canvasID].getContext('2d').drawImage(img, 0, 0, size.x, size.y); 
-				r(img);
+				r();
 			});
 			img.src = resourceLocations[imgKey]; // !!! add error handling (onfail if that exists, or a timeout)
 		});
@@ -144,7 +138,7 @@ export async function run() {
 		
 		// >:<
 		if (now - last > 2000) { 
-			gameInstance.tick(now - last);
+			gameInstance.tick((now - last) / 1000); // convert to seconds
 			renderAll(gameInstance.get_instructions());
 			// !!! get fps
 			
