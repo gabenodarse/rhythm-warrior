@@ -27,6 +27,10 @@ use js_sys::Array;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 
+const GAME_WIDTH: u32 = 1920;
+const GAME_HEIGHT: u32 = 1080;
+
+
 mod game {
 	// !!! split into modules, and bring only used crates into scope
 	use crate::*;
@@ -98,6 +102,11 @@ mod game {
 		pub fn get_instructions(&self) -> Array {
 			let foo = vec!(
 				PositionedGraphic {
+					g: Graphic::Background,
+					x: 0,
+					y: objects::GROUND_POS as i32
+				},
+				PositionedGraphic {
 					g: self.player.get_graphic(),
 					x: self.player.get_left_x(),
 					y: self.player.get_top_y()
@@ -122,12 +131,12 @@ mod objects {
 
 	// !!! maybe don't use global/static state?
 	static mut BRICK_SPEED: f32 = 0.0; // the speed at which bricks move up the screen
-	const GROUND_POS: f32 = 160.0;
+	pub const GROUND_POS: f32 = 240.0;
 	const LEFT_BOUNDARY: f32 = 0.0;
-	const RIGHT_BOUNDARY: f32 = 1920.0;
+	const RIGHT_BOUNDARY: f32 = crate::GAME_WIDTH as f32;
 	// !!! Create a top boundary? At least for logging possible anomalies?
 	const F32_ZERO: f32 = 0.0000001; // approximately zero for float numbers. any x between -F32_ZERO and +F32_ZERO is essentially 0
-	const JUMP_SPEED: f32 = -15.0;
+	const JUMP_SPEED: f32 = -200.0;
 	
 	
 	pub trait Object {
@@ -183,32 +192,35 @@ mod objects {
 			// handle jump
 			if distance_from_ground > -F32_ZERO && self.dy > -F32_ZERO && self.jumping {
 				// !!! smoother jump??? Meaning, not maximum speed instantly
-				// !!! hit floor first???
 				self.dy = JUMP_SPEED;
 			}
+			// !!! if it will hit the floor on next tick, don't set jumping to false
 			self.jumping = false;
 			
 			// handle lateral movement
 			if self.moving_right ^ self.moving_left {
 				if self.moving_right {
-					self.dx = (self.dx * 2.0 + 20.0) / 3.0; 
+					self.dx = ((self.dx + 1200.0) / 4.0) * seconds_passed + self.dx * (1.0 - seconds_passed); 
 				} else {
-					self.dx = (self.dx * 2.0 - 20.0) / 3.0; 
+					self.dx = ((self.dx - 1200.0) / 4.0) * seconds_passed + self.dx * (1.0 - seconds_passed); 
 				}
 			} else {
-				self.dx = self.dx / 10.0;
+				self.dx = (self.dx / 10.0) * seconds_passed + self.dx * (1.0 - seconds_passed);
 			}
+			
+			
 			
 			// handle vertical movement and gravity
 			if self.moving_down ^ self.moving_up {
 				if self.moving_up {
-					self.dy += 2.0;
+					self.dy += 100.0 * seconds_passed;
 				} else {
-					self.dy += 8.0;
+					self.dy += 300.0 * seconds_passed;
 				}
 			} else {
-				self.dy += 4.0;
+				self.dy += 200.0 * seconds_passed;
 			}
+		
 			
 			
 			// calculate resulting position, while checking to not go past any boundaries
@@ -217,9 +229,11 @@ mod objects {
 			if self.left_x < LEFT_BOUNDARY {
 				self.right_x -= self.left_x - LEFT_BOUNDARY;
 				self.left_x -= self.left_x - LEFT_BOUNDARY;
+				self.dx = 0.0;
 			} else if self.right_x > RIGHT_BOUNDARY {
 				self.left_x -= self.right_x - RIGHT_BOUNDARY;
 				self.right_x -= self.right_x - RIGHT_BOUNDARY;
+				self.dx = 0.0;
 			}
 			
 			
@@ -230,14 +244,13 @@ mod objects {
 				self.bottom_y -= self.bottom_y - GROUND_POS;
 			}
 			
-			crate::alert(&format!("x: {}, y: {}, dx: {}, dy: {}", self.left_x, self.top_y, self.dx, self.dy)); // >:<
 		}
 	}
 	impl Player {
 		
 		pub fn new() -> Player {
 			let size: PositionedGraphic = crate::get_graphic_size(Graphic::Player);
-			const X: f32 = 300.0; // !!! take starting pos as parameters
+			const X: f32 = 850.0; // !!! take starting pos as parameters
 			const Y: f32 = 0.0;
 			
 			Player {
@@ -318,8 +331,9 @@ extern {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum Graphic {
-	Player = 0,
-	Brick = 1,
+	Background = 0,
+	Player = 1,
+	Brick = 2,
 }
 #[wasm_bindgen]
 pub struct PositionedGraphic {
@@ -329,14 +343,19 @@ pub struct PositionedGraphic {
 }
 
 
-// !!! split object dimensions and graphic dimensions
+// TODO split object dimensions and graphic dimensions
 #[wasm_bindgen]
 pub fn get_graphic_size(g: Graphic) -> PositionedGraphic {
 	return match g {
+		Graphic::Background => { PositionedGraphic {
+			g,
+			x: GAME_WIDTH as i32,
+			y: GAME_HEIGHT as i32,
+		}},
 		Graphic::Player => { PositionedGraphic {
 			g,
-			x: 60,
-			y: 60,
+			x: 45,
+			y: 90,
 		}},
 		Graphic::Brick => { PositionedGraphic {
 			g,

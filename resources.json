@@ -1,4 +1,5 @@
 {
   "Player": "./images/player.png",
-  "Brick": "./images/brick.jpg"
+  "Brick": "./images/brick.jpg",
+  "Background": "./images/background.png"
 }
