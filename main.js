@@ -33,7 +33,7 @@ export async function run() {
 		
 		
 		// >:<
-		// if (now - last > 2000) { 
+		// handle if there's too long a time between ticks
 		gameInstance.tick((now - last) / 1000); // convert to seconds
 		graphics.renderAll(gameInstance.get_instructions());
 		// !!! get fps

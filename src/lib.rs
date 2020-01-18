@@ -1,7 +1,8 @@
+// >:<
+// Gather ALL key presses
+
 // TODO
 // create the data structure to hold objects in order of layer
-// how to manage pixel location in the event of resizing? 
-	// - multiply base pixel values based on 1920x1080 by constant factor to achieve window size
 // Should SVGs be translated to a jpg/png of an appropriate size?
 // Create a function to load a new image for a given identifier
 
@@ -15,6 +16,11 @@
 	// wasm function ends??
 // decide if objects should be global or exported structures
 // add support for different controls
+// I would like to do create a member in Game like so: objects: Vec<T: objects::Object>, but as of 1/17 it is not possible
+	// follow https://github.com/rust-lang/rust/issues/52662
+
+// TESTS
+	// test that objects have correct dimensions
 
 
 
@@ -34,25 +40,77 @@ const GAME_HEIGHT: u32 = 1080;
 mod objects;
 
 mod game {
-	// !!! split into modules, and bring only used crates into scope
 	use crate::*;
-	use crate::objects::Object; // needed to use member's methods that are implemented as a part of trait Object
-	//use crate::objects;
+	use crate::objects::Object; // needed to use member's methods that are implemented as a part of trait Object=
+	// >:< use objects::Brick;
+	// >:< use objects::Player;
 	
 	
 	#[wasm_bindgen]
 	pub struct Game {
 		// !!! create a copy of the reference to player and bricks in a data structure for ordering objects
 			// the objects either point to subsequently positioned objects or not (Option type)
+		time_running: f32, // >:<
 		player: objects::Player,
-		
+		bricks: Vec<objects::Brick>,
+		upcoming_bricks: Vec<UpcomingBrick>,
 	}
 	#[wasm_bindgen]
 	impl Game {
 		pub fn new () -> Game {
 			Game {
-				player: objects::Player::new()
+				time_running: 0.0,
+				player: objects::Player::new(),
+				bricks: vec!(),
+				
+				// !!! load bricks
+				upcoming_bricks: vec!(
+					UpcomingBrick{ 
+						brick: objects::Brick::new(),
+						time: 1.0,
+					}
+				),
 			}
+		}
+		
+		
+		pub fn tick(&mut self, seconds_passed: f32) {
+			self.time_running += seconds_passed;
+			self.player.tick(seconds_passed);
+			for brick in &mut self.bricks {
+				brick.tick(seconds_passed);
+			}
+			
+			// add any bricks from upcoming_bricks that have reached the time to appear
+			let mut last_idx: i32 = self.upcoming_bricks.len() as i32 - 1;
+			while last_idx >= 0 {
+				if self.upcoming_bricks[last_idx as usize].time < self.time_running {
+					let time_difference = self.time_running - self.upcoming_bricks[last_idx as usize].time;
+					self.upcoming_bricks[last_idx as usize].brick.tick(time_difference);
+					self.bricks.push(self.upcoming_bricks.pop().unwrap().brick);
+					last_idx -= 1;
+				} else {
+					break;
+				}
+			}
+			
+			// >:< destroy/handle bricks that are off screen
+		}
+		
+		
+		pub fn get_instructions(&self) -> Array {
+			let mut instructions = vec!(
+				PositionedGraphic {
+					g: Graphic::Background,
+					x: 0,
+					y: objects::GROUND_POS as i32
+				},
+				self.player.get_rendering_instruction(),
+			);
+			for brick in &self.bricks {
+				instructions.push(brick.get_rendering_instruction());
+			}
+			instructions.into_iter().map(JsValue::from).collect()
 		}
 		
 		
@@ -96,31 +154,15 @@ mod game {
 		}
 		
 		
-		pub fn tick(&mut self, seconds_passed: f32) {
-			self.player.tick(seconds_passed);
+		fn check_upcoming_bricks() {
+			
 		}
-		
-		
-		pub fn get_instructions(&self) -> Array {
-			let foo = vec!(
-				PositionedGraphic {
-					g: Graphic::Background,
-					x: 0,
-					y: objects::GROUND_POS as i32
-				},
-				PositionedGraphic {
-					g: self.player.get_graphic(),
-					x: self.player.get_left_x(),
-					y: self.player.get_top_y()
-				},
-				PositionedGraphic { // >:< create a brick object
-					g: Graphic::Brick ,
-					x: 0,
-					y: 200,
-				}
-			);
-			foo.into_iter().map(JsValue::from).collect()
-		}
+	}
+	
+	// TODO assert/test that the appearance_time of bricks is in order
+	struct UpcomingBrick {
+		brick: objects::Brick,
+		time: f32, // time of appearance in seconds since the start of the program
 	}
 }
 
@@ -172,8 +214,8 @@ pub fn get_graphic_size(g: Graphic) -> PositionedGraphic {
 		}},
 		Graphic::Brick => { PositionedGraphic {
 			g,
-			x: 100,
-			y: 200,
+			x: 60,
+			y: 120,
 		}},
 	};
 }

@@ -1,12 +1,10 @@
 
-
-// !!! split into modules, and bring only used crates into scope
 use crate::Graphic;
 use crate::PositionedGraphic;
 
 
 // !!! maybe don't use global/static state?
-static mut BRICK_SPEED: f32 = 0.0; // the speed at which bricks move up the screen
+static mut BRICK_SPEED: f32 = 250.0; // the speed at which bricks move up the screen
 pub const GROUND_POS: f32 = 240.0;
 const LEFT_BOUNDARY: f32 = 0.0;
 const RIGHT_BOUNDARY: f32 = crate::GAME_WIDTH as f32;
@@ -16,9 +14,9 @@ const JUMP_SPEED: f32 = -200.0;
 
 
 pub trait Object {
-	fn get_graphic(&self) -> Graphic;
 	fn get_left_x(&self) -> i32;
 	fn get_top_y(&self) -> i32;
+	fn get_rendering_instruction(&self) -> PositionedGraphic;
 	fn tick(&mut self, seconds_passed: f32);
 }
 
@@ -28,9 +26,10 @@ pub trait Object {
 	// or create functions that are added to a vector of functions to execute if the corresponding key was pressed
 pub struct Player {
 	graphic: Graphic,
+	
+	// using right_x and bottom_y rather than sizes because more comparisons between objects are possible than updates of positions
 	left_x: f32,
 	top_y: f32,
-	// using right_x and bottom_y rather than sizes because more comparisons between objects are possible than updates of positions
 	right_x: f32, 
 	bottom_y: f32,
 	dx: f32, // in pixels per second
@@ -42,16 +41,31 @@ pub struct Player {
 	moving_left: bool,
 	moving_right: bool
 }
+
+#[derive(Clone, Copy)]
+pub struct Brick {
+	graphic: Graphic,
+	left_x: f32,
+	top_y: f32,
+	right_x: f32,
+	bottom_y: f32
+}
+
+
 impl Object for Player {
 	
-	fn get_graphic(&self) -> Graphic {
-		self.graphic
-	}
 	fn get_left_x(&self) -> i32 {
 		self.left_x as i32
 	}
 	fn get_top_y(&self) -> i32 {
 		self.top_y as i32
+	}
+	fn get_rendering_instruction(&self) -> PositionedGraphic {
+		PositionedGraphic {
+			g: self.graphic,
+			x: self.left_x as i32,
+			y: self.top_y as i32,
+		}
 	}
 	
 	
@@ -125,7 +139,7 @@ impl Object for Player {
 impl Player {
 	
 	pub fn new() -> Player {
-		let size: PositionedGraphic = crate::get_graphic_size(Graphic::Player);
+		let size: PositionedGraphic = crate::get_graphic_size(Graphic::Player); // >:<
 		const X: f32 = 850.0; // !!! take starting pos as parameters
 		const Y: f32 = 0.0;
 		
@@ -178,10 +192,38 @@ impl Player {
 }
 
 
-pub struct Brick {
-	graphic: Graphic,
-	left_x: f32,
-	top_y: f32,
-	right_x: f32,
-	bottom_y: f32
+impl Object for Brick {
+	fn get_left_x(&self) -> i32 {
+		self.left_x as i32
+	}
+	fn get_top_y(&self) -> i32 {
+		self.top_y as i32
+	}
+	fn get_rendering_instruction(&self) -> PositionedGraphic {
+		PositionedGraphic {
+			g: self.graphic,
+			x: self.left_x as i32,
+			y: self.top_y as i32,
+		}
+	}
+	
+	
+	fn tick(&mut self, seconds_passed: f32) {
+		unsafe { self.top_y -= BRICK_SPEED * seconds_passed; }
+		unsafe { self.bottom_y -= BRICK_SPEED * seconds_passed; }
+	}
 }
+impl Brick {
+	pub fn new() -> Brick { // >:< take position parameters
+		let size: PositionedGraphic = crate::get_graphic_size(Graphic::Brick); // >:<
+		Brick {
+			graphic: Graphic::Brick,
+			left_x: 0.0,
+			top_y: crate::GAME_HEIGHT as f32,
+			right_x: size.x as f32,
+			bottom_y: crate::GAME_HEIGHT as f32 + size.y as f32,
+		}
+	}
+}
+
+
