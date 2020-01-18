@@ -1,3 +1,3 @@
-import * as graphics from "./graphics.js";
+import * as game from "./main.js";
 
-graphics.run();
+game.run();
