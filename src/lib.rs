@@ -1,5 +1,3 @@
-// >:<
-// Gather ALL key presses
 
 // TODO
 // create the data structure to hold objects in order of layer
@@ -42,6 +40,7 @@ mod objects;
 mod game {
 	use crate::*;
 	use crate::objects::Object; // needed to use member's methods that are implemented as a part of trait Object=
+	use std::collections::VecDeque;
 	// >:< use objects::Brick;
 	// >:< use objects::Player;
 	
@@ -50,10 +49,10 @@ mod game {
 	pub struct Game {
 		// !!! create a copy of the reference to player and bricks in a data structure for ordering objects
 			// the objects either point to subsequently positioned objects or not (Option type)
-		time_running: f32, // >:<
+		time_running: f32,
 		player: objects::Player,
-		bricks: Vec<objects::Brick>,
-		upcoming_bricks: Vec<UpcomingBrick>,
+		bricks: VecDeque<objects::Brick>,
+		upcoming_bricks: Vec<UpcomingBrick>, // a vector of the upcoming bricks, ordered by time of appearance
 	}
 	#[wasm_bindgen]
 	impl Game {
@@ -61,7 +60,7 @@ mod game {
 			Game {
 				time_running: 0.0,
 				player: objects::Player::new(),
-				bricks: vec!(),
+				bricks: VecDeque::new(),
 				
 				// !!! load bricks
 				upcoming_bricks: vec!(
@@ -77,23 +76,10 @@ mod game {
 		pub fn tick(&mut self, seconds_passed: f32) {
 			self.time_running += seconds_passed;
 			self.player.tick(seconds_passed);
-			for brick in &mut self.bricks {
+			for brick in self.bricks.iter_mut() {
 				brick.tick(seconds_passed);
 			}
-			
-			// add any bricks from upcoming_bricks that have reached the time to appear
-			let mut last_idx: i32 = self.upcoming_bricks.len() as i32 - 1;
-			while last_idx >= 0 {
-				if self.upcoming_bricks[last_idx as usize].time < self.time_running {
-					let time_difference = self.time_running - self.upcoming_bricks[last_idx as usize].time;
-					self.upcoming_bricks[last_idx as usize].brick.tick(time_difference);
-					self.bricks.push(self.upcoming_bricks.pop().unwrap().brick);
-					last_idx -= 1;
-				} else {
-					break;
-				}
-			}
-			
+			self.add_upcoming_bricks();
 			// >:< destroy/handle bricks that are off screen
 		}
 		
@@ -154,8 +140,19 @@ mod game {
 		}
 		
 		
-		fn check_upcoming_bricks() {
-			
+		fn add_upcoming_bricks(&mut self) {
+			// add any bricks from upcoming_bricks that have reached the time to appear
+			let mut last_idx: i32 = self.upcoming_bricks.len() as i32 - 1;
+			while last_idx >= 0 {
+				if self.upcoming_bricks[last_idx as usize].time < self.time_running {
+					let time_difference = self.time_running - self.upcoming_bricks[last_idx as usize].time;
+					self.upcoming_bricks[last_idx as usize].brick.tick(time_difference);
+					self.bricks.push_back(self.upcoming_bricks.pop().unwrap().brick);
+					last_idx -= 1;
+				} else {
+					break;
+				}
+			}
 		}
 	}
 	

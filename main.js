@@ -1,3 +1,5 @@
+"use strict";
+
 import * as graphics from "./graphics.js";
 import * as myWasm from "./pkg/music_mercenary.js"; // !!! split into modules and change import name from myWasm
 
@@ -52,7 +54,8 @@ function initGame() {
 	// !!! throw any errors
 	let myGame = myWasm.Game.new();
 	
-	document.addEventListener("keydown", event => {
+	window.addEventListener("keydown", event => {
+		// TODO faster handling of repeated key inputs from holding down a key?
 		switch (event.keyCode) {
 			case myWasm.InputKey.Space:
 			case myWasm.InputKey.LeftArrow:
@@ -63,8 +66,8 @@ function initGame() {
 				break;
 			
 		}
-	});
-	document.addEventListener("keyup", event => {
+	}, true);
+	window.addEventListener("keyup", event => {
 		switch (event.keyCode) {
 			case myWasm.InputKey.Space:
 			case myWasm.InputKey.LeftArrow:
@@ -75,7 +78,7 @@ function initGame() {
 				break;
 			
 		}
-	});
+	}, true);
 	
 	
 	return myGame;

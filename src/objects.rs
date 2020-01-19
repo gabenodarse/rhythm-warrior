@@ -72,16 +72,25 @@ impl Object for Player {
 	// !!! account for object collisions
 	// tick the players state, taking into account input commands
 	fn tick(&mut self, seconds_passed: f32) {
-		let distance_from_ground;
-		distance_from_ground = self.bottom_y - GROUND_POS;
 		
-		if distance_from_ground > F32_ZERO { 
-			// !!! Error, player below ground
+		let on_ground: bool;
+		{
+			let distance_from_ground = self.bottom_y - GROUND_POS;
+		
+			if distance_from_ground > F32_ZERO { 
+				// !!! Error, player below ground, log
+				self.top_y -= distance_from_ground;
+				self.bottom_y -= distance_from_ground;
+				on_ground = true;
+			} else if distance_from_ground > -F32_ZERO {
+				on_ground = true;
+			} else {
+				on_ground = false;
+			}
 		}
 		
 		// handle jump
-		if distance_from_ground > -F32_ZERO && self.dy > -F32_ZERO && self.jumping {
-			// !!! smoother jump??? Meaning, not maximum speed instantly
+		if on_ground && self.dy > -F32_ZERO && self.jumping {
 			self.dy = JUMP_SPEED;
 		}
 		// !!! if it will hit the floor on next tick, don't set jumping to false
