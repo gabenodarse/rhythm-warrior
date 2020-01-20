@@ -1,7 +1,7 @@
 import * as myWasm from "./pkg/music_mercenary.js"; // !!! split into modules and change import name from myWasm
 
 
-const NUM_GRAPHICS = 3; // >:< derive from the rust source code
+const NUM_GRAPHICS = 5; // >:< derive from the rust source code
 
 // !!! create function to assign to both this and Y Factor, and gameCanvas size, then remove the calculation in loadImages
 let g_sizeXFactor; 
@@ -57,6 +57,14 @@ export async function loadImages(resourceLocations){
 	);
 	results.push(
 		loadImage("Brick", myWasm.Graphic.Brick)
+		.catch( (rej) => { console.log(rej) })
+	);
+	results.push(
+		loadImage("SlashLeft", myWasm.Graphic.SlashLeft)
+		.catch( (rej) => { console.log(rej) })
+	);
+	results.push(
+		loadImage("SlashRight", myWasm.Graphic.SlashRight)
 		.catch( (rej) => { console.log(rej) })
 	);
 	

@@ -5,7 +5,7 @@ use crate::PositionedGraphic;
 
 // !!! maybe don't use global/static state?
 static mut BRICK_SPEED: f32 = 250.0; // the speed at which bricks move up the screen
-pub const GROUND_POS: f32 = 240.0;
+const GROUND_POS: f32 = 240.0;
 const LEFT_BOUNDARY: f32 = 0.0;
 const RIGHT_BOUNDARY: f32 = crate::GAME_WIDTH as f32;
 // !!! Create a top boundary? At least for logging possible anomalies?
@@ -14,8 +14,10 @@ const JUMP_SPEED: f32 = -200.0;
 
 
 pub trait Object {
-	fn get_left_x(&self) -> i32;
-	fn get_top_y(&self) -> i32;
+	fn get_left_x (&self) -> i32;
+	fn get_right_x (&self) -> i32;
+	fn get_top_y (&self) -> i32;
+	fn get_bottom_y (&self) -> i32;
 	fn get_rendering_instruction(&self) -> PositionedGraphic;
 	fn tick(&mut self, seconds_passed: f32);
 }
@@ -36,10 +38,9 @@ pub struct Player {
 	dy: f32, // in pixels per second
 	
 	jumping: bool,
-	moving_up: bool,
-	moving_down: bool,
 	moving_left: bool,
-	moving_right: bool
+	moving_right: bool,
+	facing_right: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -51,14 +52,29 @@ pub struct Brick {
 	bottom_y: f32
 }
 
+pub struct Slash {
+	graphic: Graphic,
+	left_x: f32,
+	top_y: f32,
+	right_x: f32,
+	bottom_y: f32,
+	lifetime: f32, // how long the slash graphic lasts !!! replace with an animation
+}
+
 
 impl Object for Player {
 	
 	fn get_left_x(&self) -> i32 {
 		self.left_x as i32
 	}
+	fn get_right_x(&self) -> i32 {
+		self.right_x as i32
+	}
 	fn get_top_y(&self) -> i32 {
 		self.top_y as i32
+	}
+	fn get_bottom_y(&self) -> i32 {
+		self.bottom_y as i32
 	}
 	fn get_rendering_instruction(&self) -> PositionedGraphic {
 		PositionedGraphic {
@@ -108,19 +124,8 @@ impl Object for Player {
 		}
 		
 		
-		
 		// handle vertical movement and gravity
-		if self.moving_down ^ self.moving_up {
-			if self.moving_up {
-				self.dy += 100.0 * seconds_passed;
-			} else {
-				self.dy += 300.0 * seconds_passed;
-			}
-		} else {
-			self.dy += 200.0 * seconds_passed;
-		}
-	
-		
+		self.dy += 200.0 * seconds_passed;
 		
 		// calculate resulting position, while checking to not go past any boundaries
 		self.left_x += self.dx * seconds_passed;
@@ -162,10 +167,9 @@ impl Player {
 			dy: 0.0,
 			
 			jumping: false,
-			moving_up: false,
-			moving_down: false,
 			moving_left: false,
-			moving_right: false
+			moving_right: false,
+			facing_right: true,
 		}
 	}
 	
@@ -173,31 +177,34 @@ impl Player {
 	pub fn jump (&mut self) {
 		self.jumping = true;
 	}
-	pub fn move_up (&mut self) {
-		self.moving_up = true;
-	}
-	pub fn move_down (&mut self) {
-		self.moving_down = true;
-	}
 	pub fn move_left (&mut self) {
 		self.moving_left = true;
+		self.facing_right = false;
 	}
 	pub fn move_right (&mut self) {
 		self.moving_right = true;
-	}
-	pub fn stop_up (&mut self) {
-		self.moving_up = false;
-	}
-	pub fn stop_down (&mut self) {
-		self.moving_down = false;
+		self.facing_right = true;
 	}
 	pub fn stop_left (&mut self) {
 		self.moving_left = false;
+		if self.moving_right {
+			self.facing_right = true;
+		}
 	}
 	pub fn stop_right (&mut self) {
 		self.moving_right = false;
+		if self.moving_left {
+			self.facing_right = false;
+		}
 	}
 	
+	pub fn facing_right(&self) -> bool {
+		if self.facing_right {
+			true
+		} else {
+			false
+		}
+	}
 }
 
 
@@ -205,8 +212,14 @@ impl Object for Brick {
 	fn get_left_x(&self) -> i32 {
 		self.left_x as i32
 	}
+	fn get_right_x(&self) -> i32 {
+		self.right_x as i32
+	}
 	fn get_top_y(&self) -> i32 {
 		self.top_y as i32
+	}
+	fn get_bottom_y(&self) -> i32 {
+		self.bottom_y as i32
 	}
 	fn get_rendering_instruction(&self) -> PositionedGraphic {
 		PositionedGraphic {
@@ -223,16 +236,71 @@ impl Object for Brick {
 	}
 }
 impl Brick {
-	pub fn new() -> Brick { // >:< take position parameters
-		let size: PositionedGraphic = crate::get_graphic_size(Graphic::Brick); // >:<
+	pub fn new (pg: PositionedGraphic) -> Brick { // >:< take position parameters
+		let size: PositionedGraphic = crate::get_graphic_size(Graphic::Brick);
 		Brick {
-			graphic: Graphic::Brick,
-			left_x: 0.0,
-			top_y: crate::GAME_HEIGHT as f32,
-			right_x: size.x as f32,
-			bottom_y: crate::GAME_HEIGHT as f32 + size.y as f32,
+			graphic: pg.g,
+			left_x: pg.x as f32,
+			top_y: pg.y as f32,
+			right_x: (pg.x + size.x) as f32,
+			bottom_y: (pg.y + size.y) as f32,
 		}
 	}
 }
 
+
+impl Object for Slash {
+	fn get_left_x(&self) -> i32 {
+		self.left_x as i32
+	}
+	fn get_right_x(&self) -> i32 {
+		self.right_x as i32
+	}
+	fn get_top_y(&self) -> i32 {
+		self.top_y as i32
+	}
+	fn get_bottom_y(&self) -> i32 {
+		self.bottom_y as i32
+	}
+	fn get_rendering_instruction(&self) -> PositionedGraphic {
+		PositionedGraphic {
+			g: self.graphic,
+			x: self.left_x as i32,
+			y: self.top_y as i32,
+		}
+	}
+	
+	
+	fn tick(&mut self, seconds_passed: f32) {
+		self.lifetime -= seconds_passed;
+	}
+}
+impl Slash {
+	pub fn new(pg: PositionedGraphic, left_to_right: bool) -> Slash { // >:< take position parameters
+		let size: PositionedGraphic = crate::get_graphic_size(pg.g);
+		if left_to_right {
+			Slash {
+				graphic: pg.g,
+				left_x: pg.x as f32,
+				top_y: pg.y as f32,
+				right_x: (pg.x + size.x) as f32,
+				bottom_y: (pg.y + size.y) as f32,
+				lifetime: 0.1,
+			}
+		} else {
+			Slash {
+				graphic: pg.g,
+				left_x: (pg.x - size.x) as f32,
+				top_y: pg.y as f32,
+				right_x: pg.x as f32,
+				bottom_y: (pg.y + size.y) as f32,
+				lifetime: 0.1,
+			}
+		}
+	}
+	
+	pub fn get_lifetime (&self) -> f32 {
+		self.lifetime
+	}
+}
 

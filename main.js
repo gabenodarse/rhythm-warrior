@@ -58,22 +58,22 @@ function initGame() {
 		// TODO faster handling of repeated key inputs from holding down a key?
 		switch (event.keyCode) {
 			case myWasm.InputKey.Space:
-			case myWasm.InputKey.LeftArrow:
-			case myWasm.InputKey.UpArrow:
-			case myWasm.InputKey.RightArrow:
-			case myWasm.InputKey.DownArrow:
+			case myWasm.InputKey.Comma:
+			case myWasm.InputKey.Period:
+			case myWasm.InputKey.Q:
 				myGame.input_command(event.keyCode);
 				break;
-			
+			case 27: // escape
+				alert("Escape pressed"); //>:<
+				break;
 		}
 	}, true);
 	window.addEventListener("keyup", event => {
 		switch (event.keyCode) {
 			case myWasm.InputKey.Space:
-			case myWasm.InputKey.LeftArrow:
-			case myWasm.InputKey.UpArrow:
-			case myWasm.InputKey.RightArrow:
-			case myWasm.InputKey.DownArrow:
+			case myWasm.InputKey.Comma:
+			case myWasm.InputKey.Period:
+			case myWasm.InputKey.Q:
 				myGame.stop_command(event.keyCode);
 				break;
 			

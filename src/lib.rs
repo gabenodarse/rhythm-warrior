@@ -16,6 +16,7 @@
 // add support for different controls
 // I would like to do create a member in Game like so: objects: Vec<T: objects::Object>, but as of 1/17 it is not possible
 	// follow https://github.com/rust-lang/rust/issues/52662
+//Object collision detecting more precise than using a minimum bounding rectangle
 
 // TESTS
 	// test that objects have correct dimensions
@@ -37,6 +38,12 @@ const GAME_HEIGHT: u32 = 1080;
 
 mod objects;
 
+// >:<
+#[wasm_bindgen]
+extern {
+    fn alert(s: &str);
+}
+
 mod game {
 	use crate::*;
 	use crate::objects::Object; // needed to use member's methods that are implemented as a part of trait Object=
@@ -52,24 +59,50 @@ mod game {
 		time_running: f32,
 		player: objects::Player,
 		bricks: VecDeque<objects::Brick>,
-		upcoming_bricks: Vec<UpcomingBrick>, // a vector of the upcoming bricks, ordered by time of appearance
+		slash: Option<objects::Slash>,
+		// TODO if values are only loaded all at once, there might be a slightly more efficient data structure than a deque
+		upcoming_bricks: VecDeque<UpcomingBrick>, // a vector of the upcoming bricks, ordered by time of appearance
 	}
 	#[wasm_bindgen]
 	impl Game {
 		pub fn new () -> Game {
-			Game {
+			let mut game = Game {
 				time_running: 0.0,
 				player: objects::Player::new(),
 				bricks: VecDeque::new(),
+				slash: None,
 				
 				// !!! load bricks
-				upcoming_bricks: vec!(
-					UpcomingBrick{ 
-						brick: objects::Brick::new(),
-						time: 1.0,
-					}
-				),
-			}
+				upcoming_bricks: VecDeque::new(),
+			};
+			
+			// !!! load bricks instead
+			game.upcoming_bricks.push_back(
+				UpcomingBrick{ 
+					brick: objects::Brick::new(
+						PositionedGraphic {
+							g: Graphic::Brick,
+							x: 100,
+							y: GAME_HEIGHT as i32,
+						}
+					),
+					time: 1.0,
+				},
+			);
+			game.upcoming_bricks.push_back(
+				UpcomingBrick{ 
+					brick: objects::Brick::new(
+						PositionedGraphic {
+							g: Graphic::Brick,
+							x: 200,
+							y: GAME_HEIGHT as i32,
+						}
+					),
+					time: 2.0,
+				}
+			);
+			
+			game
 		}
 		
 		
@@ -79,6 +112,29 @@ mod game {
 			for brick in self.bricks.iter_mut() {
 				brick.tick(seconds_passed);
 			}
+			
+			// check for brick destruction
+			match &mut self.slash {
+				Some(slash) => {
+					if slash.get_lifetime() < 0.0 {
+						self.slash = None;
+					} else {
+						slash.tick(seconds_passed);
+						
+						// Remove bricks that are slashed
+						// TODO more efficient way than checking ALL bricks
+						self.bricks.retain(|&brick| -> bool {
+							brick.get_top_y() > slash.get_bottom_y() ||
+							brick.get_right_x() < slash.get_left_x() ||
+							brick.get_left_x() > slash.get_right_x() ||
+							brick.get_bottom_y() < slash.get_top_y()
+						});
+						
+					}
+				}
+				None => {}
+			}
+			
 			self.add_upcoming_bricks();
 			// >:< destroy/handle bricks that are off screen
 		}
@@ -89,12 +145,18 @@ mod game {
 				PositionedGraphic {
 					g: Graphic::Background,
 					x: 0,
-					y: objects::GROUND_POS as i32
+					y: 0
 				},
 				self.player.get_rendering_instruction(),
 			);
 			for brick in &self.bricks {
 				instructions.push(brick.get_rendering_instruction());
+			}
+			match &self.slash {
+				Some(slash) => {
+					instructions.push(slash.get_rendering_instruction());
+				}
+				None => {}
 			}
 			instructions.into_iter().map(JsValue::from).collect()
 		}
@@ -105,17 +167,34 @@ mod game {
 				InputKey::Space => {
 					self.player.jump();
 				}
-				InputKey::LeftArrow => {
+				InputKey::Comma => {
 					self.player.move_left();
 				}
-				InputKey::UpArrow => {
-					self.player.move_up();
-				}
-				InputKey::RightArrow => {
+				InputKey::Period => {
 					self.player.move_right();
 				}
-				InputKey::DownArrow => {
-					self.player.move_down();
+				InputKey::Q => {
+					self.slash = Some(
+					if self.player.facing_right() {
+						objects::Slash::new( PositionedGraphic {
+							g: Graphic::SlashRight,
+							x: self.player.get_right_x(),
+							y: self.player.get_top_y(),
+						}, true)
+					} else {
+						objects::Slash::new( PositionedGraphic {
+							g: Graphic::SlashLeft,
+							x: self.player.get_left_x(),
+							y: self.player.get_top_y(),
+						}, false)
+					}
+					);
+				}
+				InputKey::W => {
+				}
+				InputKey::E => {
+				}
+				InputKey::R => {
 				}
 			}
 		}
@@ -124,17 +203,19 @@ mod game {
 				InputKey::Space => {
 					return; // !!! can make jumping by holding space bar possible, pros/cons ??
 				}
-				InputKey::LeftArrow => {
+				InputKey::Comma => {
 					self.player.stop_left();
 				}
-				InputKey::UpArrow => {
-					self.player.stop_up();
-				}
-				InputKey::RightArrow => {
+				InputKey::Period => {
 					self.player.stop_right();
 				}
-				InputKey::DownArrow => {
-					self.player.stop_down();
+				InputKey::Q => {
+				}
+				InputKey::W => {
+				}
+				InputKey::E => {
+				}
+				InputKey::R => {
 				}
 			}
 		}
@@ -142,15 +223,22 @@ mod game {
 		
 		fn add_upcoming_bricks(&mut self) {
 			// add any bricks from upcoming_bricks that have reached the time to appear
-			let mut last_idx: i32 = self.upcoming_bricks.len() as i32 - 1;
-			while last_idx >= 0 {
-				if self.upcoming_bricks[last_idx as usize].time < self.time_running {
-					let time_difference = self.time_running - self.upcoming_bricks[last_idx as usize].time;
-					self.upcoming_bricks[last_idx as usize].brick.tick(time_difference);
-					self.bricks.push_back(self.upcoming_bricks.pop().unwrap().brick);
-					last_idx -= 1;
-				} else {
-					break;
+			
+			loop {
+				match self.upcoming_bricks.get_mut(0) {
+					Some(upcoming_brick) => {
+						if upcoming_brick.time < self.time_running {
+							let time_difference = self.time_running - upcoming_brick.time;
+							upcoming_brick.brick.tick(time_difference);
+							self.bricks.push_back(self.upcoming_bricks.pop_front().unwrap().brick);
+							
+						} else {
+							break;
+						}
+						}
+					None => {
+						break;
+					}
 				}
 			}
 		}
@@ -171,13 +259,6 @@ struct AnimationFrame<'a> {
 }
 
 
-// >:<
-#[wasm_bindgen]
-extern {
-    fn alert(s: &str);
-}
-
-
 // !!! offline also
 #[wasm_bindgen]
 #[repr(u8)]
@@ -186,6 +267,8 @@ pub enum Graphic {
 	Background = 0,
 	Player = 1,
 	Brick = 2,
+	SlashRight = 3,
+	SlashLeft = 4,
 }
 #[wasm_bindgen]
 pub struct PositionedGraphic {
@@ -206,14 +289,19 @@ pub fn get_graphic_size(g: Graphic) -> PositionedGraphic {
 		}},
 		Graphic::Player => { PositionedGraphic {
 			g,
-			x: 45,
-			y: 90,
+			x: 50,
+			y: 100,
 		}},
 		Graphic::Brick => { PositionedGraphic {
 			g,
 			x: 60,
 			y: 120,
 		}},
+		Graphic::SlashRight | Graphic::SlashLeft => { PositionedGraphic {
+			g,
+			x: 65,
+			y: 100
+		}}
 	};
 }
 
@@ -224,9 +312,11 @@ pub fn get_graphic_size(g: Graphic) -> PositionedGraphic {
 #[derive(Clone, Copy, Debug)]
 pub enum InputKey {
 	Space = 32,
-	LeftArrow = 37,
-	UpArrow = 38,
-	RightArrow = 39,
-	DownArrow = 40
+	Comma = 188,
+	Period = 190,
+	Q = 81,
+	W = 87,
+	E = 69,
+	R = 82,
 }
 
