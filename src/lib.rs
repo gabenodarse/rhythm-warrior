@@ -16,7 +16,9 @@
 // add support for different controls
 // I would like to do create a member in Game like so: objects: Vec<T: objects::Object>, but as of 1/17 it is not possible
 	// follow https://github.com/rust-lang/rust/issues/52662
-//Object collision detecting more precise than using a minimum bounding rectangle
+// object collision detecting more precise than using a minimum bounding rectangle
+// add pausing
+// check-sum on loaded songs 
 
 // TESTS
 	// test that objects have correct dimensions
@@ -35,10 +37,11 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 const GAME_WIDTH: u32 = 1920;
 const GAME_HEIGHT: u32 = 1080;
+const GROUND_POS: f32 = 240.0; // !!! associate with the graphic for the ground
 
 mod objects;
 
-// >:<
+// TODO remove
 #[wasm_bindgen]
 extern {
     fn alert(s: &str);
@@ -52,6 +55,13 @@ mod game {
 	// >:< use objects::Player;
 	
 	
+	// TODO assert/test that the appearance_time of bricks is in order
+	// TODO UpcomingBrick type can match format of JSON data: [type, time, pos], doesn't need to hold a whole Brick object
+	struct UpcomingBrick {
+		brick: objects::Brick,
+		time: f32, // time of appearance in seconds since the start of the program
+	}
+	
 	#[wasm_bindgen]
 	pub struct Game {
 		// !!! create a copy of the reference to player and bricks in a data structure for ordering objects
@@ -60,7 +70,8 @@ mod game {
 		player: objects::Player,
 		bricks: VecDeque<objects::Brick>,
 		slash: Option<objects::Slash>,
-		// TODO if values are only loaded all at once, there might be a slightly more efficient data structure than a deque
+		// TODO if values are only loaded all at once, and only popped from 1 side, 
+			// there might be a slightly more efficient data structure than a deque
 		upcoming_bricks: VecDeque<UpcomingBrick>, // a vector of the upcoming bricks, ordered by time of appearance
 	}
 	#[wasm_bindgen]
@@ -190,12 +201,9 @@ mod game {
 					}
 					);
 				}
-				InputKey::W => {
-				}
-				InputKey::E => {
-				}
-				InputKey::R => {
-				}
+				InputKey::W => {}
+				InputKey::E => {}
+				InputKey::R => {}
 			}
 		}
 		pub fn stop_command (&mut self, key: InputKey) {
@@ -209,21 +217,32 @@ mod game {
 				InputKey::Period => {
 					self.player.stop_right();
 				}
-				InputKey::Q => {
-				}
-				InputKey::W => {
-				}
-				InputKey::E => {
-				}
-				InputKey::R => {
-				}
+				InputKey::Q => {}
+				InputKey::W => {}
+				InputKey::E => {}
+				InputKey::R => {}
 			}
 		}
 		
+		pub fn load_brick (&mut self, bt: BrickType, time: f32, pos: i32) {
+			// TODO create a method load_song instead, and if possible make it more efficient than loading brick by brick
+			self.upcoming_bricks.push_back(
+				UpcomingBrick{ 
+					brick: objects::Brick::new(
+						PositionedGraphic {
+							g: Graphic::Brick, // >:< match graphic to brick type
+							x: pos,
+							y: GAME_HEIGHT as i32,
+						}
+					),
+					time: time + 5.0, // >:< calculate from game height, brick height, ground height, and brick speed
+				},
+			);
+		}
 		
+		
+		// add any bricks from upcoming_bricks that have reached the time to appear
 		fn add_upcoming_bricks(&mut self) {
-			// add any bricks from upcoming_bricks that have reached the time to appear
-			
 			loop {
 				match self.upcoming_bricks.get_mut(0) {
 					Some(upcoming_brick) => {
@@ -235,19 +254,13 @@ mod game {
 						} else {
 							break;
 						}
-						}
+					}
 					None => {
 						break;
 					}
 				}
 			}
 		}
-	}
-	
-	// TODO assert/test that the appearance_time of bricks is in order
-	struct UpcomingBrick {
-		brick: objects::Brick,
-		time: f32, // time of appearance in seconds since the start of the program
 	}
 }
 
@@ -256,6 +269,14 @@ struct AnimationFrame<'a> {
 	frame: Graphic,
 	next_frame: Option<&'a AnimationFrame<'a>>
 	// !!! track # of frames remaining in animation ???
+}
+
+
+// !!! offline also
+#[wasm_bindgen]
+#[repr(u8)]
+pub enum BrickType {
+	Default = 0,
 }
 
 

@@ -12,8 +12,8 @@ export async function run() {
 	await Promise.all( [ 
 		myWasm.default(),
 		fetch("./resources.json")
-			.then(r => r.json())
-			.then(r => { resourceLocations = r }) // !!! add error handling
+			.then(res => res.json())
+			.then(res => { resourceLocations = res }) // !!! add error handling
 	]);
 	
 	
@@ -21,8 +21,19 @@ export async function run() {
 		() => { 
 			gameInstance = initGame(); // !!! add error handling
 			graphics.renderAll(gameInstance.get_instructions()); },
-		e => { alert("loadImages FAILED" + e); } // !!! add error handling
+		rej => { alert("loadImages FAILED" + rej); } // !!! add error handling
 	);
+	
+	
+	// !!! make loading a song its own function
+	await fetch("./Here-we-go.json")
+		.then(res => res.json())
+		.then(res => { 
+			res.forEach( entry => {
+				gameInstance.load_brick(entry[0], entry[1], entry[2]);
+			});
+		}) // !!! add error handling
+	;
 	
 	
 	let last = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime();

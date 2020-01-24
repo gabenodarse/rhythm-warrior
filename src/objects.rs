@@ -1,15 +1,16 @@
 
 use crate::Graphic;
 use crate::PositionedGraphic;
+use crate::GROUND_POS;
 
 
 // !!! maybe don't use global/static state?
+// >:< refactor to member of Game
 static mut BRICK_SPEED: f32 = 250.0; // the speed at which bricks move up the screen
-const GROUND_POS: f32 = 240.0;
 const LEFT_BOUNDARY: f32 = 0.0;
 const RIGHT_BOUNDARY: f32 = crate::GAME_WIDTH as f32;
 // !!! Create a top boundary? At least for logging possible anomalies?
-const F32_ZERO: f32 = 0.0000001; // approximately zero for float numbers. any x between -F32_ZERO and +F32_ZERO is essentially 0
+const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -F32_ZERO and +F32_ZERO is essentially 0
 const JUMP_SPEED: f32 = -200.0;
 
 

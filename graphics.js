@@ -77,8 +77,8 @@ export async function loadImages(resourceLocations){
 //renderAll
 export function renderAll(instructions) {
 	// !!! error handling: check if instructions is an array of PositionedGraphic objects
-	instructions.forEach((function(instruction) {
+	instructions.forEach( instruction => {
 		g_gameContext.drawImage(g_canvases[instruction.g],instruction.x * g_sizeXFactor,instruction.y * g_sizeYFactor); 
-	}));
+	});
 }
 
