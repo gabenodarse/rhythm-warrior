@@ -1,17 +1,16 @@
 
+// TODO
+// Log objects going beyond boundaries
+
+
 use crate::Graphic;
 use crate::PositionedGraphic;
 use crate::GROUND_POS;
+use crate::LEFT_BOUNDARY;
+use crate::RIGHT_BOUNDARY;
+use crate::TOP_BOUNDARY;
 
-
-// !!! maybe don't use global/static state?
-// >:< refactor to member of Game
-static mut BRICK_SPEED: f32 = 250.0; // the speed at which bricks move up the screen
-const LEFT_BOUNDARY: f32 = 0.0;
-const RIGHT_BOUNDARY: f32 = crate::GAME_WIDTH as f32;
-// !!! Create a top boundary? At least for logging possible anomalies?
 const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -F32_ZERO and +F32_ZERO is essentially 0
-const JUMP_SPEED: f32 = -200.0;
 
 
 pub trait Object {
@@ -20,15 +19,12 @@ pub trait Object {
 	fn get_top_y (&self) -> i32;
 	fn get_bottom_y (&self) -> i32;
 	fn get_rendering_instruction(&self) -> PositionedGraphic;
-	fn tick(&mut self, seconds_passed: f32);
 }
 
-
-// !!! if there are many different commands, separate a vector of commands to execute and a map of which commands have been added
-	// to the execution list (requires HashMap OR conversion of command keys to an incremented enum of commands)
-	// or create functions that are added to a vector of functions to execute if the corresponding key was pressed
 pub struct Player {
 	graphic: Graphic,
+	
+	jump_velocity: f32,
 	
 	// using right_x and bottom_y rather than sizes because more comparisons between objects are possible than updates of positions
 	left_x: f32,
@@ -41,7 +37,7 @@ pub struct Player {
 	jumping: bool,
 	moving_left: bool,
 	moving_right: bool,
-	facing_right: bool,
+	is_facing_right: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -84,11 +80,66 @@ impl Object for Player {
 			y: self.top_y as i32,
 		}
 	}
+}
+impl Player {
+	
+	pub fn new() -> Player {
+		let size: PositionedGraphic = crate::get_graphic_size(Graphic::Player);
+		const X: f32 = 850.0; // >:< take starting pos as parameters
+		const Y: f32 = 0.0;
+		
+		Player {
+			graphic: Graphic::Player,
+			jump_velocity: -200.0,
+			left_x: X,
+			top_y: Y,
+			right_x: X + size.x as f32, 
+			bottom_y: Y + size.y as f32,
+			dx: 0.0,
+			dy: 0.0,
+			
+			jumping: false,
+			moving_left: false,
+			moving_right: false,
+			is_facing_right: true,
+		}
+	}
 	
 	
-	// !!! account for object collisions
+	pub fn jump (&mut self) {
+		self.jumping = true;
+	}
+	pub fn move_left (&mut self) {
+		self.moving_left = true;
+		self.is_facing_right = false;
+	}
+	pub fn move_right (&mut self) {
+		self.moving_right = true;
+		self.is_facing_right = true;
+	}
+	pub fn stop_left (&mut self) {
+		self.moving_left = false;
+		if self.moving_right {
+			self.is_facing_right = true;
+		}
+	}
+	pub fn stop_right (&mut self) {
+		self.moving_right = false;
+		if self.moving_left {
+			self.is_facing_right = false;
+		}
+	}
+	
+	pub fn is_facing_right(&self) -> bool {
+		if self.is_facing_right {
+			true
+		} else {
+			false
+		}
+	}
+	
 	// tick the players state, taking into account input commands
-	fn tick(&mut self, seconds_passed: f32) {
+	pub fn tick(&mut self, seconds_passed: f32) {
 		
 		let on_ground: bool;
 		{
@@ -108,9 +159,9 @@ impl Object for Player {
 		
 		// handle jump
 		if on_ground && self.dy > -F32_ZERO && self.jumping {
-			self.dy = JUMP_SPEED;
+			self.dy = self.jump_velocity;
 		}
-		// !!! if it will hit the floor on next tick, don't set jumping to false
+		// TODO if it will hit the floor on next tick (or under a threshold), don't set jumping to false
 		self.jumping = false;
 		
 		// handle lateral movement
@@ -151,62 +202,6 @@ impl Object for Player {
 		
 	}
 }
-impl Player {
-	
-	pub fn new() -> Player {
-		let size: PositionedGraphic = crate::get_graphic_size(Graphic::Player); // >:<
-		const X: f32 = 850.0; // !!! take starting pos as parameters
-		const Y: f32 = 0.0;
-		
-		Player {
-			graphic: Graphic::Player,
-			left_x: X,
-			top_y: Y,
-			right_x: X + size.x as f32, 
-			bottom_y: Y + size.y as f32,
-			dx: 0.0,
-			dy: 0.0,
-			
-			jumping: false,
-			moving_left: false,
-			moving_right: false,
-			facing_right: true,
-		}
-	}
-	
-	
-	pub fn jump (&mut self) {
-		self.jumping = true;
-	}
-	pub fn move_left (&mut self) {
-		self.moving_left = true;
-		self.facing_right = false;
-	}
-	pub fn move_right (&mut self) {
-		self.moving_right = true;
-		self.facing_right = true;
-	}
-	pub fn stop_left (&mut self) {
-		self.moving_left = false;
-		if self.moving_right {
-			self.facing_right = true;
-		}
-	}
-	pub fn stop_right (&mut self) {
-		self.moving_right = false;
-		if self.moving_left {
-			self.facing_right = false;
-		}
-	}
-	
-	pub fn facing_right(&self) -> bool {
-		if self.facing_right {
-			true
-		} else {
-			false
-		}
-	}
-}
 
 
 impl Object for Brick {
@@ -229,12 +224,6 @@ impl Object for Brick {
 			y: self.top_y as i32,
 		}
 	}
-	
-	
-	fn tick(&mut self, seconds_passed: f32) {
-		unsafe { self.top_y -= BRICK_SPEED * seconds_passed; }
-		unsafe { self.bottom_y -= BRICK_SPEED * seconds_passed; }
-	}
 }
 impl Brick {
 	pub fn new (pg: PositionedGraphic) -> Brick { // >:< take position parameters
@@ -246,6 +235,11 @@ impl Brick {
 			right_x: (pg.x + size.x) as f32,
 			bottom_y: (pg.y + size.y) as f32,
 		}
+	}
+	
+	pub fn tick(&mut self, brick_speed: f32, seconds_passed: f32) {
+		self.top_y -= brick_speed * seconds_passed;
+		self.bottom_y -= brick_speed * seconds_passed;
 	}
 }
 
@@ -269,11 +263,6 @@ impl Object for Slash {
 			x: self.left_x as i32,
 			y: self.top_y as i32,
 		}
-	}
-	
-	
-	fn tick(&mut self, seconds_passed: f32) {
-		self.lifetime -= seconds_passed;
 	}
 }
 impl Slash {
@@ -302,6 +291,10 @@ impl Slash {
 	
 	pub fn get_lifetime (&self) -> f32 {
 		self.lifetime
+	}
+	
+	pub fn tick(&mut self, seconds_passed: f32) {
+		self.lifetime -= seconds_passed;
 	}
 }
 

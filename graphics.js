@@ -1,4 +1,4 @@
-import * as myWasm from "./pkg/music_mercenary.js"; // !!! split into modules and change import name from myWasm
+import * as wasm from "./pkg/music_mercenary.js";
 
 
 const NUM_GRAPHICS = 5; // >:< derive from the rust source code
@@ -20,63 +20,66 @@ let g_canvases = new Array(NUM_GRAPHICS);
 export async function loadImages(resourceLocations){
 	let results = [];
 	
-	let bgSize = myWasm.get_graphic_size(myWasm.Graphic.Background);
+	let bgSize = wasm.get_graphic_size(wasm.Graphic.Background);
 	g_sizeXFactor = g_gameCanvas.width / bgSize.x;
 	g_sizeYFactor = g_gameCanvas.height / bgSize.y;
 	
 
 	function loadImage(imgKey, canvasID) {
 		return new Promise(r => {
-			// !!! make sure context is defined, throw error if not
 			let img = new Image();
 			img.onload = (() => {
 				console.log("loaded 1");
-				g_canvases[canvasID] = document.createElement('canvas'); // !!! make sure canvas can be created
+				g_canvases[canvasID] = document.createElement('canvas'); // TODO make sure canvas can be created or if already created
 				
-				let size = myWasm.get_graphic_size(canvasID);
+				let size = wasm.get_graphic_size(canvasID);
 				g_canvases[canvasID].width = (size.x * g_sizeXFactor);
 				g_canvases[canvasID].height = (size.y * g_sizeYFactor);
 				g_canvases[canvasID].getContext('2d').drawImage(img, 0, 0, (size.x * g_sizeXFactor), (size.y * g_sizeYFactor));
 				
 				r();
 			});
-			img.src = resourceLocations[imgKey]; // !!! add error handling (onfail if that exists, or a timeout)
+			img.src = resourceLocations[imgKey]; // TODO add error handling (onfail if that exists, or a timeout)
 		});
 	}
 	
 	
-	// !!! create a consistent rej function and handle error
-	// IF AMOUNT OF RESOURCES DON'T MATCH THROW ERROR !!!
+	// TODO better error handling
+	function onReject(rej) {
+		console.log(rej);
+	}
+	
 	results.push(
-		loadImage("Background", myWasm.Graphic.Background)
-		.catch( (rej) => { console.log(rej) })
+		loadImage("Background", wasm.Graphic.Background)
+		.catch( onReject )
 	);
 	results.push(
-		loadImage("Player", myWasm.Graphic.Player)
-		.catch( (rej) => { console.log(rej) })
+		loadImage("Player", wasm.Graphic.Player)
+		.catch( onReject )
 	);
 	results.push(
-		loadImage("Brick", myWasm.Graphic.Brick)
-		.catch( (rej) => { console.log(rej) })
+		loadImage("Brick", wasm.Graphic.Brick)
+		.catch( onReject )
 	);
 	results.push(
-		loadImage("SlashLeft", myWasm.Graphic.SlashLeft)
-		.catch( (rej) => { console.log(rej) })
+		loadImage("SlashLeft", wasm.Graphic.SlashLeft)
+		.catch( onReject )
 	);
 	results.push(
-		loadImage("SlashRight", myWasm.Graphic.SlashRight)
-		.catch( (rej) => { console.log(rej) })
+		loadImage("SlashRight", wasm.Graphic.SlashRight)
+		.catch( onReject )
 	);
 	
-	console.log(results.length); // >:< make sure it's equal to num graphics
+	console.log(results.length); // TODO make sure it's equal to num graphics
 	
+	
+	// TODO can move all catches on results to this Promise.all
 	return Promise.all(results).catch( () => { console.log("failed load"); } );
 }
 
 
-//renderAll
 export function renderAll(instructions) {
-	// !!! error handling: check if instructions is an array of PositionedGraphic objects
+	// TODO error handling: check if instructions is an array of PositionedGraphic objects
 	instructions.forEach( instruction => {
 		g_gameContext.drawImage(g_canvases[instruction.g],instruction.x * g_sizeXFactor,instruction.y * g_sizeYFactor); 
 	});
