@@ -57,7 +57,9 @@ export async function run() {
 		requestAnimationFrame(renderLoop);
 	};
 	
-	requestAnimationFrame(renderLoop);
+	
+	// >:<
+	// requestAnimationFrame(renderLoop);
 	
 }
 

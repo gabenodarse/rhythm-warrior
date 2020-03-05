@@ -19,6 +19,8 @@
 // check-sum on loaded songs 
 // consider storing songs in a different format than JSON
 // Precise ticking even for longer delta times
+// More precise key-press timings than checking state every tick
+// Get time of event occurence rather than time receiving the event???
 
 // TESTS
 // test that objects have correct dimensions
