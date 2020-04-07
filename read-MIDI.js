@@ -1,28 +1,4 @@
 
-//return object {numBytes: x, val: y}
-const readVariableLength = (bytes, i) => {
-	
-	let beginningIdx = i;
-	
-	let val = 0;
-	//Read variable length block
-	while (bytes[i] & 0x80) {
-		val *= 0x80;
-		val += bytes[i] - 0x80;
-		++i;
-	}
-	
-	if(i >= bytes.length){
-		throw Error("Read variable length went past the end of the array");
-	}
-	
-	val *= 0x80;
-	val += bytes[i];
-	++i;
-	
-	return {numBytes: i - beginningIdx, val: val};
-}
-
 class Channel{
 	identifier;
 	output = [];
@@ -62,7 +38,6 @@ class Output{
 	}
 }
 
-// !!! error checking pass and universality pass are needed
 // !!! on error the file should be logged so the source of the error can be tracked
 export function readMIDI (bytes) {
 	
@@ -378,6 +353,131 @@ export function readMIDI (bytes) {
 		throw Error("readMIDI shouldn't reach here");
 	}
 	
-	return channels;
+	for(let i = 0; i < channels.length; ++i){
+		if(channels[i].output && channels[i].minNote && channels[i].maxNote){
+			deriveNoteXPositions (channels[i].output, channels[i].minNote, channels[i].maxNote);
+		}
+	}
 	
+	let output = consolidateOutput(channels);
+	sortOutputByTime(output);
+	
+	return output;
 }
+
+function consolidateOutput(channels){
+	let output = [];
+	channels.forEach( channel => {
+		output = output.concat(channel.output);
+	});
+	
+	return output;
+}
+
+// uses merge sort on output
+function sortOutputByTime(original){
+	let output = original;
+	let secondArray = new Array(output.length);
+	let sectionSize = 2;
+	let remainderSize = 0;
+	
+	//loop until the output is sorted
+	while(remainderSize != output.length){
+		let currentIdx = 0;
+		
+		//sort each section that is an approriate length
+		while(currentIdx + sectionSize <= output.length){
+			let firstHalfIdx = currentIdx;
+			let secondHalfIdx = currentIdx + (sectionSize / 2);
+			let firstHalfEndIdx = secondHalfIdx;
+			let endIdx = currentIdx + sectionSize;
+			let remainingElementsIdx;
+			while(firstHalfIdx < firstHalfEndIdx && secondHalfIdx < endIdx){
+				if(output[firstHalfIdx].time <= output[secondHalfIdx].time){
+					secondArray[currentIdx] = output[firstHalfIdx];
+					++firstHalfIdx;
+				}
+				else{
+					secondArray[currentIdx] = output[secondHalfIdx];
+					++secondHalfIdx;
+				}
+				++currentIdx;
+			}
+			
+			remainingElementsIdx = (firstHalfIdx != firstHalfEndIdx) ? firstHalfIdx : secondHalfIdx;
+			while(currentIdx < endIdx){
+				secondArray[currentIdx] = output[remainingElementsIdx];
+				++currentIdx;
+				++remainingElementsIdx;
+			}
+		}
+		
+		// sort the last section, which is not full length (may be empty)
+		let firstHalfIdx = currentIdx;
+		let secondHalfIdx = output.length - remainderSize;
+		let firstHalfEndIdx = secondHalfIdx;
+		let endIdx = output.length;
+		let remainingElementsIdx;
+		
+		// update remainder size for the next iteration
+		remainderSize = output.length - currentIdx;
+		
+		while(firstHalfIdx < firstHalfEndIdx && secondHalfIdx < endIdx){
+			if(output[firstHalfIdx].time <= output[secondHalfIdx].time){
+				secondArray[currentIdx] = output[firstHalfIdx];
+				++firstHalfIdx;
+			}
+			else{
+				secondArray[currentIdx] = output[secondHalfIdx];
+				++secondHalfIdx;
+			}
+			++currentIdx;
+		}
+		
+		remainingElementsIdx = (firstHalfIdx != firstHalfEndIdx) ? firstHalfIdx : secondHalfIdx;
+		while(currentIdx < endIdx){
+			secondArray[currentIdx] = output[remainingElementsIdx];
+			++currentIdx;
+			++remainingElementsIdx;
+		}
+		
+		sectionSize *= 2;
+		let tmp = output;
+		output = secondArray;
+		secondArray = tmp;
+	}
+	
+	return output;
+}
+
+//returns object {numBytes: x, val: y}
+function readVariableLength(bytes, i){
+	let beginningIdx = i;
+	
+	let val = 0;
+	//Read variable length block
+	while (bytes[i] & 0x80) {
+		val *= 0x80;
+		val += bytes[i] - 0x80;
+		++i;
+	}
+	
+	if(i >= bytes.length){
+		throw Error("Read variable length went past the end of the array");
+	}
+	
+	val *= 0x80;
+	val += bytes[i];
+	++i;
+	
+	return {numBytes: i - beginningIdx, val: val};
+}
+
+function deriveNoteXPositions(output, minNote, maxNote) {
+	let midNote = (maxNote + minNote) / 2;
+	
+	for (let i = 0; i < output.length; ++i) {
+		output[i].xPos = output[i].note - midNote;
+	}
+}
+

@@ -1,8 +1,8 @@
 
 // TODO
-// create the data structure to hold objects in order of layer
 // Should SVGs be translated to a jpg/png of an appropriate size?
 // Create a function to load a new image for a given identifier
+// Instead of all rendering onto a single canvas, use multiple canvases?
 
 // mark every #[wasm_bindgen] with just javascript or offline also
 // handle losing focus on window / possible browser events that disrupt the game
@@ -21,6 +21,14 @@
 // Precise ticking even for longer delta times
 // More precise key-press timings than checking state every tick
 // Get time of event occurence rather than time receiving the event???
+// create the data structure to hold objects in order of layer
+
+// music_mercenary.js uses workaround because instantiateStreaming doesn't function correctly (MIME type not working??)
+	// https://stackoverflow.com/questions/52239924/webassembly-instantiatestreaming-wrong-mime-type 
+	// -- defaulting to using "instantiate" instead of "instantiateStreaming"
+// Make sure things work in all browsers, especially ESModules
+// expand on read-MIDI functionality, and add options to control generated output such as only use certain program numbers (instruments)
+	// or channels to generate notes, criteria for excluding notes if there are too many, etc.
 
 // TESTS
 // test that objects have correct dimensions

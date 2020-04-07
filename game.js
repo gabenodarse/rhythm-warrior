@@ -13,7 +13,7 @@ export async function run() {
 		wasm.default(),
 		fetch("./resources.json")
 			.then(res => res.json())
-			.then(res => { resourceLocations = res }) 
+			.then(res => { resourceLocations = res })
 	]);
 	
 	// TODO add error handling
@@ -45,22 +45,18 @@ export async function run() {
 
 		now = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime();
 		
-		
-		// !!!
-		// handle if there's too long a time between ticks (pause game?)
+		// !!! handle if there's too long a time between ticks (pause game?)
+		// TODO get fps
 		gameInstance.tick((now - last) / 1000); // convert to seconds
 		graphics.renderAll(gameInstance.get_instructions());
-		// !!! get fps
-		last = now;
 		
+		last = now;
 		
 		requestAnimationFrame(renderLoop);
 	};
 	
 	
-	// >:<
-	// requestAnimationFrame(renderLoop);
-	
+	requestAnimationFrame(renderLoop);
 }
 
 
