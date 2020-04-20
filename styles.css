@@ -1,0 +1,50 @@
+body {
+	text-align: center;
+}
+
+#control-change-menu {
+	text-align: left;
+	position: absolute;
+	width: 20%;
+	margin: 20px 40%;
+	z-index: 100;
+	background-color: red;
+	display: none;
+}
+
+#control-change-menu div {
+	width: 100%;
+	background-color: blue;
+	overflow: auto;
+}
+
+#control-change-menu label{
+	margin: 2px 4px;
+}
+
+#control-change-menu button{
+	float: right;
+	position: relative;
+	margin-right: 4px;
+}
+
+#screen-blocker{
+	display: none;
+	position: absolute;
+	width: 100%;
+	height: 100vh;
+	left: 0;
+	top: 0;
+	z-index: 200;
+}
+
+#blocker-text{
+	font-size: 3em;
+	position: absolute;
+	text-align: center;
+	width: 30%;
+	left: 35%;
+	top: 30%;
+	background-color: navy;
+	z-index: 200;
+}

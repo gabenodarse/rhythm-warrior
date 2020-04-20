@@ -32,7 +32,7 @@
 
 // TESTS
 // test that objects have correct dimensions
-
+// fuzzing for memory leaks
 
 use wasm_bindgen::prelude::*;
 use js_sys::Array;
@@ -152,18 +152,18 @@ mod game {
 		}
 		
 		
-		pub fn input_command (&mut self, key: InputKey) {
-			match key {
-				InputKey::Space => {
+		pub fn input_command (&mut self, input: Input) {
+			match input {
+				Input::Jump => {
 					self.player.jump();
 				}
-				InputKey::Comma => {
+				Input::Left => {
 					self.player.move_left();
 				}
-				InputKey::Period => {
+				Input::Right => {
 					self.player.move_right();
 				}
-				InputKey::Q => {
+				Input::Ability1 => {
 					self.slash = Some(
 					if self.player.is_facing_right() {
 						Slash::new( PositionedGraphic {
@@ -180,26 +180,26 @@ mod game {
 					}
 					);
 				}
-				InputKey::W => {}
-				InputKey::E => {}
-				InputKey::R => {}
+				Input::Ability2 => {}
+				Input::Ability3 => {}
+				Input::Ability4	=> {}
 			}
 		}
-		pub fn stop_command (&mut self, key: InputKey) {
+		pub fn stop_command (&mut self, key: Input) {
 			match key {
-				InputKey::Space => {
+				Input::Jump => {
 					return; // TODO can make jumping by holding space bar possible, pros/cons ??
 				}
-				InputKey::Comma => {
+				Input::Left => {
 					self.player.stop_left();
 				}
-				InputKey::Period => {
+				Input::Right => {
 					self.player.stop_right();
 				}
-				InputKey::Q => {}
-				InputKey::W => {}
-				InputKey::E => {}
-				InputKey::R => {}
+				Input::Ability1 => {}
+				Input::Ability2 => {}
+				Input::Ability3 => {}
+				Input::Ability4 => {}
 			}
 		}
 		
@@ -301,16 +301,30 @@ pub fn get_graphic_size(g: Graphic) -> PositionedGraphic {
 	};
 }
 
+//>:<
+// #[wasm_bindgen]
+// #[repr(u8)]
+// #[derive(Clone, Copy, Debug)]
+// pub enum InputKey {
+	// Space = 32,
+	// Comma = 188,
+	// Period = 190,
+	// Q = 81,
+	// W = 87,
+	// E = 69,
+	// R = 82,
+// }
+
 #[wasm_bindgen]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
-pub enum InputKey {
-	Space = 32,
-	Comma = 188,
-	Period = 190,
-	Q = 81,
-	W = 87,
-	E = 69,
-	R = 82,
+pub enum Input {
+	Jump,
+	Left,
+	Right,
+	Ability1,
+	Ability2,
+	Ability3,
+	Ability4,
 }
 
