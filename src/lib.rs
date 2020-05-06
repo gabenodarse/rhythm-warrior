@@ -29,10 +29,15 @@
 // Make sure things work in all browsers, especially ESModules
 // expand on read-MIDI functionality, and add options to control generated output such as only use certain program numbers (instruments)
 	// or channels to generate notes, criteria for excluding notes if there are too many, etc.
+// Send commands on tick rather than asynchronously
 
 // TESTS
 // test that objects have correct dimensions
-// fuzzing for memory leaks
+
+use std::collections::btree_set;
+use std::collections::btree_set::BTreeSet; 
+use std::cmp::Ordering;
+use std::ops::Bound;
 
 use wasm_bindgen::prelude::*;
 use js_sys::Array;
@@ -54,17 +59,48 @@ extern {
 
 mod game {
 	use crate::*;
-	use crate::objects::Object; // needed to use member's methods that are implemented as a part of trait Object=
+	use crate::objects::Object; // needed to use member's methods that are implemented as a part of trait Object
 	use std::collections::VecDeque;
 	use objects::Brick;
+	use objects::BrickType;
 	use objects::Player;
 	use objects::Slash;
+	use objects::Direction;
 	
-	
-	// TODO UpcomingBrick type can match format of JSON data: [type, time, pos], doesn't need to hold a whole Brick object
-	struct UpcomingBrick {
-		brick: Brick,
+	#[derive(Clone, Copy)]
+	struct UpcomingNote {
+		note_type: BrickType,
+		x: f32,
 		time: f32, // time of appearance in seconds since the start of the program
+	}
+	
+	struct Song {
+		song_name: String,
+		notes: BTreeSet<UpcomingNote>, 
+		bpm: u8
+	}
+
+	impl PartialEq for UpcomingNote {
+		fn eq(&self, other: &UpcomingNote) -> bool {
+			self.note_type == other.note_type
+			&& self.x == other.x
+			&& self.time == other.time
+		}
+	}
+	impl Eq for UpcomingNote {}
+
+	impl PartialOrd for UpcomingNote {
+		fn partial_cmp(&self, other: &UpcomingNote) -> Option<Ordering> {
+			Some(self.cmp(other))
+		}
+	}
+
+	impl Ord for UpcomingNote {
+		fn cmp(&self, other: &UpcomingNote) -> Ordering {
+			if self.time < other.time         { Ordering::Less }
+			else if self.time > other.time { Ordering::Greater }
+			else                              { Ordering::Equal }
+		}
 	}
 	
 	#[wasm_bindgen]
@@ -72,24 +108,30 @@ mod game {
 		// !!! create a copy of the reference to player and bricks in a data structure for ordering objects
 			// the objects either point to subsequently positioned objects or not (Option type)
 		time_running: f32,
+		// !!! better location for brick speed? (inside brick struct so it isn't passed for every single brick? limitations?)
 		brick_speed: f32, // the speed at which bricks move up the screen
 		player: Player,
 		bricks: VecDeque<Brick>,
 		slash: Option<Slash>,
-		// TODO if values are only loaded all at once, and only popped from 1 side, 
-			// there might be a slightly more efficient data structure than a deque
-		upcoming_bricks: VecDeque<UpcomingBrick>, // a vector of the upcoming bricks, ordered by time of appearance
+		// !!! create a song type to hold song notes and meta data
+		song: Song, 
+		upcoming_note: Option<UpcomingNote>
 	}
 	#[wasm_bindgen]
 	impl Game {
 		pub fn new () -> Game {
 			Game {
 				time_running: 0.0,
-				brick_speed: 250.0,
+				brick_speed: 250.0, 
 				player: Player::new(),
-				bricks: VecDeque::new(),
+				bricks: VecDeque::new(), // bricks on screen, ordered by time of appearance (height)
 				slash: None,
-				upcoming_bricks: VecDeque::new(),
+				song: Song {
+					song_name: String::from(""),
+					notes: BTreeSet::new(),
+					bpm: 96
+				},
+				upcoming_note: None
 			}
 		}
 		
@@ -104,7 +146,7 @@ mod game {
 			// check for brick destruction
 			match &mut self.slash {
 				Some(slash) => {
-					if slash.get_lifetime() < 0.0 {
+					if slash.get_last_time() < 0.0 {
 						self.slash = None;
 					} else {
 						slash.tick(seconds_passed);
@@ -125,7 +167,7 @@ mod game {
 			
 			// !!! account for object collisions
 			
-			self.add_upcoming_bricks();
+			self.add_upcoming_notes();
 			// >:< destroy/handle bricks that are off screen
 		}
 		
@@ -165,19 +207,22 @@ mod game {
 				}
 				Input::Ability1 => {
 					self.slash = Some(
-					if self.player.is_facing_right() {
-						Slash::new( PositionedGraphic {
-							g: Graphic::SlashRight,
-							x: self.player.get_right_x(),
-							y: self.player.get_top_y(),
-						}, true)
-					} else {
-						Slash::new( PositionedGraphic {
-							g: Graphic::SlashLeft,
-							x: self.player.get_left_x(),
-							y: self.player.get_top_y(),
-						}, false)
-					}
+						match self.player.face_direction() {
+							Direction::Right => {
+								Slash::new( PositionedGraphic {
+									g: Graphic::SlashRight,
+									x: self.player.get_right_x(),
+									y: self.player.get_top_y(),
+								}, true)
+							}
+							Direction::Left => {
+								Slash::new( PositionedGraphic {
+									g: Graphic::SlashLeft,
+									x: self.player.get_left_x(),
+									y: self.player.get_top_y(),
+								}, false)
+							}
+						}
 					);
 				}
 				Input::Ability2 => {}
@@ -185,6 +230,7 @@ mod game {
 				Input::Ability4	=> {}
 			}
 		}
+		
 		pub fn stop_command (&mut self, key: Input) {
 			match key {
 				Input::Jump => {
@@ -203,42 +249,54 @@ mod game {
 			}
 		}
 		
-		// !!! assert that the appearance_time of bricks is in order
-		pub fn load_brick (&mut self, bt: BrickType, time: f32, pos: i32) {
-			// TODO create a method load_song instead, and if possible make it more efficient than loading brick by brick
-			self.upcoming_bricks.push_back(
-				UpcomingBrick{ 
-					brick: Brick::new(
-						PositionedGraphic {
-							g: Graphic::Brick, // !!! match graphic to brick type
-							x: pos,
-							y: GAME_HEIGHT as i32,
-						}
-					),
-					time: time - 5.0, // >:< calculate from game height, brick height, ground height, and brick speed
-				},
+		// >:< create a method load_song instead, and if possible make it more efficient than loading brick by brick
+		pub fn load_brick (&mut self, bt: BrickType, time: f32, pos: f32) {
+			self.song.notes.insert(
+				UpcomingNote{
+					note_type: bt, // !!! match graphic to brick type
+					x: pos * get_graphic_size(Graphic::Brick).x as f32 + (GAME_WIDTH / 2) as f32,
+					// time the note is played minus the time it takes to get up the screen
+					time: time - (GAME_HEIGHT as f32 - GROUND_POS + get_graphic_size(Graphic::Brick).y as f32) / self.brick_speed,
+				}
 			);
+			
+			match self.song.notes.iter().next() {
+				Some(note) => self.upcoming_note = Some(*note),
+				None => self.upcoming_note = None
+			}
 		}
 		
+		// pub fn load_song (song: [(BrickType, f32, i32)]) {
+		// }
 		
-		// add any bricks from upcoming_bricks that have reached the time to appear
-		fn add_upcoming_bricks(&mut self) {
-			loop {
-				match self.upcoming_bricks.get_mut(0) {
-					Some(upcoming_brick) => {
-						if upcoming_brick.time < self.time_running {
-							let time_difference = self.time_running - upcoming_brick.time;
-							upcoming_brick.brick.tick(self.brick_speed, time_difference);
-							self.bricks.push_back(self.upcoming_bricks.pop_front().unwrap().brick);
-							
-						} else {
-							break;
+		
+		// add any bricks from song that have reached the time to appear
+		fn add_upcoming_notes(&mut self) {
+			if let Some(upcoming_note) = &self.upcoming_note {
+				if upcoming_note.time < self.time_running {
+					
+					let upcoming_notes = self.song.notes.range(*upcoming_note..); // !!! range bounds with a float possible?
+					
+					//>:<< loop
+					for upcoming_note in upcoming_notes {
+						if upcoming_note.time > self.time_running {
+							self.upcoming_note = Some(*upcoming_note);
+							return;
 						}
+						
+						let time_difference = self.time_running - upcoming_note.time;
+						
+						let mut pg = get_graphic_size(Graphic::Brick);
+						pg.x = upcoming_note.x as i32;
+						pg.y = GAME_HEIGHT as i32;
+						let mut brick = Brick::new(pg);
+						brick.tick(self.brick_speed, time_difference); // !!! alters location of song bricks
+						self.bricks.push_back(brick);
 					}
-					None => {
-						break;
-					}
+					
+					self.upcoming_note = None;
 				}
+				
 			}
 		}
 	}
@@ -250,12 +308,7 @@ struct AnimationFrame<'a> {
 	next_frame: Option<&'a AnimationFrame<'a>>
 }
 
-#[wasm_bindgen]
-#[repr(u8)]
-pub enum BrickType {
-	Default = 0,
-}
-
+// !!! GraphicID istead of Graphic
 #[wasm_bindgen]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
@@ -300,20 +353,6 @@ pub fn get_graphic_size(g: Graphic) -> PositionedGraphic {
 		}}
 	};
 }
-
-//>:<
-// #[wasm_bindgen]
-// #[repr(u8)]
-// #[derive(Clone, Copy, Debug)]
-// pub enum InputKey {
-	// Space = 32,
-	// Comma = 188,
-	// Period = 190,
-	// Q = 81,
-	// W = 87,
-	// E = 69,
-	// R = 82,
-// }
 
 #[wasm_bindgen]
 #[repr(u8)]

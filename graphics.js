@@ -1,7 +1,7 @@
 import * as wasm from "./pkg/music_mercenary.js";
 
 
-const NUM_GRAPHICS = 5; // >:< derive from the rust source code
+const NUM_GRAPHICS = 5; // !!! derive from the rust source code
 
 // !!! create function to assign to both this and Y Factor, and gameCanvas size, then remove the calculation in loadImages
 let g_sizeXFactor; 

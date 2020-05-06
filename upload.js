@@ -1,39 +1,14 @@
-import * as MIDIReader from "./read-MIDI.js";
-import * as sqljs from "./sql-wasm.js";
+import * as fileReader from "./file-reader.js";
 
 let db;
 let notes;
 
-async function convertMIDI(MIDIFile){
-	let buffer = await MIDIFile.arrayBuffer();
-	let bytes = new Uint8Array(buffer, 0, buffer.byteLength);
-	let notes = MIDIReader.readMIDI(bytes);
-	return notes;
-}
-
-async function loadDB(dbFile){
-	let db;
-	
-	let buffer = await dbFile.arrayBuffer();
-	let bytes = new Uint8Array(buffer, 0, buffer.byteLength);
-	await sqljs.initSqlJs()
-	.then(res => {
-		db = new res.Database(bytes);
-	})
-	.catch(err => {
-		console.log(err);// !!! handle errors
-	});
-	
-	return db;
-}
-
 async function handleMIDIUpload (evt) {
-	notes = await convertMIDI(this.files[0]);
+	notes = await fileReader.convertMIDI(this.files[0]);
 }
 
 async function handleDBUpload (evt) {
-	db = await loadDB(this.files[0]);
-	let contents = db.exec("SELECT * FROM Songs");
+	db = await fileReader.loadDB(this.files[0]);
 }
 
 let MIDIFileSelector = document.createElement('input');
@@ -73,7 +48,6 @@ if (window.File && window.FileReader && window.FileList && window.Blob) {
 				db.run(sql);
 				let lastInsert = db.exec("SELECT last_insert_rowid()");
 				let newSongID = lastInsert[0].values[0];
-				console.log(newSongID);
 				
 				notes.forEach( note => {
 					let sql = "INSERT INTO NOTES \
@@ -81,15 +55,16 @@ if (window.File && window.FileReader && window.FileList && window.Blob) {
 						VALUES (" 
 						+ newSongID + ", "
 						+ note.brickType + ", "
-						+ note.time + ", "
+						+ note.time / 1000 + ", "
 						+ note.xPos + ", "
-						+ note.duration + ", "
+						+ note.duration / 1000 + ", "
 						+ note.note + ", "
 						+ note.velocity + ", "
 						+ note.isTonal + ", "
 						+ note.programNumber
 						+ ");"
 					;
+					
 					db.run(sql);
 				});
 				

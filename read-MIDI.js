@@ -11,8 +11,9 @@ class Channel{
 			throw Error("Tried to construct an invalid channel");
 		}
 		this.identifier = identifier;
-		this.maxNote = -Infinity;
 		this.minNote = Infinity;
+		this.maxNote = -Infinity;
+		this.programNumber = 0;
 	}
 }
 
@@ -197,6 +198,8 @@ export function readMIDI (bytes) {
 						if(i != chunkBoundary) {
 							throw Error("end of track did not coincide with chunk boundary");
 						}
+						
+						console.log("End of track");
 						continue;
 					
 					case 0x51:
@@ -361,6 +364,7 @@ export function readMIDI (bytes) {
 	
 	let output = consolidateOutput(channels);
 	sortOutputByTime(output);
+	console.log("Done");
 	
 	return output;
 }

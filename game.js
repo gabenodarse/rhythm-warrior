@@ -2,10 +2,12 @@
 
 import * as graphics from "./graphics.js";
 import * as wasm from "./pkg/music_mercenary.js";
+import * as loader from "./load.js";
 
 let g_controls = {};
 let g_game;
 let g_gamePaused = false;
+let g_startGame = () => {}
 
 const g_handleKeyDown = event => {
 	// TODO faster handling of repeated key inputs from holding down a key?
@@ -31,7 +33,14 @@ const g_handleKeyUp = event => {
 
 export async function run() {
 	let resourceLocations;
+	let db;
+	const audioContext = new AudioContext();
+	let audioSource;
+	let audioBuffer;
+	let songTime = 0;
+	const audioTimeSafetyBuffer = 0.15; // longer gives the hardware more time to prepare the sound to end at a precise time
 	
+	// !!! move the loading to load.js
 	// TODO add error handling
 	await Promise.all( [ 
 		wasm.default(),
@@ -45,41 +54,78 @@ export async function run() {
 		() => { 
 			initGame();
 			graphics.renderAll(g_game.get_instructions()); },
-		rej => { alert("loadImages FAILED" + rej); }
+		rej => { console.log("loadImages FAILED" + rej); }
 	);
 	
-	// !!! make loading a song its own function
 	// TODO add error handling
-	await fetch("./Here-we-go.json")
-		.then(res => res.json())
-		.then(res => { 
-			res.forEach( entry => {
-				g_game.load_brick(entry[0], entry[1], entry[2]);
-			});
-		}) 
-	;
+	await loader.loadDefaultDB()
+		.then(res => {
+			db = res;
+		})
+		.catch( rej => {
+			console.log("could not load the the database. Err: " + rej);
+		}
+	);
 	
-	let last = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime();
+	// TODO add error handling
+	await fetch("song.mp3")
+		.then(res => res.arrayBuffer())
+		.then(res => audioContext.decodeAudioData(res))
+		.then(res => { audioBuffer = res; }
+	);
+	
+	let songData = loader.loadSong(1, db);
+	songData[0]["values"].forEach( note => {
+		g_game.load_brick(note[2], note[3], note[4]);
+	});
+	
+	
+	
+	let last; // last tick time
 	let now;
 	const renderLoop = () => {
 		now = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime();
 		
-		if(!g_gamePaused) {
-			// at a certain time threshold, get instruction
-			// then render, asynchronously if possible to keep game ticking
-		
-			// !!! handle if there's too long a time between ticks (pause game?)
-			// TODO get fps
-			g_game.tick((now - last) / 1000); // convert to seconds
-			graphics.renderAll(g_game.get_instructions());
+		if(g_gamePaused) {
+			let switchTime = audioContext.currentTime + audioTimeSafetyBuffer;
+			audioSource.stop(switchTime);
+			let timePassed = (now - last) / 1000; // convert to seconds
+			g_game.tick(timePassed + audioTimeSafetyBuffer);
+			songTime += timePassed + audioTimeSafetyBuffer;
+			
+			return;
 		}
 		
+		// !!! render asynchronously to keep game ticking???
+		// !!! handle if there's too long a time between ticks (pause game?)
+		// TODO get fps
+		let timePassed = (now - last) / 1000; // convert to seconds
+		songTime += timePassed;
+		g_game.tick(timePassed); 
 		last = now;
+		
+		graphics.renderAll(g_game.get_instructions());
 		
 		requestAnimationFrame(renderLoop);
 	};
 	
-	requestAnimationFrame(renderLoop);
+	const start = () => {
+		// !!! creating a new buffer source each time because I couldn't figure out how to resume audio precisely
+			// make sure multiple buffer sources don't linger in memory
+		audioSource = audioContext.createBufferSource(); 
+		audioSource.buffer = audioBuffer;
+		audioSource.connect(audioContext.destination);
+		
+		let switchTime = audioContext.currentTime + audioTimeSafetyBuffer;
+		audioSource.start(switchTime, songTime);
+		last = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime() 
+		last += audioTimeSafetyBuffer * 1000;
+		
+		requestAnimationFrame(renderLoop);
+	}
+	
+	g_startGame = start;
+	start();
 }
 
 
@@ -100,6 +146,7 @@ function initGame() {
 }
 
 function pause() {
+	//>:< handle key states on pause/unpause
 	for(const key in g_controls) {
 		let event = new KeyboardEvent("keyup", {
 			keyCode: key,
@@ -108,17 +155,16 @@ function pause() {
 	}
 	
 	g_gamePaused = true;
-	controls(); //>:< create a pause menu and get to controls from there from pause menu
+	controls(); // !!! create a pause menu and get to controls from there
 }
 
 function unpause() {
-	//>:< put down all keys that are down
 	g_gamePaused = false;
+	g_startGame();
 }
 
 // !!! add error handling
 function controls() {
-	let newControls = Object.assign({}, g_controls);
 	let inputKeys = [];
 	
 	for (const key in g_controls) {
@@ -147,20 +193,7 @@ function controls() {
 	}
 	
 	let changeInputKey = (input, newKey) => {
-		// remove the old key from the controls
-		let oldKey = inputKeys[input];
-		if(oldKey){
-			delete newControls[oldKey];
-		}
-		
-		// check if the input's new associated key is already a control.
-			// If so, set the input associated with that key to false because the control will be changed
-		if(newControls[newKey]){
-			inputKeys[ newControls[newKey] ] = false;
-		}
-		
-		// add the new key to the controls, mark the input as having a new associated key, and display update in the menu
-		newControls[newKey] = input;
+		// mark the input as having a new associated key, and display update in the menu
 		inputKeys[input] = newKey;
 		controlChangeDivs[input].label.innerHTML = controlChangeDivs[input].label.prefixText + newKey;
 	}
@@ -177,7 +210,7 @@ function controls() {
 		window.addEventListener("keydown", handleKeyPress, {once: true});
 	}
 	
-	//>:< move so event listeners are only added once
+	//>:< move so event listeners are only added once (not on every call of the function)
 	let eventHandlers = [];
 	eventHandlers[wasm.Input.Jump] = () => { awaitNewKey(wasm.Input.Jump); };
 	eventHandlers[wasm.Input.Left] = () => { awaitNewKey(wasm.Input.Left); };
@@ -197,10 +230,16 @@ function controls() {
 	let acceptControls = event => {
 		if (event.keyCode === 192){
 			changeControlsMenu.style.display = "none";
-			g_controls = newControls;
+			g_controls = {};
+			for (const control in inputKeys) {
+				g_controls[inputKeys[control]] = parseInt(control);
+			}
+			
 			window.removeEventListener("keydown", acceptControls);
 		}
 	}
 	window.addEventListener("keydown", acceptControls);
 	
 }
+
+
