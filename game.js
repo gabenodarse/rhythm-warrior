@@ -53,7 +53,7 @@ export async function run() {
 	await graphics.loadImages(resourceLocations).then( 
 		() => { 
 			initGame();
-			graphics.renderAll(g_game.get_instructions()); },
+			graphics.renderAll(g_game.rendering_instructions()); },
 		rej => { console.log("loadImages FAILED" + rej); }
 	);
 	
@@ -98,13 +98,13 @@ export async function run() {
 		
 		// !!! render asynchronously to keep game ticking???
 		// !!! handle if there's too long a time between ticks (pause game?)
-		// TODO get fps
+		// >:< get fps, average, and log
 		let timePassed = (now - last) / 1000; // convert to seconds
 		songTime += timePassed;
 		g_game.tick(timePassed); 
 		last = now;
 		
-		graphics.renderAll(g_game.get_instructions());
+		graphics.renderAll(g_game.rendering_instructions());
 		
 		requestAnimationFrame(renderLoop);
 	};
@@ -210,7 +210,7 @@ function controls() {
 		window.addEventListener("keydown", handleKeyPress, {once: true});
 	}
 	
-	//>:< move so event listeners are only added once (not on every call of the function)
+	// !!! move so event listeners are only added once (not on every call of the function)
 	let eventHandlers = [];
 	eventHandlers[wasm.Input.Jump] = () => { awaitNewKey(wasm.Input.Jump); };
 	eventHandlers[wasm.Input.Left] = () => { awaitNewKey(wasm.Input.Left); };
@@ -226,7 +226,7 @@ function controls() {
 	changeControlsMenu.style.display = "block";
 	
 	// !!! add ability to accept or cancel changed controls
-	// >:< accept controls with a different button
+	// !!! accept controls with a different button
 	let acceptControls = event => {
 		if (event.keyCode === 192){
 			changeControlsMenu.style.display = "none";

@@ -1,7 +1,7 @@
 import * as wasm from "./pkg/music_mercenary.js";
 
 
-const NUM_GRAPHICS = 5; // !!! derive from the rust source code
+const NUM_GRAPHICS = 6; // >:< derive from the rust source code
 
 // !!! create function to assign to both this and Y Factor, and gameCanvas size, then remove the calculation in loadImages
 let g_sizeXFactor; 
@@ -20,7 +20,7 @@ let g_canvases = new Array(NUM_GRAPHICS);
 export async function loadImages(resourceLocations){
 	let results = [];
 	
-	let bgSize = wasm.get_graphic_size(wasm.Graphic.Background);
+	let bgSize = wasm.graphic_size(wasm.Graphic.Background);
 	g_sizeXFactor = g_gameCanvas.width / bgSize.x;
 	g_sizeYFactor = g_gameCanvas.height / bgSize.y;
 	
@@ -32,7 +32,7 @@ export async function loadImages(resourceLocations){
 				console.log("loaded 1");
 				g_canvases[canvasID] = document.createElement('canvas'); // TODO make sure canvas can be created or if already created
 				
-				let size = wasm.get_graphic_size(canvasID);
+				let size = wasm.graphic_size(canvasID);
 				g_canvases[canvasID].width = (size.x * g_sizeXFactor);
 				g_canvases[canvasID].height = (size.y * g_sizeYFactor);
 				g_canvases[canvasID].getContext('2d').drawImage(img, 0, 0, (size.x * g_sizeXFactor), (size.y * g_sizeYFactor));
@@ -67,6 +67,10 @@ export async function loadImages(resourceLocations){
 	);
 	results.push(
 		loadImage("SlashRight", wasm.Graphic.SlashRight)
+		.catch( onReject )
+	);
+	results.push(
+		loadImage("Dash", wasm.Graphic.Dash)
 		.catch( onReject )
 	);
 	

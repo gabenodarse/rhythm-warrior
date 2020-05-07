@@ -34,7 +34,6 @@
 // TESTS
 // test that objects have correct dimensions
 
-use std::collections::btree_set;
 use std::collections::btree_set::BTreeSet; 
 use std::cmp::Ordering;
 use std::ops::Bound;
@@ -64,7 +63,9 @@ mod game {
 	use objects::Brick;
 	use objects::BrickType;
 	use objects::Player;
+	use objects::Dash;
 	use objects::Slash;
+	use objects::TempObjectState;
 	use objects::Direction;
 	
 	#[derive(Clone, Copy)]
@@ -113,6 +114,7 @@ mod game {
 		player: Player,
 		bricks: VecDeque<Brick>,
 		slash: Option<Slash>,
+		dash: Option<Dash>,
 		// !!! create a song type to hold song notes and meta data
 		song: Song, 
 		upcoming_note: Option<UpcomingNote>
@@ -123,9 +125,10 @@ mod game {
 			Game {
 				time_running: 0.0,
 				brick_speed: 250.0, 
-				player: Player::new(),
+				player: Player::new((GAME_WIDTH / 2) as f32, 0.0),
 				bricks: VecDeque::new(), // bricks on screen, ordered by time of appearance (height)
 				slash: None,
+				dash: None,
 				song: Song {
 					song_name: String::from(""),
 					notes: BTreeSet::new(),
@@ -139,60 +142,111 @@ mod game {
 		pub fn tick(&mut self, seconds_passed: f32) {
 			self.time_running += seconds_passed;
 			self.player.tick(seconds_passed);
-			for brick in self.bricks.iter_mut() {
-				brick.tick(self.brick_speed, seconds_passed);
-			}
 			
-			// check for brick destruction
+			// check for brick destruction 
+			// !!! consolidate destructive objects (replace TempObjectState with DestructiveObjectState?)
+			// !!! collide functions on these destructive objects, taking an ObjectBounds?
+			// TODO: might be a little faster to do as bricks are updated
 			match &mut self.slash {
 				Some(slash) => {
-					if slash.get_last_time() < 0.0 {
-						self.slash = None;
-					} else {
-						slash.tick(seconds_passed);
-						
-						// Remove bricks that are slashed
-						// TODO more efficient way than checking ALL bricks
-						self.bricks.retain(|&brick| -> bool {
-							brick.get_top_y() > slash.get_bottom_y() ||
-							brick.get_right_x() < slash.get_left_x() ||
-							brick.get_left_x() > slash.get_right_x() ||
-							brick.get_bottom_y() < slash.get_top_y()
-						});
-						
+					let keep;
+					match slash.state(){
+						TempObjectState::New => {
+							// Remove bricks that are slashed
+							// TODO more efficient way than checking ALL bricks
+							let slash_bounds = slash.bounds();
+							self.bricks.retain(|&brick| -> bool {
+								!objects::intersect(&slash_bounds, &brick.bounds())
+							});
+							
+							keep = true;
+						},
+						TempObjectState::Lingering(t) => {
+							keep = if *t < 0.0 { false } else { true };
+						},
+						_ => { panic!() }
 					}
+					
+					if keep { slash.tick(seconds_passed); }
+					else { self.slash = None; }
+				}
+				None => {}
+			}
+			match &mut self.dash {
+				Some(dash) => {
+					let keep;
+					match dash.state(){
+						TempObjectState::New | TempObjectState::Active(_) => {
+							// Remove bricks that are slashed
+							// TODO more efficient way than checking ALL bricks
+							let dash_bounds = dash.bounds();
+							self.bricks.retain(|&brick| -> bool {
+								!objects::intersect(&dash_bounds, &brick.bounds())
+							});
+							
+							keep = true;
+						},
+						TempObjectState::Lingering(t) => {
+							keep = if *t < 0.0 { false } else { true };
+						},
+						_ => { panic!() }
+					}
+					
+					if keep { dash.tick(seconds_passed); }
+					else { self.dash = None; }
 				}
 				None => {}
 			}
 			
-			// !!! account for object collisions
+			// tick bricks while discarding any bricks off screen 
+			// TODO might not need to check on screen for all notes
+			let len = self.bricks.len();
+			let mut del = 0;
+			for i in 0..len {
+				if self.bricks[i].bounds().bottom_y < 0.0 {
+					del += 1;
+				} else {
+					self.bricks[i].tick(self.brick_speed, seconds_passed);
+					if del > 0 {
+						self.bricks.swap(i - del, i);
+					}
+				}
+			}
+			if del > 0 {
+				self.bricks.truncate(len - del);
+			}
 			
 			self.add_upcoming_notes();
-			// >:< destroy/handle bricks that are off screen
 		}
 		
-		
-		pub fn get_instructions(&self) -> Array {
+		// !!! let javascript keep a pointer to the rendering instructions inside wasm, and only update them with this function
+			// so there are no races?
+		pub fn rendering_instructions(&self) -> Array {
 			let mut instructions = vec!(
 				PositionedGraphic {
 					g: Graphic::Background,
 					x: 0,
 					y: 0
 				},
-				self.player.get_rendering_instruction(),
+				self.player.rendering_instruction(),
 			);
 			for brick in &self.bricks {
-				instructions.push(brick.get_rendering_instruction());
+				instructions.push(brick.rendering_instruction());
 			}
 			match &self.slash {
 				Some(slash) => {
-					instructions.push(slash.get_rendering_instruction());
+					instructions.push(slash.rendering_instruction());
+				}
+				None => {}
+			}
+			match &self.dash {
+				Some(dash) => {
+					instructions.push(dash.rendering_instruction());
 				}
 				None => {}
 			}
 			instructions.into_iter().map(JsValue::from).collect()
 		}
-		
 		
 		pub fn input_command (&mut self, input: Input) {
 			match input {
@@ -206,26 +260,31 @@ mod game {
 					self.player.move_right();
 				}
 				Input::Ability1 => {
+					let player_bounds = self.player.bounds();
 					self.slash = Some(
 						match self.player.face_direction() {
 							Direction::Right => {
-								Slash::new( PositionedGraphic {
-									g: Graphic::SlashRight,
-									x: self.player.get_right_x(),
-									y: self.player.get_top_y(),
-								}, true)
+								Slash::new( player_bounds.right_x, player_bounds.top_y, true)
 							}
 							Direction::Left => {
-								Slash::new( PositionedGraphic {
-									g: Graphic::SlashLeft,
-									x: self.player.get_left_x(),
-									y: self.player.get_top_y(),
-								}, false)
+								Slash::new( player_bounds.left_x, player_bounds.top_y, false)
 							}
 						}
 					);
 				}
-				Input::Ability2 => {}
+				Input::Ability2 => {
+					let player_bounds = self.player.bounds();
+					self.dash = Some(
+						match self.player.face_direction() {
+							Direction::Right => {
+								Dash::new( player_bounds.right_x, player_bounds.top_y, true)
+							}
+							Direction::Left => {
+								Dash::new( player_bounds.left_x, player_bounds.top_y, false)
+							}
+						}
+					);
+				}
 				Input::Ability3 => {}
 				Input::Ability4	=> {}
 			}
@@ -249,14 +308,14 @@ mod game {
 			}
 		}
 		
-		// >:< create a method load_song instead, and if possible make it more efficient than loading brick by brick
+		// TODO create a method load_song
 		pub fn load_brick (&mut self, bt: BrickType, time: f32, pos: f32) {
 			self.song.notes.insert(
 				UpcomingNote{
-					note_type: bt, // !!! match graphic to brick type
-					x: pos * get_graphic_size(Graphic::Brick).x as f32 + (GAME_WIDTH / 2) as f32,
+					note_type: bt,
+					x: pos * objects::BRICK_WIDTH as f32 + (GAME_WIDTH / 2) as f32,
 					// time the note is played minus the time it takes to get up the screen
-					time: time - (GAME_HEIGHT as f32 - GROUND_POS + get_graphic_size(Graphic::Brick).y as f32) / self.brick_speed,
+					time: time - (GAME_HEIGHT as f32 - GROUND_POS + objects::BRICK_HEIGHT as f32) / self.brick_speed,
 				}
 			);
 			
@@ -266,10 +325,6 @@ mod game {
 			}
 		}
 		
-		// pub fn load_song (song: [(BrickType, f32, i32)]) {
-		// }
-		
-		
 		// add any bricks from song that have reached the time to appear
 		fn add_upcoming_notes(&mut self) {
 			if let Some(upcoming_note) = &self.upcoming_note {
@@ -277,7 +332,6 @@ mod game {
 					
 					let upcoming_notes = self.song.notes.range(*upcoming_note..); // !!! range bounds with a float possible?
 					
-					//>:<< loop
 					for upcoming_note in upcoming_notes {
 						if upcoming_note.time > self.time_running {
 							self.upcoming_note = Some(*upcoming_note);
@@ -286,10 +340,7 @@ mod game {
 						
 						let time_difference = self.time_running - upcoming_note.time;
 						
-						let mut pg = get_graphic_size(Graphic::Brick);
-						pg.x = upcoming_note.x as i32;
-						pg.y = GAME_HEIGHT as i32;
-						let mut brick = Brick::new(pg);
+						let mut brick = Brick::new(upcoming_note.x, GAME_HEIGHT as f32);
 						brick.tick(self.brick_speed, time_difference); // !!! alters location of song bricks
 						self.bricks.push_back(brick);
 					}
@@ -318,6 +369,7 @@ pub enum Graphic {
 	Brick = 2,
 	SlashRight = 3,
 	SlashLeft = 4,
+	Dash = 5,
 }
 #[wasm_bindgen]
 pub struct PositionedGraphic {
@@ -329,7 +381,7 @@ pub struct PositionedGraphic {
 
 // TODO split object dimensions and graphic dimensions
 #[wasm_bindgen]
-pub fn get_graphic_size(g: Graphic) -> PositionedGraphic {
+pub fn graphic_size(g: Graphic) -> PositionedGraphic {
 	return match g {
 		Graphic::Background => { PositionedGraphic {
 			g,
@@ -338,18 +390,23 @@ pub fn get_graphic_size(g: Graphic) -> PositionedGraphic {
 		}},
 		Graphic::Player => { PositionedGraphic {
 			g,
-			x: 50,
-			y: 100,
+			x: objects::PLAYER_WIDTH as i32,
+			y: objects::PLAYER_HEIGHT as i32,
 		}},
 		Graphic::Brick => { PositionedGraphic {
 			g,
-			x: 60,
-			y: 120,
+			x: objects::BRICK_WIDTH as i32,
+			y: objects::BRICK_HEIGHT as i32,
 		}},
 		Graphic::SlashRight | Graphic::SlashLeft => { PositionedGraphic {
 			g,
-			x: 65,
-			y: 100
+			x: objects::SLASH_WIDTH as i32,
+			y: objects::SLASH_HEIGHT as i32
+		}},
+		Graphic::Dash => { PositionedGraphic {
+			g,
+			x: objects::DASH_WIDTH as i32,
+			y: objects::DASH_HEIGHT as i32
 		}}
 	};
 }

@@ -3,5 +3,6 @@
   "Brick": "./images/brick.jpg",
   "Background": "./images/background.png",
   "SlashLeft": "./images/slash-left.png",
-  "SlashRight": "./images/slash-right.png"
+  "SlashRight": "./images/slash-right.png",
+  "Dash": "./images/dash.png"
 }
