@@ -63,8 +63,6 @@ mod game {
 	use objects::Brick;
 	use objects::BrickType;
 	use objects::Player;
-	use objects::Dash;
-	use objects::Slash;
 	use objects::TempObjectState;
 	use objects::Direction;
 	
@@ -110,11 +108,9 @@ mod game {
 			// the objects either point to subsequently positioned objects or not (Option type)
 		time_running: f32,
 		// !!! better location for brick speed? (inside brick struct so it isn't passed for every single brick? limitations?)
-		brick_speed: f32, // the speed at which bricks move up the screen
+		brick_speed: f32,
 		player: Player,
 		bricks: VecDeque<Brick>,
-		slash: Option<Slash>,
-		dash: Option<Dash>,
 		// !!! create a song type to hold song notes and meta data
 		song: Song, 
 		upcoming_note: Option<UpcomingNote>
@@ -124,11 +120,9 @@ mod game {
 		pub fn new () -> Game {
 			Game {
 				time_running: 0.0,
-				brick_speed: 250.0, 
+				brick_speed: 250.0,
 				player: Player::new((GAME_WIDTH / 2) as f32, 0.0),
 				bricks: VecDeque::new(), // bricks on screen, ordered by time of appearance (height)
-				slash: None,
-				dash: None,
 				song: Song {
 					song_name: String::from(""),
 					notes: BTreeSet::new(),
@@ -141,62 +135,47 @@ mod game {
 		
 		pub fn tick(&mut self, seconds_passed: f32) {
 			self.time_running += seconds_passed;
-			self.player.tick(seconds_passed);
 			
 			// check for brick destruction 
 			// !!! consolidate destructive objects (replace TempObjectState with DestructiveObjectState?)
 			// !!! collide functions on these destructive objects, taking an ObjectBounds?
 			// TODO: might be a little faster to do as bricks are updated
-			match &mut self.slash {
+			match self.player.slashing() {
 				Some(slash) => {
-					let keep;
 					match slash.state(){
-						TempObjectState::New => {
+						TempObjectState::New(_) => {
 							// Remove bricks that are slashed
 							// TODO more efficient way than checking ALL bricks
 							let slash_bounds = slash.bounds();
 							self.bricks.retain(|&brick| -> bool {
 								!objects::intersect(&slash_bounds, &brick.bounds())
 							});
-							
-							keep = true;
 						},
-						TempObjectState::Lingering(t) => {
-							keep = if *t < 0.0 { false } else { true };
-						},
-						_ => { panic!() }
+						_ => ()
 					}
-					
-					if keep { slash.tick(seconds_passed); }
-					else { self.slash = None; }
 				}
 				None => {}
 			}
-			match &mut self.dash {
+			// ticks after checking for destruction. All graphically overlapping dashes/bricks should be / are destroyed, 1 frame 
+				// after the overlap
+			match self.player.dashing() {
 				Some(dash) => {
-					let keep;
 					match dash.state(){
-						TempObjectState::New | TempObjectState::Active(_) => {
-							// Remove bricks that are slashed
+						TempObjectState::Active(_) => {
+							// Remove bricks that are dashed
 							// TODO more efficient way than checking ALL bricks
 							let dash_bounds = dash.bounds();
 							self.bricks.retain(|&brick| -> bool {
 								!objects::intersect(&dash_bounds, &brick.bounds())
 							});
-							
-							keep = true;
 						},
-						TempObjectState::Lingering(t) => {
-							keep = if *t < 0.0 { false } else { true };
-						},
-						_ => { panic!() }
+						_ => ()
 					}
-					
-					if keep { dash.tick(seconds_passed); }
-					else { self.dash = None; }
 				}
 				None => {}
 			}
+			
+			self.player.tick(seconds_passed);
 			
 			// tick bricks while discarding any bricks off screen 
 			// TODO might not need to check on screen for all notes
@@ -228,27 +207,25 @@ mod game {
 					x: 0,
 					y: 0
 				},
-				self.player.rendering_instruction(),
 			);
+			
+			instructions.push(self.player.rendering_instruction());
+			
 			for brick in &self.bricks {
 				instructions.push(brick.rendering_instruction());
 			}
-			match &self.slash {
-				Some(slash) => {
-					instructions.push(slash.rendering_instruction());
-				}
-				None => {}
-			}
-			match &self.dash {
-				Some(dash) => {
-					instructions.push(dash.rendering_instruction());
-				}
-				None => {}
-			}
+			
+			
+			if let Some(slash) = self.player.slashing() {
+				instructions.push(slash.rendering_instruction()); };
+			
+			if let Some(dash) = self.player.dashing() {
+				instructions.push(dash.rendering_instruction()); };
+			
 			instructions.into_iter().map(JsValue::from).collect()
 		}
 		
-		pub fn input_command (&mut self, input: Input) {
+		pub fn input_command (&mut self, input: Input, t_since_tick: f32) {
 			match input {
 				Input::Jump => {
 					self.player.jump();
@@ -260,30 +237,10 @@ mod game {
 					self.player.move_right();
 				}
 				Input::Ability1 => {
-					let player_bounds = self.player.bounds();
-					self.slash = Some(
-						match self.player.face_direction() {
-							Direction::Right => {
-								Slash::new( player_bounds.right_x, player_bounds.top_y, true)
-							}
-							Direction::Left => {
-								Slash::new( player_bounds.left_x, player_bounds.top_y, false)
-							}
-						}
-					);
+					self.player.slash(t_since_tick);
 				}
 				Input::Ability2 => {
-					let player_bounds = self.player.bounds();
-					self.dash = Some(
-						match self.player.face_direction() {
-							Direction::Right => {
-								Dash::new( player_bounds.right_x, player_bounds.top_y, true)
-							}
-							Direction::Left => {
-								Dash::new( player_bounds.left_x, player_bounds.top_y, false)
-							}
-						}
-					);
+					self.player.dash(t_since_tick);
 				}
 				Input::Ability3 => {}
 				Input::Ability4	=> {}
@@ -353,23 +310,26 @@ mod game {
 	}
 }
 
-
-struct AnimationFrame<'a> {
-	frame: Graphic,
-	next_frame: Option<&'a AnimationFrame<'a>>
-}
-
 // !!! GraphicID istead of Graphic
 #[wasm_bindgen]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum Graphic {
-	Background = 0,
-	Player = 1,
-	Brick = 2,
-	SlashRight = 3,
-	SlashLeft = 4,
-	Dash = 5,
+	None,
+	Background,
+	Player,
+	Brick,
+	SlashRight,
+	SlashLeft,
+	Dash,
+	DashR0,
+	DashR1,
+	DashR2,
+	DashR3,
+	DashL0,
+	DashL1,
+	DashL2,
+	DashL3
 }
 #[wasm_bindgen]
 pub struct PositionedGraphic {
@@ -383,6 +343,11 @@ pub struct PositionedGraphic {
 #[wasm_bindgen]
 pub fn graphic_size(g: Graphic) -> PositionedGraphic {
 	return match g {
+		Graphic::None => { PositionedGraphic {
+			g,
+			x: 0,
+			y: 0
+		}},
 		Graphic::Background => { PositionedGraphic {
 			g,
 			x: GAME_WIDTH as i32,
@@ -406,6 +371,26 @@ pub fn graphic_size(g: Graphic) -> PositionedGraphic {
 		Graphic::Dash => { PositionedGraphic {
 			g,
 			x: objects::DASH_WIDTH as i32,
+			y: objects::DASH_HEIGHT as i32
+		}},
+		Graphic::DashR0 | Graphic::DashL0 => { PositionedGraphic {
+			g,
+			x: objects::DASH_WIDTH as i32 / 5,
+			y: objects::DASH_HEIGHT as i32
+		}},
+		Graphic::DashR1 | Graphic::DashL1 => { PositionedGraphic {
+			g,
+			x: objects::DASH_WIDTH as i32 * 2 / 5 ,
+			y: objects::DASH_HEIGHT as i32
+		}},
+		Graphic::DashR2 | Graphic::DashL2 => { PositionedGraphic {
+			g,
+			x: objects::DASH_WIDTH as i32 * 3 / 5,
+			y: objects::DASH_HEIGHT as i32
+		}},
+		Graphic::DashR3 | Graphic::DashL3 => { PositionedGraphic {
+			g,
+			x: objects::DASH_WIDTH as i32 * 4 / 5,
 			y: objects::DASH_HEIGHT as i32
 		}}
 	};

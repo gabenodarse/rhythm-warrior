@@ -8,6 +8,8 @@ let g_controls = {};
 let g_game;
 let g_gamePaused = false;
 let g_startGame = () => {}
+let g_last; // last tick time
+let g_now;
 
 const g_handleKeyDown = event => {
 	// TODO faster handling of repeated key inputs from holding down a key?
@@ -20,7 +22,8 @@ const g_handleKeyDown = event => {
 		}
 	}
 	else if(typeof(g_controls[event.keyCode]) === "number" && !g_gamePaused){
-		g_game.input_command(g_controls[event.keyCode]);
+		g_now = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime();
+		g_game.input_command(g_controls[event.keyCode], (g_now - g_last) / 1000); // convert to seconds
 	}
 	
 	event.preventDefault();
@@ -81,15 +84,13 @@ export async function run() {
 	
 	
 	
-	let last; // last tick time
-	let now;
 	const renderLoop = () => {
-		now = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime();
+		g_now = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime();
 		
 		if(g_gamePaused) {
 			let switchTime = audioContext.currentTime + audioTimeSafetyBuffer;
 			audioSource.stop(switchTime);
-			let timePassed = (now - last) / 1000; // convert to seconds
+			let timePassed = (g_now - g_last) / 1000; // convert to seconds
 			g_game.tick(timePassed + audioTimeSafetyBuffer);
 			songTime += timePassed + audioTimeSafetyBuffer;
 			
@@ -99,10 +100,10 @@ export async function run() {
 		// !!! render asynchronously to keep game ticking???
 		// !!! handle if there's too long a time between ticks (pause game?)
 		// >:< get fps, average, and log
-		let timePassed = (now - last) / 1000; // convert to seconds
+		let timePassed = (g_now - g_last) / 1000; // convert to seconds
 		songTime += timePassed;
 		g_game.tick(timePassed); 
-		last = now;
+		g_last = g_now;
 		
 		graphics.renderAll(g_game.rendering_instructions());
 		
@@ -118,8 +119,8 @@ export async function run() {
 		
 		let switchTime = audioContext.currentTime + audioTimeSafetyBuffer;
 		audioSource.start(switchTime, songTime);
-		last = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime() 
-		last += audioTimeSafetyBuffer * 1000;
+		g_last = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime() 
+		g_last += audioTimeSafetyBuffer * 1000;
 		
 		requestAnimationFrame(renderLoop);
 	}

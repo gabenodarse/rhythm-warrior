@@ -4,5 +4,13 @@
   "Background": "./images/background.png",
   "SlashLeft": "./images/slash-left.png",
   "SlashRight": "./images/slash-right.png",
-  "Dash": "./images/dash.png"
+  "Dash": "./images/dash.png",
+  "DashL0": "./images/dashl0.png",
+  "DashL1": "./images/dashl1.png",
+  "DashL2": "./images/dashl2.png",
+  "DashL3": "./images/dashl3.png",
+  "DashR0": "./images/dashr0.png",
+  "DashR1": "./images/dashr1.png",
+  "DashR2": "./images/dashr2.png",
+  "DashR3": "./images/dashr3.png"
 }

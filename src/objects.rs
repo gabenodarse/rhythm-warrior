@@ -1,6 +1,7 @@
 
 // TODO
 // Log objects going beyond boundaries
+
 use std::cmp::Ordering;
 use wasm_bindgen::prelude::*;
 
@@ -28,6 +29,7 @@ pub trait Object {
 	fn rendering_instruction(&self) -> PositionedGraphic;
 }
 
+// storing all bounds rather than pos+size because more comparisons between objects are possible than updates of positions
 #[derive(Clone, Copy)]
 pub struct ObjectBounds {
 	pub left_x: f32,
@@ -46,13 +48,14 @@ pub struct Player {
 	graphic: Graphic,
 	
 	jump_velocity: f32,
+	dash_time: f32,
 	
-	// using right_x and bottom_y rather than sizes because more comparisons between objects are possible than updates of positions
 	bounds: ObjectBounds,
 	dx: f32, // in pixels per second
 	dy: f32, // in pixels per second
 	
-	action: PlayerAction,
+	slash: Option<Slash>,
+	dash: Option<Dash>,
 	jumping: bool,
 	moving_left: bool,
 	moving_right: bool,
@@ -73,9 +76,8 @@ pub struct Brick {
 	bounds: ObjectBounds,
 }
 
-// !!! single State enum for ephemeral graphics?
 pub enum TempObjectState {
-	New,
+	New(f32), // Stores how long into the tick the object was created, since inputs happen asynchronously with ticks
 	Active(f32),
 	Lingering(f32)
 }
@@ -87,16 +89,10 @@ pub struct Slash {
 }
 
 pub struct Dash {
-	state: TempObjectState, 
+	state: TempObjectState,
 	graphic: Graphic,
+	direction: Direction,
 	bounds: ObjectBounds,
-}
-
-//>:< update player action
-enum PlayerAction {
-	None,
-	Slash,
-	Dash
 }
 
 pub fn intersect(obj1: &ObjectBounds, obj2: &ObjectBounds) -> bool {
@@ -130,6 +126,7 @@ impl Player {
 		Player {
 			graphic: Graphic::Player,
 			jump_velocity: JUMP_VELOCITY,
+			dash_time: 0.2, // !!! base on tempo
 			bounds: ObjectBounds {
 				left_x: x,
 				top_y: y,
@@ -139,15 +136,34 @@ impl Player {
 			dx: 0.0,
 			dy: 0.0,
 			
-			action: PlayerAction::None,
 			jumping: false,
+			slash: None,
+			dash: None,
 			moving_left: false,
 			moving_right: false,
 			face_dir: Direction::Right,
 		}
 	}
 	
-	
+	pub fn slash (&mut self, t_since_tick: f32) {
+		self.slash = Some(
+			match self.face_dir {
+				Direction::Right => {
+					Slash::new( self.bounds.right_x, self.bounds.top_y, t_since_tick, Direction::Right)
+				}
+				Direction::Left => {
+					Slash::new( self.bounds.left_x, self.bounds.top_y, t_since_tick, Direction::Left)
+				}
+			}
+		);
+	}
+	pub fn dash (&mut self, t_since_tick: f32) {
+		if let None = self.dash {
+			if let Direction::Right = self.face_dir {
+				self.dash = Some(Dash::new( self.bounds.right_x, self.bounds.top_y, t_since_tick, self.face_dir)); }
+			else {
+				self.dash = Some(Dash::new( self.bounds.left_x, self.bounds.top_y, t_since_tick, self.face_dir)); }}
+	}
 	pub fn jump (&mut self) {
 		self.jumping = true;
 	}
@@ -172,20 +188,44 @@ impl Player {
 		}
 	}
 	
-	pub fn face_direction(&self) -> Direction {
-		self.face_dir
+	pub fn face_direction(&self) -> &Direction {
+		&self.face_dir
+	}
+	
+	pub fn slashing(&self) -> &Option<Slash> {
+		&self.slash
+	}
+	
+	pub fn dashing(&self) -> &Option<Dash> {
+		&self.dash
 	}
 	
 	// tick the players state, taking into account input commands
 	pub fn tick(&mut self, seconds_passed: f32) {
-		match self.action {
-			PlayerAction::None | PlayerAction::Slash => {
-				self.regular_move(seconds_passed);
-			}
-			PlayerAction::Dash => {
-				
-			}
-		}
+		if let Some(dash) = &mut self.dash { 
+			match dash.state() {
+				TempObjectState::Lingering(t) if *t < 0.0 => self.dash = None,
+				_ => {
+					dash.tick(self.dash_time, seconds_passed);
+					if let Direction::Right = dash.direction() {
+						self.bounds.left_x = dash.bounds.right_x;
+						self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+					}
+					else {
+						self.bounds.right_x = dash.bounds.left_x;
+						self.bounds.left_x = self.bounds.right_x - PLAYER_WIDTH as f32;
+					}
+				}
+			}}
+		else {
+			self.regular_move(seconds_passed); }
+		
+		if let Some(slash) = &mut self.slash { 
+			match slash.state() {
+				TempObjectState::Lingering(t) if *t < 0.0 => self.slash = None,
+				_ => slash.tick(seconds_passed)
+			}}
+			
 		
 		
 	}
@@ -324,10 +364,10 @@ impl Object for Slash {
 }
 
 impl Slash {
-	pub fn new(x: f32, y: f32, left_to_right: bool) -> Slash {
-		if left_to_right {
+	pub fn new(x: f32, y: f32, t_since_tick: f32, dir: Direction) -> Slash {
+		if let Direction::Right = dir {
 			Slash {
-				state: TempObjectState::New,
+				state: TempObjectState::New(t_since_tick),
 				graphic: Graphic::SlashRight,
 				bounds: ObjectBounds {
 					left_x: x,
@@ -338,7 +378,7 @@ impl Slash {
 			}
 		} else {
 			Slash {
-				state: TempObjectState::New,
+				state: TempObjectState::New(t_since_tick),
 				graphic: Graphic::SlashLeft,
 				bounds: ObjectBounds {
 					left_x: x - SLASH_WIDTH as f32,
@@ -356,7 +396,7 @@ impl Slash {
 	
 	pub fn tick(&mut self, seconds_passed: f32) {
 		match &mut self.state {
-			TempObjectState::New => self.state = TempObjectState::Lingering(0.1 - seconds_passed),
+			TempObjectState::New(t) => self.state = TempObjectState::Lingering(0.1 - seconds_passed + *t),
 			TempObjectState::Lingering(t) => self.state = TempObjectState::Lingering(*t - seconds_passed),
 			_ => { panic!() }
 		}
@@ -377,24 +417,27 @@ impl Object for Dash {
 }
 
 impl Dash {
-	pub fn new(x: f32, y: f32, left_to_right: bool) -> Dash {
-		if left_to_right {
+	pub fn new(x: f32, y: f32, t_since_tick: f32, dir: Direction) -> Dash {
+		if let Direction::Right = dir {
 			Dash {
-				state: TempObjectState::New,
-				graphic: Graphic::Dash,
+				state: TempObjectState::New(t_since_tick),
+				graphic: Graphic::None,
+				direction: Direction::Right,
 				bounds: ObjectBounds {
 					left_x: x,
 					top_y: y,
-					right_x: x + DASH_WIDTH as f32,
+					right_x: x,
 					bottom_y: y + DASH_HEIGHT as f32,
 				}
 			}
-		} else {
+		} 
+		else {
 			Dash {
-				state: TempObjectState::New,
-				graphic: Graphic::Dash,
+				state: TempObjectState::New(t_since_tick),
+				graphic: Graphic::None,
+				direction: Direction::Left,
 				bounds: ObjectBounds {
-					left_x: x - DASH_WIDTH as f32,
+					left_x: x,
 					top_y: y,
 					right_x: x,
 					bottom_y: y + DASH_HEIGHT as f32,
@@ -403,19 +446,55 @@ impl Dash {
 		}
 	}
 	
+	pub fn direction (&self) -> Direction {
+		self.direction	
+	}
+	
 	pub fn state (&self) -> &TempObjectState {
 		&self.state
 	}
 	
-	pub fn tick(&mut self, seconds_passed: f32) {
+	pub fn tick(&mut self, dash_time: f32, seconds_passed: f32) {
 		match &mut self.state {
-			TempObjectState::New => self.state = TempObjectState::Active(0.1 - seconds_passed),
-			TempObjectState::Active(t) => {
-				self.state = 
-					if *t < 0.0 { TempObjectState::Lingering(*t - seconds_passed + 0.05) }
-					else { TempObjectState::Active(*t - seconds_passed) };
-			},
-			TempObjectState::Lingering(t) => self.state = TempObjectState::Lingering(*t - seconds_passed)
+		// a new dash lasts dash time - the time since the dash input
+		TempObjectState::New(t) => self.state = TempObjectState::Active(dash_time - seconds_passed + *t),
+		TempObjectState::Active(t) => {
+			// update bounds and graphic
+			if *t > 0.0 {
+				let next_t = *t - seconds_passed;
+				let dash_distance = 
+					if next_t > 0.0 { DASH_WIDTH as f32 * (dash_time - next_t) / dash_time } else { DASH_WIDTH as f32};
+				
+				if let Direction::Right = self.direction {
+					if next_t > 0.8 * dash_time {
+						self.graphic = Graphic::DashR0 }
+					else if next_t > 0.6 * dash_time {
+						self.graphic = Graphic::DashR1 }
+					else if next_t > 0.4 * dash_time {
+						self.graphic = Graphic::DashR2 }
+					else if next_t > 0.2 * dash_time {
+						self.graphic = Graphic::DashR3 }
+					else {
+						self.graphic = Graphic::Dash }
+					self.bounds.right_x = self.bounds.left_x + dash_distance }
+				else {
+					if next_t > 0.8 * dash_time {
+						self.graphic = Graphic::DashL0 }
+					else if next_t > 0.6 * dash_time {
+						self.graphic = Graphic::DashL1 }
+					else if next_t > 0.4 * dash_time {
+						self.graphic = Graphic::DashL2 }
+					else if next_t > 0.2 * dash_time {
+						self.graphic = Graphic::DashL3 }
+					else {
+						self.graphic = Graphic::Dash }
+					self.bounds.left_x = self.bounds.right_x - dash_distance }
+					
+				self.state = TempObjectState::Active(next_t); }
+			else{
+				self.state = TempObjectState::Lingering(*t - seconds_passed + 0.05);}
+		},
+		TempObjectState::Lingering(t) => self.state = TempObjectState::Lingering(*t - seconds_passed)
 		}
 	}
 }
