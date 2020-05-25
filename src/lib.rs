@@ -30,16 +30,18 @@
 // expand on read-MIDI functionality, and add options to control generated output such as only use certain program numbers (instruments)
 	// or channels to generate notes, criteria for excluding notes if there are too many, etc.
 // Send commands on tick rather than asynchronously
+// find a better alternative to sqljs
 
 // TESTS
 // test that objects have correct dimensions
 
 use std::collections::btree_set::BTreeSet; 
 use std::cmp::Ordering;
-use std::ops::Bound;
+use macros;
 
 use wasm_bindgen::prelude::*;
 use js_sys::Array;
+use macros::EnumVariantCount;
 
 const GAME_WIDTH: u32 = 1920;
 const GAME_HEIGHT: u32 = 1080;
@@ -67,7 +69,7 @@ mod game {
 	use objects::Direction;
 	
 	#[derive(Clone, Copy)]
-	struct UpcomingNote {
+	pub struct UpcomingNote {
 		note_type: BrickType,
 		x: f32,
 		time: f32, // time of appearance in seconds since the start of the program
@@ -76,7 +78,8 @@ mod game {
 	struct Song {
 		song_name: String,
 		notes: BTreeSet<UpcomingNote>, 
-		bpm: u8
+		bpm: u32,
+		brick_speed: f32
 	}
 
 	impl PartialEq for UpcomingNote {
@@ -120,13 +123,14 @@ mod game {
 		pub fn new () -> Game {
 			Game {
 				time_running: 0.0,
-				brick_speed: 250.0,
+				brick_speed: 500.0,
 				player: Player::new((GAME_WIDTH / 2) as f32, 0.0),
 				bricks: VecDeque::new(), // bricks on screen, ordered by time of appearance (height)
 				song: Song {
 					song_name: String::from(""),
 					notes: BTreeSet::new(),
-					bpm: 96
+					bpm: 96,
+					brick_speed: 500.0
 				},
 				upcoming_note: None
 			}
@@ -203,7 +207,7 @@ mod game {
 		pub fn rendering_instructions(&self) -> Array {
 			let mut instructions = vec!(
 				PositionedGraphic {
-					g: Graphic::Background,
+					g: GraphicGroup::Background,
 					x: 0,
 					y: 0
 				},
@@ -215,12 +219,15 @@ mod game {
 				instructions.push(brick.rendering_instruction());
 			}
 			
-			
 			if let Some(slash) = self.player.slashing() {
 				instructions.push(slash.rendering_instruction()); };
 			
 			if let Some(dash) = self.player.dashing() {
-				instructions.push(dash.rendering_instruction()); };
+				let ri = dash.rendering_instruction();
+				if let Some(ri) = ri {
+					instructions.push(ri);
+				}
+			}
 			
 			instructions.into_iter().map(JsValue::from).collect()
 		}
@@ -282,6 +289,15 @@ mod game {
 			}
 		}
 		
+		pub fn set_song_metadata(&mut self, song_name: String, bpm: u32, brick_speed: f32){
+			self.song = Song {
+				song_name,
+				notes: BTreeSet::new(),
+				bpm,
+				brick_speed,
+			}
+		}
+		
 		// add any bricks from song that have reached the time to appear
 		fn add_upcoming_notes(&mut self) {
 			if let Some(upcoming_note) = &self.upcoming_note {
@@ -308,21 +324,37 @@ mod game {
 			}
 		}
 	}
+	
+	#[wasm_bindgen]
+	pub fn game_dimensions() -> PositionedGraphic {
+		PositionedGraphic {
+			g: GraphicGroup::Background, // TODO dummy value. Might be smarter just to get height and width separately
+			x: GAME_WIDTH as i32,
+			y: GAME_HEIGHT as i32,
+		}
+	}
 }
 
-// !!! GraphicID istead of Graphic
+
+
+#[wasm_bindgen]
+#[derive(Clone, Copy, Debug)]
+struct Graphic {
+	group: GraphicGroup,
+	sub_id: u8
+}
+
 #[wasm_bindgen]
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
-pub enum Graphic {
-	None,
+#[derive(Clone, Copy, Debug, EnumVariantCount)]
+pub enum GraphicGroup {
 	Background,
 	Player,
 	Brick,
 	SlashRight,
 	SlashLeft,
 	Dash,
-	DashR0,
+	DashR0, // same group as left
 	DashR1,
 	DashR2,
 	DashR3,
@@ -333,62 +365,56 @@ pub enum Graphic {
 }
 #[wasm_bindgen]
 pub struct PositionedGraphic {
-	pub g: Graphic,
+	pub g: GraphicGroup,
 	pub x: i32,
 	pub y: i32,
 }
 
-
 // TODO split object dimensions and graphic dimensions
 #[wasm_bindgen]
-pub fn graphic_size(g: Graphic) -> PositionedGraphic {
+pub fn graphic_size(g: GraphicGroup) -> PositionedGraphic {
 	return match g {
-		Graphic::None => { PositionedGraphic {
-			g,
-			x: 0,
-			y: 0
-		}},
-		Graphic::Background => { PositionedGraphic {
+		GraphicGroup::Background => { PositionedGraphic {
 			g,
 			x: GAME_WIDTH as i32,
 			y: GAME_HEIGHT as i32,
 		}},
-		Graphic::Player => { PositionedGraphic {
+		GraphicGroup::Player => { PositionedGraphic {
 			g,
 			x: objects::PLAYER_WIDTH as i32,
 			y: objects::PLAYER_HEIGHT as i32,
 		}},
-		Graphic::Brick => { PositionedGraphic {
+		GraphicGroup::Brick => { PositionedGraphic {
 			g,
 			x: objects::BRICK_WIDTH as i32,
 			y: objects::BRICK_HEIGHT as i32,
 		}},
-		Graphic::SlashRight | Graphic::SlashLeft => { PositionedGraphic {
+		GraphicGroup::SlashRight | GraphicGroup::SlashLeft => { PositionedGraphic {
 			g,
 			x: objects::SLASH_WIDTH as i32,
 			y: objects::SLASH_HEIGHT as i32
 		}},
-		Graphic::Dash => { PositionedGraphic {
+		GraphicGroup::Dash => { PositionedGraphic {
 			g,
 			x: objects::DASH_WIDTH as i32,
 			y: objects::DASH_HEIGHT as i32
 		}},
-		Graphic::DashR0 | Graphic::DashL0 => { PositionedGraphic {
+		GraphicGroup::DashR0 | GraphicGroup::DashL0 => { PositionedGraphic {
 			g,
 			x: objects::DASH_WIDTH as i32 / 5,
 			y: objects::DASH_HEIGHT as i32
 		}},
-		Graphic::DashR1 | Graphic::DashL1 => { PositionedGraphic {
+		GraphicGroup::DashR1 | GraphicGroup::DashL1 => { PositionedGraphic {
 			g,
 			x: objects::DASH_WIDTH as i32 * 2 / 5 ,
 			y: objects::DASH_HEIGHT as i32
 		}},
-		Graphic::DashR2 | Graphic::DashL2 => { PositionedGraphic {
+		GraphicGroup::DashR2 | GraphicGroup::DashL2 => { PositionedGraphic {
 			g,
 			x: objects::DASH_WIDTH as i32 * 3 / 5,
 			y: objects::DASH_HEIGHT as i32
 		}},
-		Graphic::DashR3 | Graphic::DashL3 => { PositionedGraphic {
+		GraphicGroup::DashR3 | GraphicGroup::DashL3 => { PositionedGraphic {
 			g,
 			x: objects::DASH_WIDTH as i32 * 4 / 5,
 			y: objects::DASH_HEIGHT as i32
@@ -409,3 +435,7 @@ pub enum Input {
 	Ability4,
 }
 
+#[wasm_bindgen]
+pub fn num_graphic_groups() -> usize {
+	return GraphicGroup::num_variants();
+}

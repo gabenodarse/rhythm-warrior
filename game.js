@@ -2,7 +2,7 @@
 
 import * as graphics from "./graphics.js";
 import * as wasm from "./pkg/music_mercenary.js";
-import * as loader from "./load.js";
+import * as load from "./load.js";
 
 let g_controls = {};
 let g_game;
@@ -35,40 +35,31 @@ const g_handleKeyUp = event => {
 };
 
 export async function run() {
-	let resourceLocations;
-	let db;
+	// !!! resizing based on screen size + options
+	let gameCanvas = document.createElement('canvas');
+	let gameContext = gameCanvas.getContext('2d');
+	let xFactor = 1;
+	let yFactor = 1;
+	gameCanvas.width = 1100; 
+	gameCanvas.height = 600;
+	document.body.appendChild(gameCanvas); // !!! determine position
+
+	let loader = new load.Loader();
+	let canvases;
 	const audioContext = new AudioContext();
 	let audioSource;
 	let audioBuffer;
 	let songTime = 0;
-	const audioTimeSafetyBuffer = 0.15; // longer gives the hardware more time to prepare the sound to end at a precise time
+	const audioTimeSafetyBuffer = 0.15; // longer gives the hardware more time to prepare the sound to start/end at a precise time
 	
-	// !!! move the loading to load.js
-	// TODO add error handling
-	await Promise.all( [ 
-		wasm.default(),
-		fetch("./resources.json")
-			.then(res => res.json())
-			.then(res => { resourceLocations = res })
-	]);
 	
 	// TODO add error handling
-	await graphics.loadImages(resourceLocations).then( 
-		() => { 
-			initGame();
-			graphics.renderAll(g_game.rendering_instructions()); },
-		rej => { console.log("loadImages FAILED" + rej); }
-	);
+	await wasm.default();
 	
-	// TODO add error handling
-	await loader.loadDefaultDB()
-		.then(res => {
-			db = res;
-		})
-		.catch( rej => {
-			console.log("could not load the the database. Err: " + rej);
-		}
-	);
+	await loader.init()
+		.then( () => loader.loadGraphics(wasm))
+		.then( res => canvases = res );
+	
 	
 	// TODO add error handling
 	await fetch("song.mp3")
@@ -77,7 +68,14 @@ export async function run() {
 		.then(res => { audioBuffer = res; }
 	);
 	
-	let songData = loader.loadSong(1, db);
+	initGame();
+	
+	let gameDim = wasm.game_dimensions();
+	xFactor = gameCanvas.width / gameDim.x;
+	yFactor = gameCanvas.height / gameDim.y;
+	
+	graphics.renderAll(g_game.rendering_instructions(), canvases, xFactor, yFactor, gameContext);
+	let songData = loader.getSong(1);
 	songData[0]["values"].forEach( note => {
 		g_game.load_brick(note[2], note[3], note[4]);
 	});
@@ -99,13 +97,13 @@ export async function run() {
 		
 		// !!! render asynchronously to keep game ticking???
 		// !!! handle if there's too long a time between ticks (pause game?)
-		// >:< get fps, average, and log
+		// !!! get fps, average, and log
 		let timePassed = (g_now - g_last) / 1000; // convert to seconds
 		songTime += timePassed;
 		g_game.tick(timePassed); 
 		g_last = g_now;
 		
-		graphics.renderAll(g_game.rendering_instructions());
+		graphics.renderAll(g_game.rendering_instructions(), canvases, xFactor, yFactor, gameContext);
 		
 		requestAnimationFrame(renderLoop);
 	};

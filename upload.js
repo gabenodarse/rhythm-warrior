@@ -1,4 +1,4 @@
-import * as fileReader from "./file-reader.js";
+import * as fileReader from "./load.js";
 
 let db;
 let notes;
@@ -8,7 +8,7 @@ async function handleMIDIUpload (evt) {
 }
 
 async function handleDBUpload (evt) {
-	db = await fileReader.loadDB(this.files[0]);
+	db = await fileReader.initDB(this.files[0]);
 }
 
 let MIDIFileSelector = document.createElement('input');

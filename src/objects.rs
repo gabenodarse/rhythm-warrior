@@ -5,7 +5,7 @@
 use std::cmp::Ordering;
 use wasm_bindgen::prelude::*;
 
-use crate::Graphic;
+use crate::GraphicGroup;
 use crate::PositionedGraphic;
 use crate::GROUND_POS;
 use crate::LEFT_BOUNDARY;
@@ -16,7 +16,7 @@ const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -
 const GRAVITY: f32 = 500.0; // acceleration in pixels per second^2
 
 pub const PLAYER_WIDTH: u32 = 50;
-pub const PLAYER_HEIGHT: u32 = 100;
+pub const PLAYER_HEIGHT: u32 = 100; 
 pub const BRICK_WIDTH: u32 = 60;
 pub const BRICK_HEIGHT: u32 = 120;
 pub const SLASH_WIDTH: u32 = 65;
@@ -26,7 +26,6 @@ pub const DASH_HEIGHT: u32 = 100;
 
 pub trait Object {
 	fn bounds (&self) -> ObjectBounds; // TODO copying the full object bounds may be extra work in some instances
-	fn rendering_instruction(&self) -> PositionedGraphic;
 }
 
 // storing all bounds rather than pos+size because more comparisons between objects are possible than updates of positions
@@ -45,7 +44,7 @@ pub enum Direction {
 }
 
 pub struct Player {
-	graphic: Graphic,
+	graphic: GraphicGroup,
 	
 	jump_velocity: f32,
 	dash_time: f32,
@@ -72,7 +71,7 @@ pub enum BrickType {
 // !!! store brick type, match graphic to brick type
 #[derive(Clone, Copy)]
 pub struct Brick {
-	graphic: Graphic,
+	graphic: GraphicGroup,
 	bounds: ObjectBounds,
 }
 
@@ -83,14 +82,14 @@ pub enum TempObjectState {
 }
 
 pub struct Slash {
-	state: TempObjectState, // how long the slash graphic lasts !!! replace with an animation
-	graphic: Graphic,
+	state: TempObjectState,
+	graphic: GraphicGroup,
 	bounds: ObjectBounds,
 }
 
 pub struct Dash {
 	state: TempObjectState,
-	graphic: Graphic,
+	graphic: Option<GraphicGroup>,
 	direction: Direction,
 	bounds: ObjectBounds,
 }
@@ -110,13 +109,6 @@ impl Object for Player {
 	fn bounds(&self) -> ObjectBounds {
 		self.bounds
 	}
-	fn rendering_instruction(&self) -> PositionedGraphic {
-		PositionedGraphic {
-			g: self.graphic,
-			x: self.bounds.left_x as i32,
-			y: self.bounds.top_y as i32,
-		}
-	}
 }
 impl Player {
 	
@@ -124,7 +116,7 @@ impl Player {
 		const JUMP_VELOCITY: f32 = -250.0;
 		
 		Player {
-			graphic: Graphic::Player,
+			graphic: GraphicGroup::Player,
 			jump_velocity: JUMP_VELOCITY,
 			dash_time: 0.2, // !!! base on tempo
 			bounds: ObjectBounds {
@@ -292,6 +284,14 @@ impl Player {
 			self.bounds.bottom_y -= self.bounds.bottom_y - GROUND_POS;
 		}
 	}
+	
+	pub fn rendering_instruction(&self) -> PositionedGraphic {
+		PositionedGraphic {
+			g: self.graphic,
+			x: self.bounds.left_x as i32,
+			y: self.bounds.top_y as i32,
+		}
+	}
 }
 
 impl PartialEq for Brick {
@@ -321,19 +321,12 @@ impl Object for Brick {
 	fn bounds(&self) -> ObjectBounds {
 		self.bounds
 	}
-	fn rendering_instruction(&self) -> PositionedGraphic {
-		PositionedGraphic {
-			g: self.graphic,
-			x: self.bounds.left_x as i32,
-			y: self.bounds.top_y as i32,
-		}
-	}
 }
 
 impl Brick {
 	pub fn new (x: f32, y: f32) -> Brick {
 		Brick {
-			graphic: Graphic::Brick, 
+			graphic: GraphicGroup::Brick, 
 			bounds: ObjectBounds {
 				left_x: x,
 				top_y: y,
@@ -347,14 +340,8 @@ impl Brick {
 		self.bounds.top_y -= brick_speed * seconds_passed;
 		self.bounds.bottom_y -= brick_speed * seconds_passed;
 	}
-}
-
-
-impl Object for Slash {
-	fn bounds(&self) -> ObjectBounds {
-		self.bounds
-	}
-	fn rendering_instruction(&self) -> PositionedGraphic {
+	
+	pub fn rendering_instruction(&self) -> PositionedGraphic {
 		PositionedGraphic {
 			g: self.graphic,
 			x: self.bounds.left_x as i32,
@@ -363,12 +350,19 @@ impl Object for Slash {
 	}
 }
 
+
+impl Object for Slash {
+	fn bounds(&self) -> ObjectBounds {
+		self.bounds
+	}
+}
+
 impl Slash {
 	pub fn new(x: f32, y: f32, t_since_tick: f32, dir: Direction) -> Slash {
 		if let Direction::Right = dir {
 			Slash {
 				state: TempObjectState::New(t_since_tick),
-				graphic: Graphic::SlashRight,
+				graphic: GraphicGroup::SlashRight,
 				bounds: ObjectBounds {
 					left_x: x,
 					top_y: y,
@@ -379,7 +373,7 @@ impl Slash {
 		} else {
 			Slash {
 				state: TempObjectState::New(t_since_tick),
-				graphic: Graphic::SlashLeft,
+				graphic: GraphicGroup::SlashLeft,
 				bounds: ObjectBounds {
 					left_x: x - SLASH_WIDTH as f32,
 					top_y: y,
@@ -401,13 +395,8 @@ impl Slash {
 			_ => { panic!() }
 		}
 	}
-}
-
-impl Object for Dash {
-	fn bounds(&self) -> ObjectBounds {
-		self.bounds
-	}
-	fn rendering_instruction(&self) -> PositionedGraphic {
+	
+	pub fn rendering_instruction(&self) -> PositionedGraphic {
 		PositionedGraphic {
 			g: self.graphic,
 			x: self.bounds.left_x as i32,
@@ -416,12 +405,18 @@ impl Object for Dash {
 	}
 }
 
+impl Object for Dash {
+	fn bounds(&self) -> ObjectBounds {
+		self.bounds
+	}
+}
+
 impl Dash {
 	pub fn new(x: f32, y: f32, t_since_tick: f32, dir: Direction) -> Dash {
 		if let Direction::Right = dir {
 			Dash {
 				state: TempObjectState::New(t_since_tick),
-				graphic: Graphic::None,
+				graphic: None,
 				direction: Direction::Right,
 				bounds: ObjectBounds {
 					left_x: x,
@@ -434,7 +429,7 @@ impl Dash {
 		else {
 			Dash {
 				state: TempObjectState::New(t_since_tick),
-				graphic: Graphic::None,
+				graphic: None,
 				direction: Direction::Left,
 				bounds: ObjectBounds {
 					left_x: x,
@@ -467,27 +462,27 @@ impl Dash {
 				
 				if let Direction::Right = self.direction {
 					if next_t > 0.8 * dash_time {
-						self.graphic = Graphic::DashR0 }
+						self.graphic = Some(GraphicGroup::DashR0) }
 					else if next_t > 0.6 * dash_time {
-						self.graphic = Graphic::DashR1 }
+						self.graphic = Some(GraphicGroup::DashR1) }
 					else if next_t > 0.4 * dash_time {
-						self.graphic = Graphic::DashR2 }
+						self.graphic = Some(GraphicGroup::DashR2) }
 					else if next_t > 0.2 * dash_time {
-						self.graphic = Graphic::DashR3 }
+						self.graphic = Some(GraphicGroup::DashR3) }
 					else {
-						self.graphic = Graphic::Dash }
+						self.graphic = Some(GraphicGroup::Dash) }
 					self.bounds.right_x = self.bounds.left_x + dash_distance }
 				else {
 					if next_t > 0.8 * dash_time {
-						self.graphic = Graphic::DashL0 }
+						self.graphic = Some(GraphicGroup::DashL0) }
 					else if next_t > 0.6 * dash_time {
-						self.graphic = Graphic::DashL1 }
+						self.graphic = Some(GraphicGroup::DashL1) }
 					else if next_t > 0.4 * dash_time {
-						self.graphic = Graphic::DashL2 }
+						self.graphic = Some(GraphicGroup::DashL2) }
 					else if next_t > 0.2 * dash_time {
-						self.graphic = Graphic::DashL3 }
+						self.graphic = Some(GraphicGroup::DashL3) }
 					else {
-						self.graphic = Graphic::Dash }
+						self.graphic = Some(GraphicGroup::Dash) }
 					self.bounds.left_x = self.bounds.right_x - dash_distance }
 					
 				self.state = TempObjectState::Active(next_t); }
@@ -495,6 +490,19 @@ impl Dash {
 				self.state = TempObjectState::Lingering(*t - seconds_passed + 0.05);}
 		},
 		TempObjectState::Lingering(t) => self.state = TempObjectState::Lingering(*t - seconds_passed)
+		}
+	}
+	
+	pub fn rendering_instruction(&self) -> Option<PositionedGraphic> {
+		match self.graphic {
+			None => None,
+			Some(g) => {
+				Some(PositionedGraphic {
+					g,
+					x: self.bounds.left_x as i32,
+					y: self.bounds.top_y as i32,
+				})
+			}
 		}
 	}
 }
