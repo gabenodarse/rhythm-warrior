@@ -2,6 +2,7 @@
 // TODO
 // Log objects going beyond boundaries
 
+// >:< pausing/unpausing messes up character pos
 use std::cmp::Ordering;
 use wasm_bindgen::prelude::*;
 

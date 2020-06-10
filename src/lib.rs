@@ -232,6 +232,21 @@ mod game {
 			instructions.into_iter().map(JsValue::from).collect()
 		}
 		
+		// >:< 
+		pub fn editor_beat_offset(&self) -> u32 {
+			let secs_per_beat = 60.0 / self.song.bpm as f32;
+			let beat_time = (self.time_running % secs_per_beat) / secs_per_beat;
+			let beat_offset = beat_time * self.brick_speed / secs_per_beat;
+			
+			return beat_offset as u32;
+		}
+		
+		pub fn editor_beat_interval(&self) -> u32 {
+			let secs_per_beat = 60.0 / self.song.bpm as f32;
+			let beat_interval = self.brick_speed / secs_per_beat;
+			return beat_interval as u32;
+		}
+		
 		pub fn input_command (&mut self, input: Input, t_since_tick: f32) {
 			match input {
 				Input::Jump => {
@@ -254,6 +269,7 @@ mod game {
 			}
 		}
 		
+		// TODO precision on press but not on release? (no t param)
 		pub fn stop_command (&mut self, key: Input) {
 			match key {
 				Input::Jump => {
@@ -337,6 +353,7 @@ mod game {
 
 
 
+// !!! use graphics groups with sub IDs instead of single graphics?
 #[wasm_bindgen]
 #[derive(Clone, Copy, Debug)]
 struct Graphic {
@@ -354,7 +371,7 @@ pub enum GraphicGroup {
 	SlashRight,
 	SlashLeft,
 	Dash,
-	DashR0, // same group as left
+	DashR0, 
 	DashR1,
 	DashR2,
 	DashR3,

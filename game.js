@@ -8,10 +8,10 @@ let g_controls = {};
 let g_game;
 let g_gamePaused = false;
 let g_startGame = () => {}
-let g_last; // last tick time
-let g_now;
+let g_gameStartControl = (cntrl) => {}
+let g_gameStopControl = (cntrl) => {}
 
-const g_handleKeyDown = event => {
+const g_handleGameKeyDown = event => {
 	// TODO faster handling of repeated key inputs from holding down a key?
 	if (event.keyCode === 27){
 		if(g_gamePaused){
@@ -22,116 +22,87 @@ const g_handleKeyDown = event => {
 		}
 	}
 	else if(typeof(g_controls[event.keyCode]) === "number" && !g_gamePaused){
-		g_now = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime();
-		g_game.input_command(g_controls[event.keyCode], (g_now - g_last) / 1000); // convert to seconds
+		g_gameStartControl(g_controls[event.keyCode]);
 	}
 	
 	event.preventDefault();
 }
-const g_handleKeyUp = event => {
+
+const g_handleGameKeyUp = event => {
 	if(typeof(g_controls[event.keyCode]) === "number" && !g_gamePaused){
-		g_game.stop_command(g_controls[event.keyCode]);
+		g_gameStopControl(g_controls[event.keyCode]);
 	}
 };
 
 export async function run() {
-	// !!! resizing based on screen size + options
-	let gameCanvas = document.createElement('canvas');
-	let gameContext = gameCanvas.getContext('2d');
-	let xFactor = 1;
-	let yFactor = 1;
-	gameCanvas.width = 1100; 
-	gameCanvas.height = 600;
-	document.body.appendChild(gameCanvas); // !!! determine position
-
-	let loader = new load.Loader();
-	let canvases;
-	const audioContext = new AudioContext();
-	let audioSource;
-	let audioBuffer;
-	let songTime = 0;
-	const audioTimeSafetyBuffer = 0.15; // longer gives the hardware more time to prepare the sound to start/end at a precise time
+	let game = new Game();
+	await game.load();
 	
+	const loop = () => {
+		if(g_gamePaused) {
+			game.pause();
+			return;
+		}
+		
+		game.tick();
+		requestAnimationFrame(loop);
+	}
+	
+	const start = () => {
+		game.start(loop);
+	}
+	
+	g_startGame = start;
+	g_gameStartControl = (cntrl) => {
+		game.startControl(cntrl);
+	}
+	g_gameStopControl = (cntrl) => {
+		game.stopControl(cntrl);
+	}
+	
+	start();
+}
+
+function Game () {
+	// !!! resizing based on screen size + options
+	this.gameCanvas = document.createElement('canvas');
+	this.gameContext = this.gameCanvas.getContext('2d');
+	this.xFactor = 1;
+	this.yFactor = 1;
+	this.gameCanvas.width = 1100; 
+	this.gameCanvas.height = 600;
+	document.body.appendChild(this.gameCanvas); // !!! determine position
+
+	this.lastTick;
+	this.gameData;
+	this.canvases;
+	this.audioContext = new AudioContext();
+	this.audioSource;
+	this.audioBuffer;
+	this.songTime = 0;
+	this.audioTimeSafetyBuffer = 0.15;
+}
+
+Game.prototype.load = async function () {
+	let loader = new load.Loader();
 	
 	// TODO add error handling
 	await wasm.default();
 	
 	await loader.init()
 		.then( () => loader.loadGraphics(wasm))
-		.then( res => canvases = res );
-	
+		.then( res => this.canvases = res );
 	
 	// TODO add error handling
 	await fetch("song.mp3")
 		.then(res => res.arrayBuffer())
-		.then(res => audioContext.decodeAudioData(res))
-		.then(res => { audioBuffer = res; }
+		.then(res => this.audioContext.decodeAudioData(res))
+		.then(res => { this.audioBuffer = res; }
 	);
 	
-	initGame();
+	this.gameData = wasm.Game.new();
 	
-	let gameDim = wasm.game_dimensions();
-	xFactor = gameCanvas.width / gameDim.x;
-	yFactor = gameCanvas.height / gameDim.y;
-	
-	graphics.renderAll(g_game.rendering_instructions(), canvases, xFactor, yFactor, gameContext);
-	let songData = loader.getSong(1);
-	songData[0]["values"].forEach( note => {
-		g_game.load_brick(note[2], note[3], note[4]);
-	});
-	
-	
-	
-	const renderLoop = () => {
-		g_now = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime();
-		
-		if(g_gamePaused) {
-			let switchTime = audioContext.currentTime + audioTimeSafetyBuffer;
-			audioSource.stop(switchTime);
-			let timePassed = (g_now - g_last) / 1000; // convert to seconds
-			g_game.tick(timePassed + audioTimeSafetyBuffer);
-			songTime += timePassed + audioTimeSafetyBuffer;
-			
-			return;
-		}
-		
-		// !!! render asynchronously to keep game ticking???
-		// !!! handle if there's too long a time between ticks (pause game?)
-		// !!! get fps, average, and log
-		let timePassed = (g_now - g_last) / 1000; // convert to seconds
-		songTime += timePassed;
-		g_game.tick(timePassed); 
-		g_last = g_now;
-		
-		graphics.renderAll(g_game.rendering_instructions(), canvases, xFactor, yFactor, gameContext);
-		
-		requestAnimationFrame(renderLoop);
-	};
-	
-	const start = () => {
-		// !!! creating a new buffer source each time because I couldn't figure out how to resume audio precisely
-			// make sure multiple buffer sources don't linger in memory
-		audioSource = audioContext.createBufferSource(); 
-		audioSource.buffer = audioBuffer;
-		audioSource.connect(audioContext.destination);
-		
-		let switchTime = audioContext.currentTime + audioTimeSafetyBuffer;
-		audioSource.start(switchTime, songTime);
-		g_last = (window.performance && window.performance.now) ? window.performance.now() : new Date().getTime() 
-		g_last += audioTimeSafetyBuffer * 1000;
-		
-		requestAnimationFrame(renderLoop);
-	}
-	
-	g_startGame = start;
-	start();
-}
-
-
-function initGame() {
-	// TODO throw or handle any errors
-	g_game = wasm.Game.new();
-	
+	g_controls = [];
 	g_controls[32] = wasm.Input.Jump; // space
 	g_controls[188] = wasm.Input.Left; // comma
 	g_controls[190] = wasm.Input.Right; // period
@@ -140,17 +111,73 @@ function initGame() {
 	g_controls[69] = wasm.Input.Ability3; // e
 	g_controls[82] = wasm.Input.Ability4; // r
 	
-	window.addEventListener("keydown", g_handleKeyDown);
-	window.addEventListener("keyup", g_handleKeyUp);
+	// remove event listeners that aren't game // >:<
+	window.addEventListener("keydown", g_handleGameKeyDown);
+	window.addEventListener("keyup", g_handleGameKeyUp);
+	
+	let gameDim = wasm.game_dimensions();
+	this.xFactor = this.gameCanvas.width / gameDim.x;
+	this.yFactor = this.gameCanvas.height / gameDim.y;
+	
+	let songData = loader.getSong(1);
+	songData[0]["values"].forEach( note => {
+		this.gameData.load_brick(note[2], note[3], note[4]);
+	});
+}
+
+Game.prototype.start = function (callback) {
+	// !!! creating a new buffer source each time because I couldn't figure out how to resume audio precisely
+		// make sure multiple buffer sources don't linger in memory
+	this.audioSource = this.audioContext.createBufferSource(); 
+	this.audioSource.buffer = this.audioBuffer;
+	this.audioSource.connect(this.audioContext.destination);
+	
+	let switchTime = this.audioContext.currentTime + this.audioTimeSafetyBuffer;
+	this.audioSource.start(switchTime, this.songTime);
+	this.lastTick = new Date().getTime() + this.audioTimeSafetyBuffer * 1000;
+	
+	requestAnimationFrame(callback);
+}
+
+Game.prototype.pause = function(){
+	let now = new Date().getTime();
+	let switchTime = this.audioContext.currentTime + this.audioTimeSafetyBuffer;
+	this.audioSource.stop(switchTime);
+	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
+	this.gameData.tick(timePassed + this.audioTimeSafetyBuffer);
+	this.songTime += timePassed + this.audioTimeSafetyBuffer;
+}
+
+Game.prototype.tick = function(){
+	let now = new Date().getTime();
+	// !!! render asynchronously to keep game ticking???
+	// !!! handle if there's too long a time between ticks (pause game?)
+	// !!! get fps, average, and log
+	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
+	this.songTime += timePassed;
+	this.gameData.tick(timePassed); 
+	this.lastTick = now;
+	
+	graphics.renderAll(this.gameData.rendering_instructions(), this.canvases, this.xFactor, this.yFactor, this.gameContext);
+}
+
+Game.prototype.startControl = function(cntrl){
+	let now = new Date().getTime();
+	this.gameData.input_command(cntrl, (now - this.lastTick) / 1000);
+}
+
+Game.prototype.stopControl = function(cntrl){
+	let now = new Date().getTime();
+	this.gameData.stop_command(cntrl, (now - this.lastTick) / 1000);
 }
 
 function pause() {
 	//>:< handle key states on pause/unpause
 	for(const key in g_controls) {
-		let event = new KeyboardEvent("keyup", {
+		let evt = new KeyboardEvent("keyup", {
 			keyCode: key,
 		});
-		g_handleKeyUp(event);
+		g_handleGameKeyUp(evt);
 	}
 	
 	g_gamePaused = true;
@@ -241,4 +268,11 @@ function controls() {
 	
 }
 
-
+// >:< editor
+function initEditor() {
+	let game = new Game();
+	await game.load();
+	
+	window.removeEventListener("keydown", g_handleGameKeyDown);
+	window.removeEventListener("keyup", g_handleGameKeyUp);
+}
