@@ -79,7 +79,6 @@ function Game () {
 	this.audioContext = new AudioContext();
 	this.audioSource;
 	this.audioBuffer;
-	this.songTime = 0;
 	this.audioTimeSafetyBuffer = 0.15;
 }
 
@@ -102,16 +101,8 @@ Game.prototype.load = async function () {
 	
 	this.gameData = wasm.Game.new();
 	
-	g_controls = [];
-	g_controls[32] = wasm.Input.Jump; // space
-	g_controls[188] = wasm.Input.Left; // comma
-	g_controls[190] = wasm.Input.Right; // period
-	g_controls[81] = wasm.Input.Ability1; // q
-	g_controls[87] = wasm.Input.Ability2; // w
-	g_controls[69] = wasm.Input.Ability3; // e
-	g_controls[82] = wasm.Input.Ability4; // r
-	
 	// remove event listeners that aren't game // >:<
+	// right place for adding game event listeners? In the function common to both editor and game?
 	window.addEventListener("keydown", g_handleGameKeyDown);
 	window.addEventListener("keyup", g_handleGameKeyUp);
 	
@@ -119,13 +110,23 @@ Game.prototype.load = async function () {
 	this.xFactor = this.gameCanvas.width / gameDim.x;
 	this.yFactor = this.gameCanvas.height / gameDim.y;
 	
-	let songData = loader.getSong(1);
+	let songData = loader.getSong(2);
 	songData[0]["values"].forEach( note => {
 		this.gameData.load_brick(note[2], note[3], note[4]);
 	});
 }
 
 Game.prototype.start = function (callback) {
+	if(Object.keys(g_controls).length == 0){
+		g_controls[32] = wasm.Input.Jump; // space
+		g_controls[188] = wasm.Input.Left; // comma
+		g_controls[190] = wasm.Input.Right; // period
+		g_controls[81] = wasm.Input.Ability1; // q
+		g_controls[87] = wasm.Input.Ability2; // w
+		g_controls[69] = wasm.Input.Ability3; // e
+		g_controls[82] = wasm.Input.Ability4; // r
+	}
+	
 	// !!! creating a new buffer source each time because I couldn't figure out how to resume audio precisely
 		// make sure multiple buffer sources don't linger in memory
 	this.audioSource = this.audioContext.createBufferSource(); 
@@ -133,10 +134,14 @@ Game.prototype.start = function (callback) {
 	this.audioSource.connect(this.audioContext.destination);
 	
 	let switchTime = this.audioContext.currentTime + this.audioTimeSafetyBuffer;
-	this.audioSource.start(switchTime, this.songTime);
+	this.audioSource.start(switchTime, this.gameData.song_time());
 	this.lastTick = new Date().getTime() + this.audioTimeSafetyBuffer * 1000;
 	
-	requestAnimationFrame(callback);
+	// timeout to prevent negative ticks
+	setTimeout( () => {
+		requestAnimationFrame(callback);
+	}, this.audioTimeSafetyBuffer * 1000);
+	
 }
 
 Game.prototype.pause = function(){
@@ -145,7 +150,6 @@ Game.prototype.pause = function(){
 	this.audioSource.stop(switchTime);
 	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
 	this.gameData.tick(timePassed + this.audioTimeSafetyBuffer);
-	this.songTime += timePassed + this.audioTimeSafetyBuffer;
 }
 
 Game.prototype.tick = function(){
@@ -154,7 +158,6 @@ Game.prototype.tick = function(){
 	// !!! handle if there's too long a time between ticks (pause game?)
 	// !!! get fps, average, and log
 	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
-	this.songTime += timePassed;
 	this.gameData.tick(timePassed); 
 	this.lastTick = now;
 	
@@ -171,8 +174,33 @@ Game.prototype.stopControl = function(cntrl){
 	this.gameData.stop_command(cntrl, (now - this.lastTick) / 1000);
 }
 
+Game.prototype.showEditor = function(){
+	let dims = wasm.game_dimensions();
+	let screenWidth = dims.x;
+	let screenHeight = dims.y;
+	
+	let beatInterval = this.gameData.beat_interval();
+	let brickSpeed = this.gameData.brick_speed();
+	let y = 0;
+	let t = ( ((-this.gameData.song_time()) % beatInterval) + beatInterval ) % beatInterval; // positive modulus
+	let yOffset = this.gameData.ground_pos();
+	
+	while(true){
+		if(t * brickSpeed + yOffset < screenHeight){
+			this.gameContext.fillRect(0, (t * brickSpeed + yOffset) * this.yFactor, screenWidth * this.xFactor, 3);
+			t += beatInterval / 2;
+			this.gameContext.fillRect(0, (t * brickSpeed + yOffset) * this.yFactor, screenWidth * this.xFactor, 1);
+			t += beatInterval / 2;
+			continue;
+		}
+		break;
+	}
+}
+
+
+
 function pause() {
-	//>:< handle key states on pause/unpause
+	// !!! handle key states on pause/unpause
 	for(const key in g_controls) {
 		let evt = new KeyboardEvent("keyup", {
 			keyCode: key,
@@ -268,11 +296,17 @@ function controls() {
 	
 }
 
-// >:< editor
-function initEditor() {
+export async function runEditor() {
 	let game = new Game();
 	await game.load();
 	
 	window.removeEventListener("keydown", g_handleGameKeyDown);
 	window.removeEventListener("keyup", g_handleGameKeyUp);
+	
+	let foo = () => { 
+		game.tick();
+		game.showEditor();
+	}
+	
+	game.start(foo);
 }

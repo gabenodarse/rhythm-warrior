@@ -1,3 +1,6 @@
 import * as game from "./game.js";
 
-game.run();
+// game.run();
+
+game.runEditor();
+

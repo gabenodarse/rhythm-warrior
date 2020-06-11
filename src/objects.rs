@@ -2,7 +2,6 @@
 // TODO
 // Log objects going beyond boundaries
 
-// >:< pausing/unpausing messes up character pos
 use std::cmp::Ordering;
 use wasm_bindgen::prelude::*;
 
@@ -31,7 +30,7 @@ pub trait Object {
 
 // storing all bounds rather than pos+size because more comparisons between objects are possible than updates of positions
 #[derive(Clone, Copy)]
-pub struct ObjectBounds {
+pub struct ObjectBounds { 
 	pub left_x: f32,
 	pub right_x: f32,
 	pub top_y: f32,

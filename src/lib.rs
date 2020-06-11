@@ -1,21 +1,11 @@
 
 // TODO
-// Should SVGs be translated to a jpg/png of an appropriate size?
-// Create a function to load a new image for a given identifier
-// Instead of all rendering onto a single canvas, use multiple canvases?
-
-// mark every #[wasm_bindgen] with just javascript or offline also
 // handle losing focus on window / possible browser events that disrupt the game
 
 // do wasm functions always happen synchronously ??? (if I have an event handler for key presses, will it only trigger after the
 	// wasm function ends??
-// decide if objects should be global or exported structures
-// add support for different controls
-// I would like to create a member in Game like so: objects: Vec<T: objects::Object>, but as of 1-17-20 it is not possible
-	// follow https://github.com/rust-lang/rust/issues/52662
-// best way to detect object collision??
+// object collision??
 	// object collision detecting more precise than using a minimum bounding rectangle
-// add pausing
 // check-sum on loaded songs 
 // consider storing songs in a different format than JSON
 // Precise ticking even for longer delta times
@@ -34,6 +24,9 @@
 
 // TESTS
 // test that objects have correct dimensions
+
+// !!! pausing/unpausing messes up character pos
+// !!! probably better to use shifted ints rather than floats
 
 use std::collections::btree_set::BTreeSet; 
 use std::cmp::Ordering;
@@ -72,7 +65,7 @@ mod game {
 	pub struct UpcomingNote {
 		note_type: BrickType,
 		x: f32,
-		time: f32, // time of appearance in seconds since the start of the program
+		time: f32, // time the note is meant to be played
 	}
 	
 	struct Song {
@@ -109,7 +102,7 @@ mod game {
 	pub struct Game {
 		// !!! create a copy of the reference to player and bricks in a data structure for ordering objects
 			// the objects either point to subsequently positioned objects or not (Option type)
-		time_running: f32,
+		time_running: f32, // invariant: should never be negative
 		// !!! better location for brick speed? (inside brick struct so it isn't passed for every single brick? limitations?)
 		brick_speed: f32,
 		player: Player,
@@ -125,7 +118,7 @@ mod game {
 				time_running: 0.0,
 				brick_speed: 500.0,
 				player: Player::new((GAME_WIDTH / 2) as f32, 0.0),
-				bricks: VecDeque::new(), // bricks on screen, ordered by time of appearance (height)
+				bricks: VecDeque::new(), // bricks on screen, ordered by time they are meant to be played
 				song: Song {
 					song_name: String::from(""),
 					notes: BTreeSet::new(),
@@ -232,19 +225,21 @@ mod game {
 			instructions.into_iter().map(JsValue::from).collect()
 		}
 		
-		// >:< 
-		pub fn editor_beat_offset(&self) -> u32 {
-			let secs_per_beat = 60.0 / self.song.bpm as f32;
-			let beat_time = (self.time_running % secs_per_beat) / secs_per_beat;
-			let beat_offset = beat_time * self.brick_speed / secs_per_beat;
-			
-			return beat_offset as u32;
+		pub fn ground_pos(&self) -> f32 {
+			return GROUND_POS as f32;
 		}
 		
-		pub fn editor_beat_interval(&self) -> u32 {
+		pub fn beat_interval(&self) -> f32 {
 			let secs_per_beat = 60.0 / self.song.bpm as f32;
-			let beat_interval = self.brick_speed / secs_per_beat;
-			return beat_interval as u32;
+			return secs_per_beat;
+		}
+		
+		pub fn brick_speed(&self) -> f32 {
+			return self.brick_speed;
+		}
+		
+		pub fn song_time(&self) -> f32 {
+			return self.time_running;
 		}
 		
 		pub fn input_command (&mut self, input: Input, t_since_tick: f32) {
@@ -294,8 +289,7 @@ mod game {
 				UpcomingNote{
 					note_type: bt,
 					x: pos * objects::BRICK_WIDTH as f32 + (GAME_WIDTH / 2) as f32,
-					// time the note is played minus the time it takes to get up the screen
-					time: time - (GAME_HEIGHT as f32 - GROUND_POS + objects::BRICK_HEIGHT as f32) / self.brick_speed,
+					time
 				}
 			);
 			
@@ -317,19 +311,21 @@ mod game {
 		// add any bricks from song that have reached the time to appear
 		fn add_upcoming_notes(&mut self) {
 			if let Some(upcoming_note) = &self.upcoming_note {
-				if upcoming_note.time < self.time_running {
+				// time that notes should be played plus a buffer time where they travel up the screen
+				let appearance_buffer = self.time_running + GAME_HEIGHT as f32 / self.brick_speed;
+				if upcoming_note.time < appearance_buffer {
 					
 					let upcoming_notes = self.song.notes.range(*upcoming_note..); // !!! range bounds with a float possible?
 					
 					for upcoming_note in upcoming_notes {
-						if upcoming_note.time > self.time_running {
+						if upcoming_note.time > appearance_buffer {
 							self.upcoming_note = Some(*upcoming_note);
 							return;
 						}
 						
-						let time_difference = self.time_running - upcoming_note.time;
+						let time_difference = appearance_buffer - upcoming_note.time;
 						
-						let mut brick = Brick::new(upcoming_note.x, GAME_HEIGHT as f32);
+						let mut brick = Brick::new(upcoming_note.x, GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32);
 						brick.tick(self.brick_speed, time_difference); // !!! alters location of song bricks
 						self.bricks.push_back(brick);
 					}
