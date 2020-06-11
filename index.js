@@ -1,6 +1,6 @@
-import * as game from "./game.js";
+import * as main from "./main.js";
 
-// game.run();
+// main.run();
 
-game.runEditor();
+main.runEditor();
 

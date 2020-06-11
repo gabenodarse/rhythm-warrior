@@ -72,7 +72,8 @@ mod game {
 		song_name: String,
 		notes: BTreeSet<UpcomingNote>, 
 		bpm: u32,
-		brick_speed: f32
+		brick_speed: f32,
+		duration: f32
 	}
 
 	impl PartialEq for UpcomingNote {
@@ -119,11 +120,12 @@ mod game {
 				brick_speed: 500.0,
 				player: Player::new((GAME_WIDTH / 2) as f32, 0.0),
 				bricks: VecDeque::new(), // bricks on screen, ordered by time they are meant to be played
-				song: Song {
+				song: Song { 
 					song_name: String::from(""),
 					notes: BTreeSet::new(),
 					bpm: 96,
-					brick_speed: 500.0
+					brick_speed: 500.0,
+					duration: 120.0
 				},
 				upcoming_note: None
 			}
@@ -192,6 +194,7 @@ mod game {
 				self.bricks.truncate(len - del);
 			}
 			
+			// !!! detecting end of song?
 			self.add_upcoming_notes();
 		}
 		
@@ -285,6 +288,10 @@ mod game {
 		
 		// TODO create a method load_song
 		pub fn load_brick (&mut self, bt: BrickType, time: f32, pos: f32) {
+			if time > self.song.duration {
+				return;
+			}
+			
 			self.song.notes.insert(
 				UpcomingNote{
 					note_type: bt,
@@ -299,16 +306,18 @@ mod game {
 			}
 		}
 		
-		pub fn set_song_metadata(&mut self, song_name: String, bpm: u32, brick_speed: f32){
+		pub fn set_song_metadata(&mut self, song_name: String, bpm: u32, brick_speed: f32, duration: f32){
 			self.song = Song {
 				song_name,
 				notes: BTreeSet::new(),
 				bpm,
 				brick_speed,
+				duration
 			}
 		}
 		
 		// add any bricks from song that have reached the time to appear
+			// uses range weirdness because seeking through a B-tree of non-primitives is weird
 		fn add_upcoming_notes(&mut self) {
 			if let Some(upcoming_note) = &self.upcoming_note {
 				// time that notes should be played plus a buffer time where they travel up the screen
@@ -326,7 +335,7 @@ mod game {
 						let time_difference = appearance_buffer - upcoming_note.time;
 						
 						let mut brick = Brick::new(upcoming_note.x, GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32);
-						brick.tick(self.brick_speed, time_difference); // !!! alters location of song bricks
+						brick.tick(self.brick_speed, time_difference);
 						self.bricks.push_back(brick);
 					}
 					
@@ -334,6 +343,31 @@ mod game {
 				}
 				
 			}
+		}
+		
+		pub fn seek(&mut self, time: f32) {
+			self.time_running = time;
+			self.bricks = VecDeque::new();
+			
+			let min_time = time - (GROUND_POS / self.brick_speed);
+			let appearance_buffer = time + GAME_HEIGHT as f32 / self.brick_speed;
+			
+			for note in self.song.notes.iter() {
+				if note.time > min_time {
+					if note.time > appearance_buffer {
+						self.upcoming_note = Some(*note);
+						return;
+					}
+					
+					let time_difference = appearance_buffer - note.time;
+					
+					let mut brick = Brick::new(note.x, GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32);
+					brick.tick(self.brick_speed, time_difference);
+					self.bricks.push_back(brick);
+				}
+			}
+			
+			self.upcoming_note = None;
 		}
 	}
 	
