@@ -1,6 +1,5 @@
 "use strict";
 
-// >:< can make editor and game separate types which inherit from Game Data type
 import * as wasm from "./pkg/music_mercenary.js";
 import * as load from "./load.js";
 
@@ -27,10 +26,9 @@ Game.prototype.load = async function () {
 	let loader = new load.Loader();
 	
 	// TODO add error handling
-	await wasm.default();
 	
 	await loader.init()
-		.then( () => loader.loadGraphics(wasm))
+		.then( () => loader.loadGraphics())
 		.then( res => this.canvases = res );
 	
 	// TODO add error handling
@@ -48,7 +46,7 @@ Game.prototype.load = async function () {
 	
 	let songData = loader.getSong(2);
 	songData[0]["values"].forEach( note => {
-		this.gameData.load_brick(note[2], note[3], note[4]);
+		this.gameData.toggle_brick(note[2], note[3], note[4]);
 	});
 }
 
@@ -86,8 +84,6 @@ Game.prototype.tick = function(){
 	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
 	this.gameData.tick(timePassed); 
 	this.lastTick = now;
-	
-	this.renderAll();
 }
 
 Game.prototype.startControl = function(cntrl){
@@ -100,7 +96,36 @@ Game.prototype.stopControl = function(cntrl){
 	this.gameData.stop_command(cntrl, (now - this.lastTick) / 1000);
 }
 
-Game.prototype.showEditor = function(){
+Game.prototype.renderGame = function(){
+	let instructions = this.gameData.rendering_instructions();
+	
+	instructions.forEach( instruction => {
+		this.gameContext.drawImage(this.canvases[instruction.g],instruction.x * this.xFactor,instruction.y * this.yFactor); 
+	});
+}
+
+
+
+export function Editor () {
+	Game.call(this);
+	
+	this.scroller = document.querySelector("#scroller input");
+	if(!this.scroller){
+		throw Error("no scroller found");
+	}
+}
+
+Object.setPrototypeOf(Editor.prototype, Game.prototype);
+
+Editor.prototype.renderEditor = function(){
+	// render game
+	let instructions = this.gameData.rendering_instructions();
+	instructions.forEach( instruction => {
+		if(instruction.g != wasm.GraphicGroup["Player"]){
+			this.gameContext.drawImage(this.canvases[instruction.g],instruction.x * this.xFactor,instruction.y * this.yFactor); 
+		}
+	});
+	
 	let dims = wasm.game_dimensions();
 	let screenWidth = dims.x;
 	let screenHeight = dims.y;
@@ -123,16 +148,54 @@ Game.prototype.showEditor = function(){
 	}
 }
 
-Game.prototype.renderAll = function(){
-	let instructions = this.gameData.rendering_instructions();
-	
-	// TODO error handling: check if instructions is an array of PositionedGraphic objects
-	instructions.forEach( instruction => {
-		this.gameContext.drawImage(this.canvases[instruction.g],instruction.x * this.xFactor,instruction.y * this.yFactor); 
-	});
-}
-
-Game.prototype.seek = function(time){
+Editor.prototype.seek = function(time){
 	this.gameData.seek(time);
 }
 
+Editor.prototype.load = async function(){
+	await Game.prototype.load.call(this);
+	
+	this.scroller.value = this.gameData.song_time();
+	this.scroller.max = this.gameData.song_duration();
+	this.scroller.step = this.gameData.beat_interval() * 2;
+	this.scroller.addEventListener("input", evt => {
+		let t = parseInt(this.scroller.value);
+		this.seek(t);
+		this.renderEditor();
+	});
+	
+	this.gameCanvas.lastClickTime = 0;
+	this.gameCanvas.addEventListener("click", evt => {
+		let now = new Date().getTime();
+		if(now - this.gameCanvas.lastClickTime < 500){
+			let x = evt.clientX - this.gameCanvas.offsetLeft;
+			let y = evt.clientY - this.gameCanvas.offsetTop;
+			let t = this.gameData.song_time();
+			this.createNote(x, y, t);
+			this.gameData.seek(t);
+			this.renderEditor();
+		}
+		
+		this.gameCanvas.lastClickTime = now;
+	});
+	
+}
+
+Editor.prototype.createNote = function(x, y, t){
+	// !!! support for third, sixth, twelfth notes
+	let sixteenthNoteTime = this.gameData.beat_interval() / 4;
+	
+	y -= this.gameData.ground_pos() * this.yFactor;
+	t += y / (this.gameData.brick_speed() * this.yFactor);
+	t += sixteenthNoteTime - t % sixteenthNoteTime;
+	let brickWidth = wasm.graphic_size(wasm.GraphicGroup.Brick).x * this.xFactor
+	
+	// >:< Because there are 32 notes, each x non overlapping. 
+		// probably want to narrow it down to 24 notes. Store note positions as 0-23? (modify midi conversion)
+	x = Math.floor(x / brickWidth) - 16;
+	
+	this.gameData.toggle_brick(0, t, x);	
+}
+	
+	
+	

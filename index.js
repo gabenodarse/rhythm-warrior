@@ -1,6 +1,10 @@
+import * as wasm from "./pkg/music_mercenary.js";
 import * as main from "./main.js";
 
-// main.run();
+(async function(){
+	await wasm.default();
+	// main.run();
+	main.runEditor();
+})()
 
-main.runEditor();
 

@@ -64,13 +64,13 @@ mod game {
 	#[derive(Clone, Copy)]
 	pub struct UpcomingNote {
 		note_type: BrickType,
-		x: f32,
+		x: u32,
 		time: f32, // time the note is meant to be played
 	}
 	
 	struct Song {
 		song_name: String,
-		notes: BTreeSet<UpcomingNote>, 
+		notes: BTreeSet<UpcomingNote>,
 		bpm: u32,
 		brick_speed: f32,
 		duration: f32
@@ -93,9 +93,14 @@ mod game {
 
 	impl Ord for UpcomingNote {
 		fn cmp(&self, other: &UpcomingNote) -> Ordering {
-			if self.time < other.time         { Ordering::Less }
+			if self.time < other.time      { Ordering::Less }
 			else if self.time > other.time { Ordering::Greater }
-			else                              { Ordering::Equal }
+			// arbitrary comparisons so that notes of the same time can exist within the same set
+			else if (self.note_type as u8) < (other.note_type as u8) { Ordering::Less }
+			else if (self.note_type as u8) > (other.note_type as u8) { Ordering::Greater }
+			else if self.x < other.x { Ordering::Less }
+			else if self.x > other.x { Ordering::Greater }
+			else { Ordering::Equal }
 		}
 	}
 	
@@ -245,6 +250,10 @@ mod game {
 			return self.time_running;
 		}
 		
+		pub fn song_duration(&self) -> f32 {
+			return self.song.duration;
+		}
+		
 		pub fn input_command (&mut self, input: Input, t_since_tick: f32) {
 			match input {
 				Input::Jump => {
@@ -287,18 +296,20 @@ mod game {
 		}
 		
 		// TODO create a method load_song
-		pub fn load_brick (&mut self, bt: BrickType, time: f32, pos: f32) {
+		pub fn toggle_brick (&mut self, bt: BrickType, time: f32, pos: u32) {
 			if time > self.song.duration {
 				return;
 			}
+			// >:< just as there is a max time, there should be a min time. During the intro min time a metronome can establish tempo
 			
-			self.song.notes.insert(
-				UpcomingNote{
-					note_type: bt,
-					x: pos * objects::BRICK_WIDTH as f32 + (GAME_WIDTH / 2) as f32,
-					time
-				}
-			);
+			let brick = UpcomingNote{
+				note_type: bt,
+				x: pos * objects::BRICK_WIDTH + (GAME_WIDTH / 2),
+				time
+			};
+			if !self.song.notes.insert( brick ) {
+				self.song.notes.remove( &brick );
+			}
 			
 			match self.song.notes.iter().next() {
 				Some(note) => self.upcoming_note = Some(*note),
@@ -334,7 +345,7 @@ mod game {
 						
 						let time_difference = appearance_buffer - upcoming_note.time;
 						
-						let mut brick = Brick::new(upcoming_note.x, GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32);
+						let mut brick = Brick::new(upcoming_note.x as f32, GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32);
 						brick.tick(self.brick_speed, time_difference);
 						self.bricks.push_back(brick);
 					}
@@ -361,7 +372,7 @@ mod game {
 					
 					let time_difference = appearance_buffer - note.time;
 					
-					let mut brick = Brick::new(note.x, GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32);
+					let mut brick = Brick::new(note.x as f32, GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32);
 					brick.tick(self.brick_speed, time_difference);
 					self.bricks.push_back(brick);
 				}

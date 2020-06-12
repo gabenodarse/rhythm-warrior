@@ -1,5 +1,6 @@
 import * as MIDIReader from "./read-MIDI.js";
 import * as sqljs from "./sql-wasm.js";
+import * as wasm from "./pkg/music_mercenary.js";
 
 export async function convertMIDI(MIDIFile){
 	let buffer = await MIDIFile.arrayBuffer();
@@ -80,16 +81,12 @@ Loader.prototype.getSong = function(song){
 }
 
 //load all images from files into canvas contexts
-Loader.prototype.loadGraphics = async function(wasmInstance){
+Loader.prototype.loadGraphics = async function(){
 	
 	if(!this.resourceLocations){
 		throw Error("unknown (unloaded) resource locations");
 	}
-	if(!wasmInstance){
-		throw Error("no wasm instance passed");
-	}
 	
-	let wasm = wasmInstance;
 	let resourceLocations = this.resourceLocations;
 	
 	let num_graphic_groups = wasm.num_graphic_groups();

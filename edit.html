@@ -4,11 +4,21 @@
     <meta charset="utf-8">
     <title>Editor</title>
     <link href="styles.css" type="text/css" rel="stylesheet"/>
+    <style>
+        #scroller input{
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
   </head>
   <body>
       
     <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
     <script type="module" src="./index.js"></script>
-    
+    <div id="scroller">
+        <input type="range"/>
+    </div>
   </body>
 </html>

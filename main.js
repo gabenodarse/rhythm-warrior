@@ -4,6 +4,7 @@ import * as load from "./load.js";
 import * as game from "./game.js";
 
 const Game = game.Game;
+const Editor = game.Editor;
 
 let g_controls = {};
 let g_gamePaused = false;
@@ -57,6 +58,7 @@ export async function run() {
 		}
 		
 		game.tick();
+		game.renderGame();
 		requestAnimationFrame(loop);
 	}
 	
@@ -77,16 +79,15 @@ export async function run() {
 }
 
 export async function runEditor() {
-	let game = new Game();
-	await game.load();
+	let editor = new Editor();
+	await editor.load();
 	
 	let foo = () => {
-		game.seek(15);
-		game.tick();
-		game.showEditor();
+		editor.seek(0);
+		editor.renderEditor();
 	}
 	
-	game.start(foo);
+	editor.start(foo);
 }
 
 function pause() {
