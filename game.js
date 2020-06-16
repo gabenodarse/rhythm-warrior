@@ -1,21 +1,25 @@
 "use strict";
 
+// >:< 
+// Probably don't want to create sprites every tick. Either: 
+	// find a way to place duplicated sprites in pixi or with webgl
+	// stack of sprite arrays for each graphic group, length of max instance, and the sprite arrays containing possible sub images
 import * as wasm from "./pkg/music_mercenary.js";
 import * as load from "./load.js";
 
 export function Game () {
-	// !!! resizing based on screen size + options
-	this.gameCanvas = document.createElement('canvas');
-	this.gameContext = this.gameCanvas.getContext('2d');
+	// >:< resizing based on screen size + options
+	this.width = 1100;
+	this.height = 600;
 	this.xFactor = 1;
 	this.yFactor = 1;
-	this.gameCanvas.width = 1100; 
-	this.gameCanvas.height = 600;
-	document.body.appendChild(this.gameCanvas); // !!! determine position
+	this.pixiApp = new PIXI.Application({width: this.width, height: this.height, transparent: true});
+	document.body.appendChild(this.pixiApp.view);
 
 	this.lastTick;
 	this.gameData;
-	this.canvases;
+	this.textures;
+	this.sprites;
 	this.audioContext = new AudioContext();
 	this.audioSource;
 	this.audioBuffer;
@@ -26,10 +30,9 @@ Game.prototype.load = async function () {
 	let loader = new load.Loader();
 	
 	// TODO add error handling
-	
 	await loader.init()
 		.then( () => loader.loadGraphics())
-		.then( res => this.canvases = res );
+		.then( res => this.textures = res );
 	
 	// TODO add error handling
 	await fetch("song.mp3")
@@ -41,8 +44,8 @@ Game.prototype.load = async function () {
 	this.gameData = wasm.Game.new();
 	
 	let gameDim = wasm.game_dimensions();
-	this.xFactor = this.gameCanvas.width / gameDim.x;
-	this.yFactor = this.gameCanvas.height / gameDim.y;
+	this.xFactor = this.width / gameDim.x;
+	this.yFactor = this.height / gameDim.y;
 	
 	let songData = loader.getSong(2);
 	songData[0]["values"].forEach( note => {
@@ -99,8 +102,22 @@ Game.prototype.stopControl = function(cntrl){
 Game.prototype.renderGame = function(){
 	let instructions = this.gameData.rendering_instructions();
 	
+	for(let i = this.sprites.length - 1; i >= 0; --i){
+		this.sprites[i].destroy();
+	}
+	this.sprites = []; 
+	
 	instructions.forEach( instruction => {
-		this.gameContext.drawImage(this.canvases[instruction.g],instruction.x * this.xFactor,instruction.y * this.yFactor); 
+		let sprite = new PIXI.Sprite(this.textures[instruction.g]);
+		let dims = wasm.graphic_size(instruction.g);
+		
+		sprite.x = instruction.x * this.xFactor; 
+        sprite.y = instruction.y * this.yFactor;
+		sprite.width = dims.x * this.xFactor;
+		sprite.height = dims.y * this.yFactor;
+		
+		this.sprites.push(sprite);
+		this.pixiApp.stage.addChild(sprite);
 	});
 }
 
@@ -110,25 +127,28 @@ export function Editor () {
 	Game.call(this);
 	
 	this.scroller = document.querySelector("#scroller input");
+	this.editorOverlay = document.querySelector("#editor-overlay");
+	this.sprites = [];
+
 	if(!this.scroller){
 		throw Error("no scroller found");
+	}
+	if(!this.editorOverlay){
+		throw Error("no editor overlay found");
 	}
 }
 
 Object.setPrototypeOf(Editor.prototype, Game.prototype);
 
 Editor.prototype.renderEditor = function(){
-	// render game
-	let instructions = this.gameData.rendering_instructions();
-	instructions.forEach( instruction => {
-		if(instruction.g != wasm.GraphicGroup["Player"]){
-			this.gameContext.drawImage(this.canvases[instruction.g],instruction.x * this.xFactor,instruction.y * this.yFactor); 
-		}
-	});
+	// render game components
+	this.renderGame();
 	
 	let dims = wasm.game_dimensions();
 	let screenWidth = dims.x;
 	let screenHeight = dims.y;
+	let ctx = this.editorOverlay.getContext("2d");
+	ctx.clearRect(0, 0, screenWidth * this.xFactor, screenHeight * this.yFactor);
 	
 	let beatInterval = this.gameData.beat_interval();
 	let brickSpeed = this.gameData.brick_speed();
@@ -138,9 +158,9 @@ Editor.prototype.renderEditor = function(){
 	
 	while(true){
 		if(t * brickSpeed + yOffset < screenHeight){
-			this.gameContext.fillRect(0, (t * brickSpeed + yOffset) * this.yFactor, screenWidth * this.xFactor, 3);
+			ctx.fillRect(0, (t * brickSpeed + yOffset) * this.yFactor, screenWidth * this.xFactor, 3);
 			t += beatInterval / 2;
-			this.gameContext.fillRect(0, (t * brickSpeed + yOffset) * this.yFactor, screenWidth * this.xFactor, 1);
+			ctx.fillRect(0, (t * brickSpeed + yOffset) * this.yFactor, screenWidth * this.xFactor, 1);
 			t += beatInterval / 2;
 			continue;
 		}
@@ -164,19 +184,21 @@ Editor.prototype.load = async function(){
 		this.renderEditor();
 	});
 	
-	this.gameCanvas.lastClickTime = 0;
-	this.gameCanvas.addEventListener("click", evt => {
+	this.editorOverlay.width = this.width;
+	this.editorOverlay.height = this.height;
+	this.editorOverlay.lastClickTime = 0;
+	this.editorOverlay.addEventListener("click", evt => {
 		let now = new Date().getTime();
-		if(now - this.gameCanvas.lastClickTime < 500){
-			let x = evt.clientX - this.gameCanvas.offsetLeft;
-			let y = evt.clientY - this.gameCanvas.offsetTop;
+		if(now - this.editorOverlay.lastClickTime < 500){
+			let x = evt.clientX - this.editorOverlay.offsetLeft;
+			let y = evt.clientY - this.editorOverlay.offsetTop;
 			let t = this.gameData.song_time();
 			this.createNote(x, y, t);
 			this.gameData.seek(t);
 			this.renderEditor();
 		}
 		
-		this.gameCanvas.lastClickTime = now;
+		this.editorOverlay.lastClickTime = now;
 	});
 	
 }
@@ -190,7 +212,7 @@ Editor.prototype.createNote = function(x, y, t){
 	t += sixteenthNoteTime - t % sixteenthNoteTime;
 	let brickWidth = wasm.graphic_size(wasm.GraphicGroup.Brick).x * this.xFactor
 	
-	// >:< Because there are 32 notes, each x non overlapping. 
+	// >:< Because there are 32 notes, each x non overlapping. Magic number should be removed.
 		// probably want to narrow it down to 24 notes. Store note positions as 0-23? (modify midi conversion)
 	x = Math.floor(x / brickWidth) - 16;
 	

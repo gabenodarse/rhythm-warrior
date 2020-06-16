@@ -300,7 +300,7 @@ mod game {
 			if time > self.song.duration {
 				return;
 			}
-			// >:< just as there is a max time, there should be a min time. During the intro min time a metronome can establish tempo
+			// !!! just as there is a max time, there should be a min time. During the intro min time a metronome can establish tempo
 			
 			let brick = UpcomingNote{
 				note_type: bt,

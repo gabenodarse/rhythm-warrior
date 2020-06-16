@@ -95,30 +95,17 @@ Loader.prototype.loadGraphics = async function(){
 			" and number of resource locations " + Object.keys(resourceLocations).length + " do not match");
 	}
 	
-	let results = [];
-	let g_canvases = new Array(num_graphic_groups);// >:< pixi
+	let textures = new Array(num_graphic_groups);
 	
-	// >:< 
-	let bgSize = {x: 1920, y:1080};
-	let g_sizeXFactor = 1100 / bgSize.x;
-	let g_sizeYFactor = 600 / bgSize.y;
-	
-	
-	function loadImage(imgKey, canvasID) {
-		return new Promise(res => {
-			let img = new Image();
-			img.onload = (() => {
-				console.log("loaded 1");
-				g_canvases[canvasID] = document.createElement('canvas');
-				
-				let size = wasm.graphic_size(canvasID);
-				g_canvases[canvasID].width = (size.x * g_sizeXFactor);
-				g_canvases[canvasID].height = (size.y * g_sizeYFactor);
-				g_canvases[canvasID].getContext('2d').drawImage(img, 0, 0, (size.x * g_sizeXFactor), (size.y * g_sizeYFactor));
-				
-				res();
-			});
-			img.src = resourceLocations[imgKey]; // TODO add error handling (onfail if that exists, or a timeout)
+	function loadTextures(resourcesKey, graphicGroup) {
+		let filename = resourceLocations[resourcesKey];
+		return new Promise( (res, rej) => {
+			PIXI.loader
+				.add(filename)
+				.load(() => {
+					textures[graphicGroup] = PIXI.loader.resources[filename].texture;
+					res();
+				});
 		});
 	}
 	
@@ -127,15 +114,11 @@ Loader.prototype.loadGraphics = async function(){
 		console.log(rej);
 	}
 	
-	for(const resID in resourceLocations){
-		results.push(
-			loadImage(resID, wasm.GraphicGroup[resID])
-			.catch( onReject )
-		);
+	// TODO loading more than 1 texture at a time possible?
+	for(const resourcesKey in resourceLocations){
+		await loadTextures(resourcesKey, wasm.GraphicGroup[resourcesKey])
+			.catch( onReject );
 	}
 	
-	// TODO can move all catches on results to this Promise.all
-	await Promise.all(results).catch( () => { console.log("failed loading images"); } );
-	
-	return g_canvases;
+	return textures;
 }
