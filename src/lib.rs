@@ -28,6 +28,10 @@
 // !!! pausing/unpausing messes up character pos
 // !!! probably better to use shifted ints rather than floats
 
+// >:< tick then hit detect, don't hit detect on frame after hit
+// >:< dash has to go through to hit note
+// >:< size offset, x offset, y offset for graphics that are sized differently than their objects
+
 use std::collections::btree_set::BTreeSet; 
 use std::cmp::Ordering;
 use macros;
@@ -207,7 +211,7 @@ mod game {
 			// so there are no races?
 		pub fn rendering_instructions(&self) -> Array {
 			let mut instructions = vec!(
-				PositionedGraphic {
+				PositionedGraphic { // !!! use a background canvas instead of rerendering background each tick?
 					g: GraphicGroup::Background,
 					x: 0,
 					y: 0
@@ -394,14 +398,6 @@ mod game {
 
 
 
-// !!! use graphics groups with sub IDs instead of single graphics?
-#[wasm_bindgen]
-#[derive(Clone, Copy, Debug)]
-struct Graphic {
-	group: GraphicGroup,
-	sub_id: u8
-}
-
 #[wasm_bindgen]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, EnumVariantCount)]
@@ -421,6 +417,7 @@ pub enum GraphicGroup {
 	DashL2,
 	DashL3
 }
+
 #[wasm_bindgen]
 pub struct PositionedGraphic {
 	pub g: GraphicGroup,

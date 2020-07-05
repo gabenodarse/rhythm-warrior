@@ -12,16 +12,14 @@
             width: 100%;
         }
         #editor-overlay{
-            position: absolute;
-            zIndex: 100;
+            z-index: 100;
         }
     </style>
   </head>
   <body>
       
     <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
-    <script src="./pixi.min.js"></script>
-    <script type="module" src="./index.js"></script>
+    <script type="module" src="./edit.js"></script>
     <div id="scroller">
         <input type="range"/>
     </div>

@@ -2,6 +2,11 @@ body {
 	text-align: center;
 }
 
+canvas{
+	position: absolute;
+	left: 0px;
+}
+
 #control-change-menu {
 	text-align: left;
 	position: absolute;

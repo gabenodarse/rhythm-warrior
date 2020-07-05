@@ -1,6 +1,7 @@
 import * as MIDIReader from "./read-MIDI.js";
 import * as sqljs from "./sql-wasm.js";
 import * as wasm from "./pkg/music_mercenary.js";
+import * as graphics from "./graphics.js";
 
 export async function convertMIDI(MIDIFile){
 	let buffer = await MIDIFile.arrayBuffer();
@@ -80,7 +81,8 @@ Loader.prototype.getSong = function(song){
 	}
 }
 
-//load all images from files into canvas contexts
+// load all images from files before returning a WebGLGraphics object from those images
+// !!! add error handling (timeout on image loading?)
 Loader.prototype.loadGraphics = async function(){
 	
 	if(!this.resourceLocations){
@@ -89,36 +91,31 @@ Loader.prototype.loadGraphics = async function(){
 	
 	let resourceLocations = this.resourceLocations;
 	
-	let num_graphic_groups = wasm.num_graphic_groups();
-	if(Object.keys(resourceLocations).length != num_graphic_groups){
-		throw Error("Expected number of graphics " + num_graphic_groups +
+	let numGraphics = wasm.num_graphic_groups();
+	if(Object.keys(resourceLocations).length != numGraphics){
+		throw Error("Expected number of graphics " + numGraphics +
 			" and number of resource locations " + Object.keys(resourceLocations).length + " do not match");
 	}
 	
-	let textures = new Array(num_graphic_groups);
-	
-	function loadTextures(resourcesKey, graphicGroup) {
-		let filename = resourceLocations[resourcesKey];
-		return new Promise( (res, rej) => {
-			PIXI.loader
-				.add(filename)
-				.load(() => {
-					textures[graphicGroup] = PIXI.loader.resources[filename].texture;
-					res();
-				});
-		});
+	let numLoaded = 0;
+	let images = new Array(numGraphics);
+	let done;
+	let p = new Promise((res, rej) => {
+		done = res;
+	});
+	let imgLoaded = function(){
+		++numLoaded;
+		if(numLoaded == numGraphics){
+			let webGL = new graphics.WebGLGraphics(images);
+			done(webGL);
+		}
 	}
 	
-	// TODO better error handling
-	function onReject(rej) {
-		console.log(rej);
-	}
-	
-	// TODO loading more than 1 texture at a time possible?
 	for(const resourcesKey in resourceLocations){
-		await loadTextures(resourcesKey, wasm.GraphicGroup[resourcesKey])
-			.catch( onReject );
+		images[ wasm.GraphicGroup[resourcesKey] ] = new Image();
+		images[ wasm.GraphicGroup[resourcesKey] ].onload = imgLoaded;
+		images[ wasm.GraphicGroup[resourcesKey] ].src = resourceLocations[resourcesKey];;
 	}
 	
-	return textures;
+	return p;
 }

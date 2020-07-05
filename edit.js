@@ -3,7 +3,7 @@ import * as main from "./main.js";
 
 (async function(){
 	await wasm.default();
-	main.run();
+	main.runEditor();
 })()
 
 

@@ -82,12 +82,13 @@ export async function runEditor() {
 	let editor = new Editor();
 	await editor.load();
 	
-	let foo = () => {
+	// !!! way to work with editor and song together
+	let start = () => {
 		editor.seek(0);
 		editor.renderEditor();
 	}
 	
-	editor.start(foo);
+	editor.start(start);
 }
 
 function pause() {

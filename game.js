@@ -1,9 +1,5 @@
 "use strict";
 
-// >:< 
-// Probably don't want to create sprites every tick. Either: 
-	// find a way to place duplicated sprites in pixi or with webgl
-	// stack of sprite arrays for each graphic group, length of max instance, and the sprite arrays containing possible sub images
 import * as wasm from "./pkg/music_mercenary.js";
 import * as load from "./load.js";
 
@@ -13,13 +9,10 @@ export function Game () {
 	this.height = 600;
 	this.xFactor = 1;
 	this.yFactor = 1;
-	this.pixiApp = new PIXI.Application({width: this.width, height: this.height, transparent: true});
-	document.body.appendChild(this.pixiApp.view);
 
 	this.lastTick;
 	this.gameData;
-	this.textures;
-	this.sprites;
+	this.webGL;
 	this.audioContext = new AudioContext();
 	this.audioSource;
 	this.audioBuffer;
@@ -27,12 +20,12 @@ export function Game () {
 }
 
 Game.prototype.load = async function () {
-	let loader = new load.Loader();
+	let loader = new load.Loader(); // >:< loader as member? (so different songs can be loaded without creating new loaders)
 	
 	// TODO add error handling
 	await loader.init()
 		.then( () => loader.loadGraphics())
-		.then( res => this.textures = res );
+		.then( res => this.webGL = res );
 	
 	// TODO add error handling
 	await fetch("song.mp3")
@@ -46,6 +39,7 @@ Game.prototype.load = async function () {
 	let gameDim = wasm.game_dimensions();
 	this.xFactor = this.width / gameDim.x;
 	this.yFactor = this.height / gameDim.y;
+	this.webGL.resize(this.xFactor, this.yFactor);
 	
 	let songData = loader.getSong(2);
 	songData[0]["values"].forEach( note => {
@@ -102,23 +96,7 @@ Game.prototype.stopControl = function(cntrl){
 Game.prototype.renderGame = function(){
 	let instructions = this.gameData.rendering_instructions();
 	
-	for(let i = this.sprites.length - 1; i >= 0; --i){
-		this.sprites[i].destroy();
-	}
-	this.sprites = []; 
-	
-	instructions.forEach( instruction => {
-		let sprite = new PIXI.Sprite(this.textures[instruction.g]);
-		let dims = wasm.graphic_size(instruction.g);
-		
-		sprite.x = instruction.x * this.xFactor; 
-        sprite.y = instruction.y * this.yFactor;
-		sprite.width = dims.x * this.xFactor;
-		sprite.height = dims.y * this.yFactor;
-		
-		this.sprites.push(sprite);
-		this.pixiApp.stage.addChild(sprite);
-	});
+	this.webGL.renderTextures(instructions, this.xFactor, this.yFactor);
 }
 
 
@@ -128,7 +106,6 @@ export function Editor () {
 	
 	this.scroller = document.querySelector("#scroller input");
 	this.editorOverlay = document.querySelector("#editor-overlay");
-	this.sprites = [];
 
 	if(!this.scroller){
 		throw Error("no scroller found");
@@ -209,7 +186,7 @@ Editor.prototype.createNote = function(x, y, t){
 	
 	y -= this.gameData.ground_pos() * this.yFactor;
 	t += y / (this.gameData.brick_speed() * this.yFactor);
-	t += sixteenthNoteTime - t % sixteenthNoteTime;
+	t += sixteenthNoteTime - (t % sixteenthNoteTime + sixteenthNoteTime) % sixteenthNoteTime; //subtract positive modulus
 	let brickWidth = wasm.graphic_size(wasm.GraphicGroup.Brick).x * this.xFactor
 	
 	// >:< Because there are 32 notes, each x non overlapping. Magic number should be removed.
