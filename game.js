@@ -49,8 +49,10 @@ Game.prototype.load = async function () {
 
 Game.prototype.resize = function(width, height){
 	let gameDim = wasm.game_dimensions();
-	this.xFactor = this.width / gameDim.x;
-	this.yFactor = this.height / gameDim.y;
+	this.width = width;
+	this.height = height;
+	this.xFactor = width / gameDim.x;
+	this.yFactor = height / gameDim.y;
 	this.graphics.resize(this.xFactor, this.yFactor);
 }
 
@@ -185,6 +187,11 @@ Editor.prototype.load = async function(){
 		this.editorOverlay.lastClickTime = now;
 	});
 	
+}
+
+Editor.prototype.resize = function(width, height){
+	Game.prototype.resize.call(this, width, height);
+	this.renderEditor();
 }
 
 Editor.prototype.createNote = function(x, y, t){

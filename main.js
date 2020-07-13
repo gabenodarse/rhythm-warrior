@@ -6,12 +6,27 @@ import * as game from "./game.js";
 const Game = game.Game;
 const Editor = game.Editor;
 
+let g_resizeRefresher = true;
 let g_controls = {};
 let g_gamePaused = false;
 let g_startGame = () => {}
 let g_gameStartControl = (cntrl) => {}
 let g_gameStopControl = (cntrl) => {}
+let g_resizeGame = (width, height) => {}
+let g_resize = () => {}
 
+const g_resizeScreen = () => {
+	const delay = 50; // minimum delay between screen size refreshes
+	if(g_resizeRefresher){
+		g_resizeRefresher = false;
+		setTimeout(async function(){
+			g_resizeRefresher = true;
+			let screenDiv = document.querySelector("#screen-div");
+			g_resizeGame(screenDiv.clientWidth, screenDiv.clientHeight);
+		},delay);
+	}
+}
+	
 const g_handleGameKeyDown = event => {
 	// TODO faster handling of repeated key inputs from holding down a key?
 	if (event.keyCode === 27){
@@ -40,6 +55,7 @@ export async function run() {
 	await game.load();
 	window.addEventListener("keydown", g_handleGameKeyDown);
 	window.addEventListener("keyup", g_handleGameKeyUp);
+	window.addEventListener("resize", g_resizeScreen); 
 	
 	if(Object.keys(g_controls).length == 0){
 		g_controls[32] = wasm.Input.Jump; // space
@@ -59,35 +75,43 @@ export async function run() {
 		
 		game.tick();
 		game.renderGame();
-		requestAnimationFrame(loop);
+		requestAnimationFrame(loop); // !!! set timeout or request animation frame better?
 	}
 	
-	const start = () => {
+	g_startGame = () => {
 		game.start(loop);
 	}
-	
-	g_startGame = start;
 	g_gameStartControl = (cntrl) => {
 		game.startControl(cntrl);
 	}
 	g_gameStopControl = (cntrl) => {
 		game.stopControl(cntrl);
 	}
+	g_resizeGame = (width, height) => {
+		game.resize(width, height);
+	}
 	
 	// !!! how to end a game/editor
-	start();
+	g_resizeScreen();
+	game.start(loop);
 }
 
 export async function runEditor() {
+	window.addEventListener("resize", g_resizeScreen);
 	let editor = new Editor();
 	await editor.load();
 	
 	// !!! way to work with editor and song together
+	g_resizeGame = (width, height) => {
+		editor.resize(width, height);
+	}
+	
 	let start = () => {
 		editor.seek(0);
 		editor.renderEditor();
 	}
 	
+	g_resizeScreen();
 	editor.start(start);
 }
 

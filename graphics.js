@@ -28,7 +28,7 @@ export function CanvasGraphics(images){
 			this.canvases[gIdx].canvases[i] = document.createElement("canvas");
 			this.canvases[gIdx].canvases[i].width = dimensions.x;
 			this.canvases[gIdx].canvases[i].height = dimensions.y;
-			this.canvases[gIdx].canvases[i].getContext("2d").drawImage(img, 0, 0, dimensions.x, dimensions.y);
+			this.canvases[gIdx].canvases[i].getContext("2d").drawImage(fullsize, 0, 0, dimensions.x, dimensions.y);
 			this.canvases[gIdx].canvases[i].style.visibility = "hidden"; // >:< visibility vs display performance
 			document.body.appendChild( this.canvases[gIdx].canvases[i] );
 		}
@@ -65,8 +65,8 @@ CanvasGraphics.prototype.resize = function(xFactor, yFactor){
 		let dimensions = wasm.graphic_size(gIdx);
 		let fullsize = canvasGroup.fullsize;
 		canvasGroup.canvases.forEach( canvas => {
-			canvas.height = dimensions.y * yFactor;
 			canvas.width = dimensions.x * xFactor;
+			canvas.height = dimensions.y * yFactor;
 			canvas.getContext("2d").drawImage(fullsize, 0, 0, canvas.width, canvas.height);
 		})
 	});
