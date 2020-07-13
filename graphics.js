@@ -2,8 +2,7 @@
 import * as wasm from "./pkg/music_mercenary.js";
 
 // !!!
-// deleting shaders and program helpful?
-// webgl vs. webgl2?
+// patiently awaiting webGPU. Hopefully better than webGL
 
 function SizedTexture(texture, width, height){
 	this.texture = texture;
@@ -11,30 +10,67 @@ function SizedTexture(texture, width, height){
 	this.height = height;
 }
 
-const vertexShader = `
-    attribute vec2 a_position;
-	attribute vec2 a_texCoord;
+let vertexShader;
+let fragmentShader;
+
+export function CanvasGraphics(images){
+	this.canvases = [];
+	// create canvases for each image
+	images.forEach( (img,gIdx) => {
+		let dimensions = wasm.graphic_size(gIdx);
+		let numCanvases = wasm.max_graphics(gIdx);
+		let fullsize = document.createElement("canvas");
+		fullsize.width = dimensions.x;
+		fullsize.height = dimensions.y;
+		fullsize.getContext("2d").drawImage(img, 0, 0, dimensions.x, dimensions.y);
+		this.canvases[gIdx] = {nextCanvasIdx: 0, canvases: [], fullsize: fullsize};
+		for(let i = 0; i < numCanvases; ++i){
+			this.canvases[gIdx].canvases[i] = document.createElement("canvas");
+			this.canvases[gIdx].canvases[i].width = dimensions.x;
+			this.canvases[gIdx].canvases[i].height = dimensions.y;
+			this.canvases[gIdx].canvases[i].getContext("2d").drawImage(img, 0, 0, dimensions.x, dimensions.y);
+			this.canvases[gIdx].canvases[i].style.visibility = "hidden"; // >:< visibility vs display performance
+			document.body.appendChild( this.canvases[gIdx].canvases[i] );
+		}
+	});
+}
+
+CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
+	// clear old canvases
+	this.canvases.forEach( canvasGroup => {
+		if(canvasGroup.nextCanvasIdx != 0){
+			for(let i = canvasGroup.nextCanvasIdx - 1; i >= 0; --i){
+				canvasGroup.canvases[i].style.visibility = "hidden";
+			}
+			canvasGroup.nextCanvasIdx = 0;
+		}
+	});
 	
-	varying vec2 v_texCoord;
-     
-    void main() {
-		gl_Position = vec4(a_position, 0.0, 1.0);
+	// move and make canvases visible
+	instructions.forEach( instruction => {
+		let graphicIdx = instruction.g;
+		let canvasGroup = this.canvases[graphicIdx];
+		let idx = canvasGroup.nextCanvasIdx;
 		
-		// update v_texCoord for fragment shader
-		v_texCoord = a_texCoord;
-    }
-`;
+		canvasGroup.canvases[idx].style.visibility = "visible";
+		canvasGroup.canvases[idx].style.left = instruction.x * xFactor + "px";
+		canvasGroup.canvases[idx].style.top = instruction.y * yFactor + "px";
+		
+		++canvasGroup.nextCanvasIdx;
+	});
+}
 
-const fragmentShader = `
-	// fragment shaders don't have a default precision so we need to pick one
-	precision mediump float;
-	uniform sampler2D u_image;
-	varying vec2 v_texCoord;
-
-	void main() {
-		gl_FragColor = texture2D(u_image, v_texCoord);
-	}
-`;
+CanvasGraphics.prototype.resize = function(xFactor, yFactor){
+	this.canvases.forEach( (canvasGroup, gIdx) => {
+		let dimensions = wasm.graphic_size(gIdx);
+		let fullsize = canvasGroup.fullsize;
+		canvasGroup.canvases.forEach( canvas => {
+			canvas.height = dimensions.y * yFactor;
+			canvas.width = dimensions.x * xFactor;
+			canvas.getContext("2d").drawImage(fullsize, 0, 0, canvas.width, canvas.height);
+		})
+	});
+}
 
 export function WebGLGraphics(images){
 	// members
@@ -131,7 +167,7 @@ WebGLGraphics.prototype.resize = function(xFactor, yFactor){
 	this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 }
 
-WebGLGraphics.prototype.renderTextures = function(instructions, xFactor, yFactor){
+WebGLGraphics.prototype.render = function(instructions, xFactor, yFactor){
 	const gl = this.gl;
 	const positionBuffer = this.positionBuffer;
 	const textures = this.textures;
@@ -161,6 +197,30 @@ WebGLGraphics.prototype.renderTextures = function(instructions, xFactor, yFactor
 		gl.drawArrays(gl.TRIANGLES, 0, pointCount);
 	});
 }
+
+vertexShader = `
+    attribute vec2 a_position;
+	attribute vec2 a_texCoord;
+	
+	varying vec2 v_texCoord;
+     
+    void main() {
+		gl_Position = vec4(a_position, 0.0, 1.0);
+		
+		// update v_texCoord for fragment shader
+		v_texCoord = a_texCoord;
+    }
+`;
+fragmentShader = `
+	// fragment shaders don't have a default precision so we need to pick one
+	precision mediump float;
+	uniform sampler2D u_image;
+	varying vec2 v_texCoord;
+
+	void main() {
+		gl_FragColor = texture2D(u_image, v_texCoord);
+	}
+`;
 
 function initShaderProgram(gl, vsSource, fsSource) {
 	const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);

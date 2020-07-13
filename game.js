@@ -4,15 +4,14 @@ import * as wasm from "./pkg/music_mercenary.js";
 import * as load from "./load.js";
 
 export function Game () {
-	// >:< resizing based on screen size + options
-	this.width = 1100;
-	this.height = 600;
-	this.xFactor = 1;
-	this.yFactor = 1;
+	this.width;
+	this.height;
+	this.xFactor;
+	this.yFactor;
 
 	this.lastTick;
 	this.gameData;
-	this.webGL;
+	this.graphics; // !!! can be either canvases or webGL. Add way to choose between them.
 	this.audioContext = new AudioContext();
 	this.audioSource;
 	this.audioBuffer;
@@ -24,8 +23,8 @@ Game.prototype.load = async function () {
 	
 	// TODO add error handling
 	await loader.init()
-		.then( () => loader.loadGraphics())
-		.then( res => this.webGL = res );
+		.then( () => loader.loadGraphics("canvases"))
+		.then( res => this.graphics = res );
 	
 	// TODO add error handling
 	await fetch("song.mp3")
@@ -37,14 +36,22 @@ Game.prototype.load = async function () {
 	this.gameData = wasm.Game.new();
 	
 	let gameDim = wasm.game_dimensions();
-	this.xFactor = this.width / gameDim.x;
-	this.yFactor = this.height / gameDim.y;
-	this.webGL.resize(this.xFactor, this.yFactor);
+	this.width = gameDim.x;
+	this.height = gameDim.y;
+	this.xFactor = 1;
+	this.yFactor = 1;
 	
 	let songData = loader.getSong(2);
 	songData[0]["values"].forEach( note => {
 		this.gameData.toggle_brick(note[2], note[3], note[4]);
 	});
+}
+
+Game.prototype.resize = function(width, height){
+	let gameDim = wasm.game_dimensions();
+	this.xFactor = this.width / gameDim.x;
+	this.yFactor = this.height / gameDim.y;
+	this.graphics.resize(this.xFactor, this.yFactor);
 }
 
 Game.prototype.start = function (callback) {
@@ -96,7 +103,7 @@ Game.prototype.stopControl = function(cntrl){
 Game.prototype.renderGame = function(){
 	let instructions = this.gameData.rendering_instructions();
 	
-	this.webGL.renderTextures(instructions, this.xFactor, this.yFactor);
+	this.graphics.render(instructions, this.xFactor, this.yFactor);
 }
 
 

@@ -478,6 +478,21 @@ pub fn graphic_size(g: GraphicGroup) -> PositionedGraphic {
 }
 
 #[wasm_bindgen]
+pub fn max_graphics(g: GraphicGroup) -> u32 {
+	match g {
+		GraphicGroup::Background => 1,
+		GraphicGroup::Player => 1,
+		GraphicGroup::Brick => 64,
+		GraphicGroup::SlashRight | GraphicGroup::SlashLeft => 1,
+		GraphicGroup::Dash => 1,
+		GraphicGroup::DashR0 | GraphicGroup::DashL0 => 1,
+		GraphicGroup::DashR1 | GraphicGroup::DashL1 => 1,
+		GraphicGroup::DashR2 | GraphicGroup::DashL2 => 1,
+		GraphicGroup::DashR3 | GraphicGroup::DashL3 => 1
+	}
+}
+
+#[wasm_bindgen]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum Input {

@@ -83,10 +83,14 @@ Loader.prototype.getSong = function(song){
 
 // load all images from files before returning a WebGLGraphics object from those images
 // !!! add error handling (timeout on image loading?)
-Loader.prototype.loadGraphics = async function(){
+Loader.prototype.loadGraphics = async function(type){
 	
 	if(!this.resourceLocations){
 		throw Error("unknown (unloaded) resource locations");
+	}
+	
+	if(type != "canvases" && type != "webGL"){
+		throw Error("unspecified graphics type");
 	}
 	
 	let resourceLocations = this.resourceLocations;
@@ -106,8 +110,13 @@ Loader.prototype.loadGraphics = async function(){
 	let imgLoaded = function(){
 		++numLoaded;
 		if(numLoaded == numGraphics){
-			let webGL = new graphics.WebGLGraphics(images);
-			done(webGL);
+			if(type == "webGL"){
+				done(new graphics.WebGLGraphics(images));
+			}
+			else if(type == "canvases"){
+				done(new graphics.CanvasGraphics(images));
+			}
+			else{ throw Error(); }
 		}
 	}
 	
