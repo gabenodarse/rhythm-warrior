@@ -71,14 +71,15 @@ pub enum BrickType {
 // !!! store brick type, match graphic to brick type
 #[derive(Clone, Copy)]
 pub struct Brick {
+	time: f32,
 	graphic: GraphicGroup,
 	bounds: ObjectBounds,
 }
 
 pub enum TempObjectState {
 	New(f32), // Stores how long into the tick the object was created, since inputs happen asynchronously with ticks
-	Active(f32),
-	Lingering(f32)
+	Active(f32), // Stores how much longer the objct is active. May be negative, meaning it will become inactive on next check
+	Lingering(f32) // Stores how much longer the object is lingering. If negative, object should be deleted
 }
 
 pub struct Slash {
@@ -324,8 +325,9 @@ impl Object for Brick {
 }
 
 impl Brick {
-	pub fn new (x: f32, y: f32) -> Brick {
+	pub fn new (x: f32, y: f32, t: f32) -> Brick {
 		Brick {
+			time: t,
 			graphic: GraphicGroup::Brick, 
 			bounds: ObjectBounds {
 				left_x: x,
@@ -339,6 +341,10 @@ impl Brick {
 	pub fn tick(&mut self, brick_speed: f32, seconds_passed: f32) {
 		self.bounds.top_y -= brick_speed * seconds_passed;
 		self.bounds.bottom_y -= brick_speed * seconds_passed;
+	}
+	
+	pub fn time(&self) -> f32 {
+		return self.time;
 	}
 	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
@@ -390,9 +396,12 @@ impl Slash {
 	
 	pub fn tick(&mut self, seconds_passed: f32) {
 		match &mut self.state {
-			TempObjectState::New(t) => self.state = TempObjectState::Lingering(0.1 - seconds_passed + *t),
-			TempObjectState::Lingering(t) => self.state = TempObjectState::Lingering(*t - seconds_passed),
-			_ => { panic!() }
+			TempObjectState::New(t) => {
+				// compromise between event register time and tick time
+				self.state = TempObjectState::Active( (-seconds_passed + *t) / 2.0 )
+			},
+			TempObjectState::Active(t) => self.state = TempObjectState::Lingering(0.1 + *t - seconds_passed),
+			TempObjectState::Lingering(t) => self.state = TempObjectState::Lingering(*t - seconds_passed)
 		}
 	}
 	
@@ -451,8 +460,11 @@ impl Dash {
 	
 	pub fn tick(&mut self, dash_time: f32, seconds_passed: f32) {
 		match &mut self.state {
-		// a new dash lasts dash time - the time since the dash input
-		TempObjectState::New(t) => self.state = TempObjectState::Active(dash_time - seconds_passed + *t),
+		TempObjectState::New(t) => {
+			// a new dash lasts dash time - (time since dash input / 2)
+				// (dash start time is considered the average between registered time and tick where it appears)
+			self.state = TempObjectState::Active(dash_time + (-seconds_passed + *t) / 2.0)
+		},
 		TempObjectState::Active(t) => {
 			// update bounds and graphic
 			if *t > 0.0 {

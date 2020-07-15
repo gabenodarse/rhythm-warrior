@@ -26,11 +26,11 @@
 // test that objects have correct dimensions
 
 // !!! pausing/unpausing messes up character pos
-// !!! probably better to use shifted ints rather than floats
+// !!! might be better to use shifted ints rather than floats
+// !!! size offset, x offset, y offset for graphics that are sized differently than their objects
 
-// >:< tick then hit detect, don't hit detect on frame after hit
 // >:< dash has to go through to hit note
-// >:< size offset, x offset, y offset for graphics that are sized differently than their objects
+
 
 use std::collections::btree_set::BTreeSet; 
 use std::cmp::Ordering;
@@ -76,8 +76,33 @@ mod game {
 		song_name: String,
 		notes: BTreeSet<UpcomingNote>,
 		bpm: u32,
+		// !!! better location for brick speed? (inside brick struct so it isn't passed for every single brick? limitations?)
 		brick_speed: f32,
-		duration: f32
+		duration: f32,
+		thresholds: TimingThresholds
+	}
+	
+	// within this many ms of when the note is meant to be played
+	struct TimingThresholds { 
+		perfect: f32,
+		good: f32,
+		ok: f32,
+	}
+	
+	impl TimingThresholds {
+		fn from_brick_speed(brick_speed: f32) -> TimingThresholds {
+			let perfect = if 4000.0 / brick_speed > 10.0 { // how many milliseconds it takes to travel 4 pixels
+				4000.0 / brick_speed
+			} else {
+				10.0
+			};
+			
+			TimingThresholds {
+				perfect,
+				good: perfect * 2.0,
+				ok: perfect * 4.0,
+			}
+		}
 	}
 
 	impl PartialEq for UpcomingNote {
@@ -113,8 +138,7 @@ mod game {
 		// !!! create a copy of the reference to player and bricks in a data structure for ordering objects
 			// the objects either point to subsequently positioned objects or not (Option type)
 		time_running: f32, // invariant: should never be negative
-		// !!! better location for brick speed? (inside brick struct so it isn't passed for every single brick? limitations?)
-		brick_speed: f32,
+		score: i32,
 		player: Player,
 		bricks: VecDeque<Brick>,
 		// !!! create a song type to hold song notes and meta data
@@ -123,65 +147,27 @@ mod game {
 	}
 	#[wasm_bindgen]
 	impl Game {
+		// >:< different new method
 		pub fn new () -> Game {
 			Game {
 				time_running: 0.0,
-				brick_speed: 500.0,
 				player: Player::new((GAME_WIDTH / 2) as f32, 0.0),
 				bricks: VecDeque::new(), // bricks on screen, ordered by time they are meant to be played
+				score: 0,
 				song: Song { 
 					song_name: String::from(""),
 					notes: BTreeSet::new(),
 					bpm: 96,
 					brick_speed: 500.0,
-					duration: 120.0
+					duration: 120.0,
+					thresholds: TimingThresholds::from_brick_speed(500.0)
 				},
 				upcoming_note: None
 			}
 		}
-		
-		
+				
 		pub fn tick(&mut self, seconds_passed: f32) {
 			self.time_running += seconds_passed;
-			
-			// check for brick destruction 
-			// !!! consolidate destructive objects (replace TempObjectState with DestructiveObjectState?)
-			// !!! collide functions on these destructive objects, taking an ObjectBounds?
-			// TODO: might be a little faster to do as bricks are updated
-			match self.player.slashing() {
-				Some(slash) => {
-					match slash.state(){
-						TempObjectState::New(_) => {
-							// Remove bricks that are slashed
-							// TODO more efficient way than checking ALL bricks
-							let slash_bounds = slash.bounds();
-							self.bricks.retain(|&brick| -> bool {
-								!objects::intersect(&slash_bounds, &brick.bounds())
-							});
-						},
-						_ => ()
-					}
-				}
-				None => {}
-			}
-			// ticks after checking for destruction. All graphically overlapping dashes/bricks should be / are destroyed, 1 frame 
-				// after the overlap
-			match self.player.dashing() {
-				Some(dash) => {
-					match dash.state(){
-						TempObjectState::Active(_) => {
-							// Remove bricks that are dashed
-							// TODO more efficient way than checking ALL bricks
-							let dash_bounds = dash.bounds();
-							self.bricks.retain(|&brick| -> bool {
-								!objects::intersect(&dash_bounds, &brick.bounds())
-							});
-						},
-						_ => ()
-					}
-				}
-				None => {}
-			}
 			
 			self.player.tick(seconds_passed);
 			
@@ -193,7 +179,7 @@ mod game {
 				if self.bricks[i].bounds().bottom_y < 0.0 {
 					del += 1;
 				} else {
-					self.bricks[i].tick(self.brick_speed, seconds_passed);
+					self.bricks[i].tick(self.song.brick_speed, seconds_passed);
 					if del > 0 {
 						self.bricks.swap(i - del, i);
 					}
@@ -201,6 +187,61 @@ mod game {
 			}
 			if del > 0 {
 				self.bricks.truncate(len - del);
+			}
+			
+			// get the destruction bounds for slashing or dashing
+			let destruction_bounds = [
+				match self.player.slashing() {
+					Some(slash) => {
+						match slash.state() {
+							TempObjectState::Active(_) => Some(slash.bounds()),
+							_ => None
+						}
+					},
+					None => None
+				},
+				match self.player.dashing() {
+					Some(dash) => {
+						match dash.state() {
+							TempObjectState::Active(_) => Some(dash.bounds()),
+							_ => None
+						}
+					},
+					None => None
+				}
+			];
+			
+			// check for brick destruction 
+			// TODO: might be a little faster to do as bricks are updated
+			// TODO more efficient way than checking ALL bricks
+			let t = self.time_running;
+			let score = &mut self.score;
+			let bricks = &mut self.bricks;
+			let thresholds = &self.song.thresholds;
+			for bounds in destruction_bounds.iter() {
+				if let Some(bounds) = bounds {
+					bricks.retain(|&brick| -> bool {
+						let intersect = objects::intersect(&bounds, &brick.bounds());
+						if intersect {
+							let time_difference = if t > brick.time() { t - brick.time() } else { brick.time() - t };
+							*score += 
+								if time_difference < thresholds.perfect {
+									100
+								} 
+								else if time_difference < thresholds.good {
+									90
+								}
+								else if time_difference < thresholds.ok {
+									80
+								}
+								else {
+									70
+								};
+							return false;
+						}
+						return true;
+					});
+				}
 			}
 			
 			// !!! detecting end of song?
@@ -237,6 +278,18 @@ mod game {
 			instructions.into_iter().map(JsValue::from).collect()
 		}
 		
+		pub fn score(&self) -> i32 {
+			return self.score;
+		}
+		
+		pub fn max_score(&self) -> i32 {
+			let mut max = 0;
+			for _ in self.song.notes.iter() {
+				max += 100;
+			}
+			return max;
+		}
+		
 		pub fn ground_pos(&self) -> f32 {
 			return GROUND_POS as f32;
 		}
@@ -247,7 +300,7 @@ mod game {
 		}
 		
 		pub fn brick_speed(&self) -> f32 {
-			return self.brick_speed;
+			return self.song.brick_speed;
 		}
 		
 		pub fn song_time(&self) -> f32 {
@@ -321,13 +374,14 @@ mod game {
 			}
 		}
 		
-		pub fn set_song_metadata(&mut self, song_name: String, bpm: u32, brick_speed: f32, duration: f32){
+		pub fn change_song(&mut self, song_name: String, bpm: u32, brick_speed: f32, duration: f32){
 			self.song = Song {
 				song_name,
 				notes: BTreeSet::new(),
 				bpm,
 				brick_speed,
-				duration
+				duration,
+				thresholds: TimingThresholds::from_brick_speed(brick_speed)
 			}
 		}
 		
@@ -336,7 +390,7 @@ mod game {
 		fn add_upcoming_notes(&mut self) {
 			if let Some(upcoming_note) = &self.upcoming_note {
 				// time that notes should be played plus a buffer time where they travel up the screen
-				let appearance_buffer = self.time_running + GAME_HEIGHT as f32 / self.brick_speed;
+				let appearance_buffer = self.time_running + GAME_HEIGHT as f32 / self.song.brick_speed;
 				if upcoming_note.time < appearance_buffer {
 					
 					let upcoming_notes = self.song.notes.range(*upcoming_note..); // !!! range bounds with a float possible?
@@ -349,8 +403,11 @@ mod game {
 						
 						let time_difference = appearance_buffer - upcoming_note.time;
 						
-						let mut brick = Brick::new(upcoming_note.x as f32, GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32);
-						brick.tick(self.brick_speed, time_difference);
+						let mut brick = Brick::new(
+							upcoming_note.x as f32,
+							GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32,
+							upcoming_note.time );
+						brick.tick(self.song.brick_speed, time_difference);
 						self.bricks.push_back(brick);
 					}
 					
@@ -364,8 +421,8 @@ mod game {
 			self.time_running = time;
 			self.bricks = VecDeque::new();
 			
-			let min_time = time - (GROUND_POS / self.brick_speed);
-			let appearance_buffer = time + GAME_HEIGHT as f32 / self.brick_speed;
+			let min_time = time - (GROUND_POS / self.song.brick_speed);
+			let appearance_buffer = time + GAME_HEIGHT as f32 / self.song.brick_speed;
 			
 			for note in self.song.notes.iter() {
 				if note.time > min_time {
@@ -376,8 +433,11 @@ mod game {
 					
 					let time_difference = appearance_buffer - note.time;
 					
-					let mut brick = Brick::new(note.x as f32, GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32);
-					brick.tick(self.brick_speed, time_difference);
+					let mut brick = Brick::new(
+						note.x as f32,
+						GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32,
+						note.time);
+					brick.tick(self.song.brick_speed, time_difference);
 					self.bricks.push_back(brick);
 				}
 			}
