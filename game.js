@@ -23,7 +23,7 @@ Game.prototype.load = async function () {
 	
 	// TODO add error handling
 	await loader.init()
-		.then( () => loader.loadGraphics("canvases"))
+		.then( () => loader.loadGraphics("webGL")) //canvases or webGL
 		.then( res => this.graphics = res );
 	
 	// TODO add error handling
@@ -128,6 +128,7 @@ Object.setPrototypeOf(Editor.prototype, Game.prototype);
 
 Editor.prototype.renderEditor = function(){
 	// render game components
+	// >:< move to overlay.js Overlay
 	this.renderGame();
 	
 	let dims = wasm.game_dimensions();

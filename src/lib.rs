@@ -554,7 +554,7 @@ pub fn max_graphics(g: GraphicGroup) -> u32 {
 
 #[wasm_bindgen]
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, EnumVariantCount)]
 pub enum Input {
 	Jump,
 	Left,
@@ -568,4 +568,9 @@ pub enum Input {
 #[wasm_bindgen]
 pub fn num_graphic_groups() -> usize {
 	return GraphicGroup::num_variants();
+}
+
+#[wasm_bindgen]
+pub fn num_possible_inputs() -> usize {
+	return Input::num_variants();
 }

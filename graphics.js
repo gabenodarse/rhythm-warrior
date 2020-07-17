@@ -3,6 +3,7 @@ import * as wasm from "./pkg/music_mercenary.js";
 
 // !!!
 // patiently awaiting webGPU. Hopefully better than webGL
+// >:< BG does not need to be refreshed. Separate, static canvas
 
 function SizedTexture(texture, width, height){
 	this.texture = texture;
@@ -14,6 +15,7 @@ let vertexShader;
 let fragmentShader;
 
 export function CanvasGraphics(images){
+	let screen = document.querySelector("#screen-div");
 	this.canvases = [];
 	// create canvases for each image
 	images.forEach( (img,gIdx) => {
@@ -30,7 +32,7 @@ export function CanvasGraphics(images){
 			this.canvases[gIdx].canvases[i].height = dimensions.y;
 			this.canvases[gIdx].canvases[i].getContext("2d").drawImage(fullsize, 0, 0, dimensions.x, dimensions.y);
 			this.canvases[gIdx].canvases[i].style.visibility = "hidden"; // >:< visibility vs display performance
-			document.body.appendChild( this.canvases[gIdx].canvases[i] );
+			screen.appendChild( this.canvases[gIdx].canvases[i] );
 		}
 	});
 }
@@ -182,10 +184,10 @@ WebGLGraphics.prototype.render = function(instructions, xFactor, yFactor){
 		let sizedTexture = textures[graphicIdx];
 		
 		gl.bindTexture(gl.TEXTURE_2D, sizedTexture.texture);
-		let startX = instruction.x * xFactor / 1100 * 2.0 - 1.0;
-		let startY = -(instruction.y * yFactor / 600 * 2.0 - 1.0);
-		let endX = startX + sizedTexture.width * xFactor / 1100 * 2.0;
-		let endY = startY - sizedTexture.height * yFactor / 600 * 2.0;
+		let startX = instruction.x * xFactor / this.canvas.width * 2.0 - 1.0;
+		let startY = -(instruction.y * yFactor / this.canvas.height * 2.0 - 1.0);
+		let endX = startX + sizedTexture.width * xFactor / this.canvas.width * 2.0;
+		let endY = startY - sizedTexture.height * yFactor / this.canvas.height * 2.0;
 		positions[0] = startX; positions[1] = startY;
 		positions[2] = endX;   positions[3] = startY;
 		positions[4] = startX; positions[5] = endY;

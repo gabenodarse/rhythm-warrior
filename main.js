@@ -2,12 +2,15 @@
 import * as wasm from "./pkg/music_mercenary.js";
 import * as load from "./load.js";
 import * as game from "./game.js";
+import * as overlay from "./overlay.js";
 
 const Game = game.Game;
 const Editor = game.Editor;
 
+// >:< eliminate globals by creating functions to set up event handlers ?? EventPropagator
+	// then combine game, event propagator, and overlay into one master object?
 let g_resizeRefresher = true;
-let g_controls = {};
+let g_controls = {}; // maps key codes to game controls
 let g_gamePaused = false;
 let g_startGame = () => {}
 let g_gameStartControl = (cntrl) => {}
@@ -52,6 +55,7 @@ const g_handleGameKeyUp = event => {
 
 export async function run() {
 	let game = new Game();
+	let overlayObj;
 	await game.load();
 	window.addEventListener("keydown", g_handleGameKeyDown);
 	window.addEventListener("keyup", g_handleGameKeyUp);
@@ -67,8 +71,12 @@ export async function run() {
 		g_controls[82] = wasm.Input.Ability4; // r
 	}
 	
+	overlayObj = new overlay.Overlay(g_controls);
+	overlayObj.toggle("score");
+	
 	const loop = () => {
 		if(g_gamePaused) {
+			overlayObj.toggle("menu");
 			game.pause();
 			return;
 		}
@@ -79,6 +87,7 @@ export async function run() {
 	}
 	
 	g_startGame = () => {
+		overlayObj.toggle("menu");
 		game.start(loop);
 	}
 	g_gameStartControl = (cntrl) => {
@@ -125,7 +134,6 @@ function pause() {
 	}
 	
 	g_gamePaused = true;
-	controls(); // !!! create a pause menu and get to controls from there
 }
 
 function unpause() {
@@ -133,7 +141,7 @@ function unpause() {
 	g_startGame();
 }
 
-// !!! add error handling
+/* // !!! add error handling
 function controls() {
 	let inputKeys = [];
 	
@@ -210,4 +218,4 @@ function controls() {
 	}
 	window.addEventListener("keydown", acceptControls);
 	
-}
+} */
