@@ -14,8 +14,7 @@ function SizedTexture(texture, width, height){
 let vertexShader;
 let fragmentShader;
 
-export function CanvasGraphics(images){
-	let screen = document.querySelector("#screen-div");
+export function CanvasGraphics(images, screenDiv){
 	this.canvases = [];
 	// create canvases for each image
 	images.forEach( (img,gIdx) => {
@@ -32,7 +31,7 @@ export function CanvasGraphics(images){
 			this.canvases[gIdx].canvases[i].height = dimensions.y;
 			this.canvases[gIdx].canvases[i].getContext("2d").drawImage(fullsize, 0, 0, dimensions.x, dimensions.y);
 			this.canvases[gIdx].canvases[i].style.visibility = "hidden"; // >:< visibility vs display performance
-			screen.appendChild( this.canvases[gIdx].canvases[i] );
+			screenDiv.appendChild( this.canvases[gIdx].canvases[i] );
 		}
 	});
 }
@@ -74,7 +73,7 @@ CanvasGraphics.prototype.resize = function(xFactor, yFactor){
 	});
 }
 
-export function WebGLGraphics(images){
+export function WebGLGraphics(images, screenDiv){
 	// members
 	this.canvas = document.createElement("canvas");;
 	this.gl = this.canvas.getContext("webgl");;
@@ -88,9 +87,9 @@ export function WebGLGraphics(images){
 	canvas.width = gameDim.x;;
 	canvas.height = gameDim.y;
 	canvas.style.position = "absolute";
-	document.body.appendChild(canvas);
+	screenDiv.appendChild(canvas);
 	
-	if(!gl){
+	if(!gl){ // >:< move error and checking to when a choice between canvases and webGL is made
 		alert("Unable to initialize WebGL. Your browser or machine may not support it.");
 		throw Error("Unable to initialize WebGL. Your browser or machine may not support it.");
 	}

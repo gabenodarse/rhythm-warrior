@@ -4,26 +4,44 @@ import * as wasm from "./pkg/music_mercenary.js";
 import * as load from "./load.js";
 
 export function Game () {
+	//members
 	this.width;
 	this.height;
 	this.xFactor;
 	this.yFactor;
-
+	
+	this.screenDiv;
 	this.lastTick;
 	this.gameData;
 	this.graphics; // !!! can be either canvases or webGL. Add way to choose between them.
+	this.isLoaded = false;
+	
 	this.audioContext = new AudioContext();
 	this.audioSource;
 	this.audioBuffer;
 	this.audioTimeSafetyBuffer = 0.15;
+	
+	//initialize screen div
+	this.screenDiv = document.createElement("div");
+	this.screenDiv.style.position = "absolute";
+	this.screenDiv.style.top = "0";
+	this.screenDiv.style.left = "0";
+	this.screenDiv.style.margin = "0";
+	this.screenDiv.style.width = "100vw";
+	this.screenDiv.style.height = "100vh";
+	document.body.appendChild(this.screenDiv);
 }
 
 Game.prototype.load = async function () {
-	let loader = new load.Loader(); // >:< loader as member? (so different songs can be loaded without creating new loaders)
+	if(this.isLoaded){ return; }
+	
+	// >:< loader as member? (so different songs can be loaded without creating new loaders)
+		// load songs separately from graphics
+	let loader = new load.Loader();
 	
 	// TODO add error handling
 	await loader.init()
-		.then( () => loader.loadGraphics("webGL")) //canvases or webGL
+		.then( () => loader.loadGraphics("webGL", this.screenDiv)) //canvases or webGL
 		.then( res => this.graphics = res );
 	
 	// TODO add error handling
@@ -45,15 +63,21 @@ Game.prototype.load = async function () {
 	songData[0]["values"].forEach( note => {
 		this.gameData.toggle_brick(note[2], note[3], note[4]);
 	});
+	
+	this.isLoaded = true;
 }
 
-Game.prototype.resize = function(width, height){
+Game.prototype.resize = function(){
+	let width = this.screenDiv.clientWidth;
+	let height = this.screenDiv.clientHeight;
 	let gameDim = wasm.game_dimensions();
+	
 	this.width = width;
 	this.height = height;
 	this.xFactor = width / gameDim.x;
 	this.yFactor = height / gameDim.y;
 	this.graphics.resize(this.xFactor, this.yFactor);
+	this.renderGame();
 }
 
 Game.prototype.start = function (callback) {
@@ -76,10 +100,12 @@ Game.prototype.start = function (callback) {
 
 Game.prototype.pause = function(){
 	let now = new Date().getTime();
+	// >:< don't use audio safety buffer for pausing. Store audio resume time in variable?
 	let switchTime = this.audioContext.currentTime + this.audioTimeSafetyBuffer;
 	this.audioSource.stop(switchTime);
 	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
 	this.gameData.tick(timePassed + this.audioTimeSafetyBuffer);
+	this.renderGame();
 }
 
 Game.prototype.tick = function(){
@@ -108,98 +134,52 @@ Game.prototype.renderGame = function(){
 	this.graphics.render(instructions, this.xFactor, this.yFactor);
 }
 
-
+Game.prototype.songData = function(){
+	return {
+		beatInterval: this.gameData.beat_interval(),
+		brickSpeed: this.gameData.brick_speed()
+	}
+}
 
 export function Editor () {
 	Game.call(this);
 	
-	this.scroller = document.querySelector("#scroller input");
-	this.editorOverlay = document.querySelector("#editor-overlay");
-
-	if(!this.scroller){
-		throw Error("no scroller found");
-	}
-	if(!this.editorOverlay){
-		throw Error("no editor overlay found");
-	}
+	this.onScreenClick;
 }
 
 Object.setPrototypeOf(Editor.prototype, Game.prototype);
-
-Editor.prototype.renderEditor = function(){
-	// render game components
-	// >:< move to overlay.js Overlay
-	this.renderGame();
-	
-	let dims = wasm.game_dimensions();
-	let screenWidth = dims.x;
-	let screenHeight = dims.y;
-	let ctx = this.editorOverlay.getContext("2d");
-	ctx.clearRect(0, 0, screenWidth * this.xFactor, screenHeight * this.yFactor);
-	
-	let beatInterval = this.gameData.beat_interval();
-	let brickSpeed = this.gameData.brick_speed();
-	let y = 0;
-	let t = ( ((-this.gameData.song_time()) % beatInterval) + beatInterval ) % beatInterval; // positive modulus
-	let yOffset = this.gameData.ground_pos();
-	
-	while(true){
-		if(t * brickSpeed + yOffset < screenHeight){
-			ctx.fillRect(0, (t * brickSpeed + yOffset) * this.yFactor, screenWidth * this.xFactor, 3);
-			t += beatInterval / 2;
-			ctx.fillRect(0, (t * brickSpeed + yOffset) * this.yFactor, screenWidth * this.xFactor, 1);
-			t += beatInterval / 2;
-			continue;
-		}
-		break;
-	}
-}
 
 Editor.prototype.seek = function(time){
 	this.gameData.seek(time);
 }
 
 Editor.prototype.load = async function(){
-	await Game.prototype.load.call(this);
-	
-	this.scroller.value = this.gameData.song_time();
-	this.scroller.max = this.gameData.song_duration();
-	this.scroller.step = this.gameData.beat_interval() * 2;
-	this.scroller.addEventListener("input", evt => {
-		let t = parseInt(this.scroller.value);
-		this.seek(t);
-		this.renderEditor();
-	});
-	
-	this.editorOverlay.width = this.width;
-	this.editorOverlay.height = this.height;
-	this.editorOverlay.lastClickTime = 0;
-	this.editorOverlay.addEventListener("click", evt => {
-		let now = new Date().getTime();
-		if(now - this.editorOverlay.lastClickTime < 500){
-			let x = evt.clientX - this.editorOverlay.offsetLeft;
-			let y = evt.clientY - this.editorOverlay.offsetTop;
-			let t = this.gameData.song_time();
-			this.createNote(x, y, t);
-			this.gameData.seek(t);
-			this.renderEditor();
-		}
-		
-		this.editorOverlay.lastClickTime = now;
-	});
-	
+	if(!this.isLoaded){
+		await Game.prototype.load.call(this);
+	}
+	this.loadEditorComponent();
 }
 
-Editor.prototype.resize = function(width, height){
-	Game.prototype.resize.call(this, width, height);
-	this.renderEditor();
+Editor.prototype.loadEditorComponent = function(){
+	if(!this.onScreenClick){
+		this.onScreenClick = evt => {
+			let x = evt.clientX - this.screenDiv.offsetLeft;
+			let y = evt.clientY - this.screenDiv.offsetTop;
+			let t = this.gameData.song_time();
+			this.createNote(x, y, t);
+			this.gameData.seek(t); 
+			this.renderGame();
+		}
+		
+		this.screenDiv.addEventListener("click", this.onScreenClick);
+	}
 }
 
 Editor.prototype.createNote = function(x, y, t){
 	// !!! support for third, sixth, twelfth notes
 	let sixteenthNoteTime = this.gameData.beat_interval() / 4;
 	
-	y -= this.gameData.ground_pos() * this.yFactor;
+	y -= wasm.ground_pos() * this.yFactor;
 	t += y / (this.gameData.brick_speed() * this.yFactor);
 	t += sixteenthNoteTime - (t % sixteenthNoteTime + sixteenthNoteTime) % sixteenthNoteTime; //subtract positive modulus
 	let brickWidth = wasm.graphic_size(wasm.GraphicGroup.Brick).x * this.xFactor
@@ -211,5 +191,20 @@ Editor.prototype.createNote = function(x, y, t){
 	this.gameData.toggle_brick(0, t, x);	
 }
 	
+export function createEditorFromGame(game){
+	if(!game instanceof Game){
+		throw Error("game object is not an instance of a Game");
+	}
+	else if(game.isLoaded == false) {
+		throw Error("game object has not been loaded");
+	}
+	if(game instanceof Editor){
+		return game;
+	}
 	
+	Object.setPrototypeOf(game, Editor.prototype);
+	game.loadEditorComponent();
+	
+	return game;
+}
 	

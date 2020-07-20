@@ -290,10 +290,6 @@ mod game {
 			return max;
 		}
 		
-		pub fn ground_pos(&self) -> f32 {
-			return GROUND_POS as f32;
-		}
-		
 		pub fn beat_interval(&self) -> f32 {
 			let secs_per_beat = 60.0 / self.song.bpm as f32;
 			return secs_per_beat;
@@ -565,6 +561,11 @@ pub enum Input {
 	Ability4,
 }
 
+#[wasm_bindgen]
+pub fn ground_pos() -> f32 {
+	return GROUND_POS as f32;
+}
+		
 #[wasm_bindgen]
 pub fn num_graphic_groups() -> usize {
 	return GraphicGroup::num_variants();

@@ -11,31 +11,132 @@ g_keyCodeNames[87] = "w";
 g_keyCodeNames[69] = "e";
 g_keyCodeNames[82] = "r";
 
-export function Overlay(controlsMap){
+export function Overlay(game, eventPropagater, controlsMap){
 	this.overlay;
 	this.score;
 	this.menu;
-	this.beatLines; // >:< 
+	this.editorOverlay;
 	
 	let overlay = document.createElement("div");
 	let score = new Score();
-	let menu = new Menu(controlsMap);
-	let beatLines = document.createElement("canvas");
+	let menu = new Menu(eventPropagater, controlsMap);
+	let editorOverlay = new EditorOverlay(game); // >:< single editor object
 	
-	overlay.style.width = "100%";
+	overlay.style.width = "100vw";
 	overlay.style.height = "100vh";
 	overlay.style.position = "absolute";
 	overlay.style.left = "0";
 	overlay.style.top = "0";
+	overlay.style.pointerEvents = "none";
 	
 	overlay.appendChild(score.domElement());
 	overlay.appendChild(menu.domElement());
+	overlay.appendChild(editorOverlay.domElement());
 	document.body.appendChild(overlay);
 	
 	this.overlay = overlay;
 	this.score = score;
 	this.menu = menu;
-	this.beatLines = beatLines;
+	this.editorOverlay = editorOverlay;
+}
+
+// >:< for when a game object isn't tied to 1 specific song
+// Overlay.prototype.createNewEditor = function(bpm, pixelsPerSecond){
+	// this.editorGuidingLines.updateState(bpm, pixelsPerSecond);
+// }
+
+Overlay.prototype.updateEditor = function(time){
+	this.editorOverlay.updateTime(time);
+}
+
+function EditorOverlay(game){
+	this.div;
+	this.guidingLines;
+	this.scroller;
+	
+	this.div = document.createElement("div");
+	this.div.style.width = "100vw";
+	this.div.style.height = "100vh";
+	this.div.style.display = "none";
+	
+	this.guidingLines = new EditorGuidingLines(game);
+	
+	this.div.appendChild(this.guidingLines.domElement());
+}
+
+EditorOverlay.prototype.toggle = function(){
+	if(this.div.style.display != "none"){
+		this.div.style.display = "none";
+	}
+	else{
+		this.div.style.display = "block";
+	}
+}
+
+EditorOverlay.prototype.updateTime = function(time){
+	this.guidingLines.updateTime(time);
+}
+
+EditorOverlay.prototype.domElement = function(){
+	return this.div;
+}
+
+function EditorGuidingLines(game){
+	this.canvas;
+	this.beatInterval; // how long between beats in seconds
+	this.beatPixelInterval; // how many pixels between beats
+	this.groundPosOffset = wasm.ground_pos();
+	
+	this.canvas = document.createElement("canvas");
+	this.canvas.width;
+	this.canvas.height;
+	this.canvas.style.width = "100%";
+	this.canvas.style.height = "100%";
+	
+	let dims = wasm.game_dimensions();
+	this.canvas.width = dims.x;
+	this.canvas.height = dims.y;
+	
+	let songData = game.songData();
+	this.beatInterval = songData.beatInterval;
+	this.beatPixelInterval = this.beatInterval * songData.brickSpeed;
+}
+
+EditorGuidingLines.prototype.domElement = function(){
+	return this.canvas;
+}
+
+// TODO faster if the canvas stays the same and is just repositioned on time changes. 
+	// However, if the game height is not the full screen height, lines would show outside the game's boundaries
+EditorGuidingLines.prototype.updateTime = function(time){
+	if(time < 0){
+		console.log("can't update to a negative time");
+		return;
+	}
+	
+	let ctx = this.canvas.getContext("2d");
+	ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+	
+	let quarterBeatInterval = this.beatInterval / 4;
+	let quarterBeatPixelInterval = this.beatPixelInterval / 4;
+	let timeIntoBeat = time % this.beatInterval;
+	let timeIntoQuarterBeat = time % quarterBeatInterval;
+	// round to next quarter beat interval
+	let posOffset = this.groundPosOffset;
+	posOffset -= timeIntoQuarterBeat / quarterBeatInterval * quarterBeatPixelInterval;
+	let quarterBeatCounter = Math.floor(timeIntoBeat / quarterBeatInterval);
+	for(let y = posOffset; y < this.canvas.height; y += quarterBeatPixelInterval){
+		if(quarterBeatCounter % 4 == 0){ // beat line
+			ctx.fillRect(0, y, this.canvas.width, 3);
+		}
+		else if(quarterBeatCounter % 4 == 2){ // half beat line
+			ctx.fillRect(0, y, this.canvas.width, 1);
+		}
+		else{ // quarter beat line
+			
+		}
+		++quarterBeatCounter;
+	}
 }
 
 function Score(){
@@ -63,7 +164,7 @@ function Score(){
 	document.body.appendChild(this.scoreDiv);
 }
 
-function Menu(controlsMap){
+function Menu(eventPropagater, controlsMap){
 	this.menuDiv;
 	this.currentDisplayed;
 	this.mainMenu; // each sub div contains an array of selections, each selection contains a select function
@@ -88,6 +189,9 @@ function Menu(controlsMap){
 		this.controlsMenu.activate();
 		this.currentDisplayed = this.controlsMenu;
 	}, "Controls");
+	this.mainMenu.addSelection(() => {
+		eventPropagater.enableEditor();
+	}, "Enable Editor");
 	
 	this.menuDiv.appendChild(this.mainMenu.domElement());
 	this.menuDiv.appendChild(this.controlsMenu.domElement());
@@ -224,8 +328,8 @@ MenuPanel.prototype.domElement = function(){
 	return this.div;
 }
 
-Overlay.prototype.toggle = function(elementName){
-	if(this[elementName] != "undefined"){
+Overlay.prototype.toggleElement = function(elementName){
+	if(this[elementName] != undefined){
 		this[elementName].toggle();
 	}
 	else{
@@ -246,7 +350,7 @@ Score.prototype.domElement = function(){
 }
 
 Score.prototype.toggle = function(){
-	if(this.scoreDiv.style.display == "block"){
+	if(this.scoreDiv.style.display != "none"){
 		this.scoreDiv.style.display = "none";
 	}
 	else{
@@ -266,10 +370,12 @@ Menu.prototype.domElement = function(){
 }
 
 Menu.prototype.toggle = function(){
-	if(this.menuDiv.style.display == "block"){
+	if(this.menuDiv.style.display != "none"){
 		this.menuDiv.style.display = "none";
-		this.currentDisplayed.deactivate();
-		this.currentDisplayed = null;
+		if(this.currentDisplayed){
+			this.currentDisplayed.deactivate();
+			this.currentDisplayed = null;
+		}
 	}
 	else{
 		this.menuDiv.style.display = "block";
