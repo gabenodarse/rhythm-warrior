@@ -11,6 +11,8 @@ g_keyCodeNames[87] = "w";
 g_keyCodeNames[69] = "e";
 g_keyCodeNames[82] = "r";
 
+// !!! backspace for menu navigation?
+// !!! does overlay ever have to be resized?
 export function Overlay(game, eventPropagater, controlsMap){
 	this.overlay;
 	this.score;
@@ -133,7 +135,11 @@ EditorGuidingLines.prototype.updateTime = function(time){
 			ctx.fillRect(0, y, this.canvas.width, 1);
 		}
 		else{ // quarter beat line
-			
+			ctx.beginPath();
+			ctx.setLineDash([6, 16]);
+			ctx.moveTo(0, y);
+			ctx.lineTo(this.canvas.width, y);
+			ctx.stroke();
 		}
 		++quarterBeatCounter;
 	}
@@ -192,6 +198,9 @@ function Menu(eventPropagater, controlsMap){
 	this.mainMenu.addSelection(() => {
 		eventPropagater.enableEditor();
 	}, "Enable Editor");
+	this.mainMenu.addSelection(() => {
+		eventPropagater.disableEditor();
+	}, "Disable Editor");
 	
 	this.menuDiv.appendChild(this.mainMenu.domElement());
 	this.menuDiv.appendChild(this.controlsMenu.domElement());
@@ -228,6 +237,8 @@ function MenuPanel(){
 	};
 }
 
+// !!! note that arrow keys disable other keys
+// !!! check if options correctly display the controls set when reactivating
 function ControlsMenu(controlsMap){
 	MenuPanel.call(this);
 	this.selectionsNames = [];
@@ -339,10 +350,6 @@ Overlay.prototype.toggleElement = function(elementName){
 
 Overlay.prototype.updateScore = function(newScore){
 	this.score.update(newScore);
-}
-
-Overlay.prototype.updateBeatLines = function(firstBeatY, beatDY){
-	
 }
 
 Score.prototype.domElement = function(){

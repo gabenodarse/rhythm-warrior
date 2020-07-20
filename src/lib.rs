@@ -416,6 +416,7 @@ mod game {
 		pub fn seek(&mut self, time: f32) {
 			self.time_running = time;
 			self.bricks = VecDeque::new();
+			self.score = 0;
 			
 			let min_time = time - (GROUND_POS / self.song.brick_speed);
 			let appearance_buffer = time + GAME_HEIGHT as f32 / self.song.brick_speed;

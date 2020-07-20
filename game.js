@@ -3,6 +3,7 @@
 import * as wasm from "./pkg/music_mercenary.js";
 import * as load from "./load.js";
 
+//TODO searching through game to its prototype to find the tick function every tick is technically suboptimal?
 export function Game () {
 	//members
 	this.width;
@@ -99,13 +100,7 @@ Game.prototype.start = function (callback) {
 }
 
 Game.prototype.pause = function(){
-	let now = new Date().getTime();
-	// >:< don't use audio safety buffer for pausing. Store audio resume time in variable?
-	let switchTime = this.audioContext.currentTime + this.audioTimeSafetyBuffer;
-	this.audioSource.stop(switchTime);
-	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
-	this.gameData.tick(timePassed + this.audioTimeSafetyBuffer);
-	this.renderGame();
+	this.audioSource.stop();
 }
 
 Game.prototype.tick = function(){
@@ -137,8 +132,23 @@ Game.prototype.renderGame = function(){
 Game.prototype.songData = function(){
 	return {
 		beatInterval: this.gameData.beat_interval(),
-		brickSpeed: this.gameData.brick_speed()
+		brickSpeed: this.gameData.brick_speed(),
+		songTime: this.gameData.song_time()
 	}
+}
+
+Game.prototype.toEditor = function(){
+	if(this.isLoaded == false) {
+		throw Error("game object has not been loaded");
+	}
+	if(this instanceof Editor){
+		return this;
+	}
+	
+	Object.setPrototypeOf(this, Editor.prototype);
+	this.loadEditorComponent();
+	
+	return this;
 }
 
 export function Editor () {
@@ -171,7 +181,7 @@ Editor.prototype.loadEditorComponent = function(){
 			this.renderGame();
 		}
 		
-		this.screenDiv.addEventListener("click", this.onScreenClick);
+		this.screenDiv.addEventListener("click", this.onScreenClick); // TODO smarter way to add/remove this listener?
 	}
 }
 
@@ -190,21 +200,17 @@ Editor.prototype.createNote = function(x, y, t){
 	
 	this.gameData.toggle_brick(0, t, x);	
 }
-	
-export function createEditorFromGame(game){
-	if(!game instanceof Game){
-		throw Error("game object is not an instance of a Game");
-	}
-	else if(game.isLoaded == false) {
+
+Editor.prototype.toGame = function(){
+	if(this.isLoaded == false) {
 		throw Error("game object has not been loaded");
 	}
-	if(game instanceof Editor){
-		return game;
-	}
 	
-	Object.setPrototypeOf(game, Editor.prototype);
-	game.loadEditorComponent();
+	this.screenDiv.removeEventListener("click", this.onScreenClick);
+	this.onScreenClick = undefined;
+	this.gameData.seek(0); // !!! rethink the relationship between editor and game. Seems flimsy.
+	Object.setPrototypeOf(this, Game.prototype);
 	
-	return game;
+	return this;
 }
 	
