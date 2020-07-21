@@ -19,7 +19,6 @@ import {Overlay} from "./overlay.js";
 		// this.renderGame();
 	// });
 // >:< menu bugging out (wrong one highlighted, not toggling highlight on menu disable?)
-// !!! toggles in propagator and overlay to display/hide
 // !!! save each song as a separate json to eliminate possibility of accidental overwrite
 	// or create duplicate songs with same names in db (then create a db viewer)
 // >:< way to display one canvas element in multiple places? If not, # of canvases needs to be specified for each graphic

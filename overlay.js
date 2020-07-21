@@ -13,48 +13,46 @@ g_keyCodeNames[82] = "r";
 
 // !!! backspace for menu navigation?
 // !!! does overlay ever have to be resized?
-export function Overlay(game, eventPropagater, controlsMap){
-	this.overlay;
+// !!! change toggle functions to display/hide functions
+// TODO overlay editor modifies game object directly... should happen through event propagator? 
+	// root problem: How is it ensured that editor overlay is never active while the editor is inactive and the game is running?
+export function Overlay(game, eventPropagator, controlsMap){
+	this.overlayDiv;
 	this.score;
 	this.menu;
 	this.editorOverlay;
 	
-	let overlay = document.createElement("div");
+	let overlayDiv = document.createElement("div");
 	let score = new Score();
-	let menu = new Menu(eventPropagater, controlsMap);
-	let editorOverlay = new EditorOverlay(game); // >:< single editor object
+	let menu = new Menu(eventPropagator, controlsMap);
+	let editorOverlay = new EditorOverlay(game, eventPropagator);
 	
-	overlay.style.width = "100vw";
-	overlay.style.height = "100vh";
-	overlay.style.position = "absolute";
-	overlay.style.left = "0";
-	overlay.style.top = "0";
-	overlay.style.pointerEvents = "none";
+	overlayDiv.style.width = "100vw";
+	overlayDiv.style.height = "100vh";
+	overlayDiv.style.position = "absolute";
+	overlayDiv.style.left = "0";
+	overlayDiv.style.top = "0";
 	
-	overlay.appendChild(score.domElement());
-	overlay.appendChild(menu.domElement());
-	overlay.appendChild(editorOverlay.domElement());
-	document.body.appendChild(overlay);
+	overlayDiv.appendChild(score.domElement());
+	overlayDiv.appendChild(menu.domElement());
+	overlayDiv.appendChild(editorOverlay.domElement());
+	document.body.appendChild(overlayDiv);
 	
-	this.overlay = overlay;
+	this.overlayDiv = overlayDiv;
 	this.score = score;
 	this.menu = menu;
 	this.editorOverlay = editorOverlay;
 }
 
 // >:< for when a game object isn't tied to 1 specific song
-// Overlay.prototype.createNewEditor = function(bpm, pixelsPerSecond){
-	// this.editorGuidingLines.updateState(bpm, pixelsPerSecond);
+// Overlay.prototype.createNewEditor = function(game){
 // }
 
-Overlay.prototype.updateEditor = function(time){
-	this.editorOverlay.updateTime(time);
-}
-
-function EditorOverlay(game){
+function EditorOverlay(game, eventPropagator){
 	this.div;
 	this.guidingLines;
 	this.scroller;
+	this.controls;
 	
 	this.div = document.createElement("div");
 	this.div.style.width = "100vw";
@@ -62,32 +60,18 @@ function EditorOverlay(game){
 	this.div.style.display = "none";
 	
 	this.guidingLines = new EditorGuidingLines(game);
+	this.controls = new EditorControls(game, eventPropagator);
 	
 	this.div.appendChild(this.guidingLines.domElement());
-}
-
-EditorOverlay.prototype.toggle = function(){
-	if(this.div.style.display != "none"){
-		this.div.style.display = "none";
-	}
-	else{
-		this.div.style.display = "block";
-	}
-}
-
-EditorOverlay.prototype.updateTime = function(time){
-	this.guidingLines.updateTime(time);
-}
-
-EditorOverlay.prototype.domElement = function(){
-	return this.div;
+	this.div.appendChild(this.controls.domElement());
 }
 
 function EditorGuidingLines(game){
 	this.canvas;
-	this.beatInterval; // how long between beats in seconds
+	this.beatInterval; // how long between beats in seconds // !!! get from game every time or store as state?
 	this.beatPixelInterval; // how many pixels between beats
 	this.groundPosOffset = wasm.ground_pos();
+	this.onclick;
 	
 	this.canvas = document.createElement("canvas");
 	this.canvas.width;
@@ -102,47 +86,85 @@ function EditorGuidingLines(game){
 	let songData = game.songData();
 	this.beatInterval = songData.beatInterval;
 	this.beatPixelInterval = this.beatInterval * songData.brickSpeed;
-}
-
-EditorGuidingLines.prototype.domElement = function(){
-	return this.canvas;
-}
-
-// TODO faster if the canvas stays the same and is just repositioned on time changes. 
-	// However, if the game height is not the full screen height, lines would show outside the game's boundaries
-EditorGuidingLines.prototype.updateTime = function(time){
-	if(time < 0){
-		console.log("can't update to a negative time");
-		return;
+	
+	this.onclick = evt => {
+		let x = evt.clientX - this.canvas.offsetLeft;
+		let y = evt.clientY - this.canvas.offsetTop;
+		let t = game.songData().songTime;
+		game.createNote(x, y, t);
 	}
 	
-	let ctx = this.canvas.getContext("2d");
-	ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+	this.canvas.addEventListener("click", this.onclick);
 	
-	let quarterBeatInterval = this.beatInterval / 4;
-	let quarterBeatPixelInterval = this.beatPixelInterval / 4;
-	let timeIntoBeat = time % this.beatInterval;
-	let timeIntoQuarterBeat = time % quarterBeatInterval;
-	// round to next quarter beat interval
-	let posOffset = this.groundPosOffset;
-	posOffset -= timeIntoQuarterBeat / quarterBeatInterval * quarterBeatPixelInterval;
-	let quarterBeatCounter = Math.floor(timeIntoBeat / quarterBeatInterval);
-	for(let y = posOffset; y < this.canvas.height; y += quarterBeatPixelInterval){
-		if(quarterBeatCounter % 4 == 0){ // beat line
-			ctx.fillRect(0, y, this.canvas.width, 3);
-		}
-		else if(quarterBeatCounter % 4 == 2){ // half beat line
-			ctx.fillRect(0, y, this.canvas.width, 1);
-		}
-		else{ // quarter beat line
-			ctx.beginPath();
-			ctx.setLineDash([6, 16]);
-			ctx.moveTo(0, y);
-			ctx.lineTo(this.canvas.width, y);
-			ctx.stroke();
-		}
-		++quarterBeatCounter;
-	}
+}
+
+function EditorControls(game, eventPropagator){
+	this.div;
+	this.rangesDiv;
+	this.buttonDiv;
+	this.broadRange;
+	this.preciseRange;
+	this.playPauseButton;
+	this.songDuration;
+	this.beatInterval;
+	
+	let songData = game.songData();
+	this.songDuration = songData.songDuration;
+	this.beatInterval = songData.beatInterval;
+	
+	this.div = document.createElement("div");
+	this.div.style.position = "absolute";
+	this.div.style.bottom = "0";
+	this.div.style.width = "100%";
+	this.div.style.zIndex = "200";
+	this.div.style.backgroundColor = "rgba(100, 100, 100, 0.4)";
+	
+	this.rangesDiv = document.createElement("div");
+	this.rangesDiv.style.width = "90%";
+	this.rangesDiv.style.marginLeft = "5%";
+	
+	this.buttonDiv = document.createElement("div");
+	this.buttonDiv.style.position = "absolute";
+	this.buttonDiv.style.width = "5%";
+	this.buttonDiv.style.left = "0";
+	this.buttonDiv.style.top = "0";
+	this.buttonDiv.style.height = "100%";
+	
+	this.broadRange = document.createElement("input");
+	this.broadRange.style.width = "100%";
+	this.broadRange.style.display = "block";
+	this.broadRange.type = "range";
+	this.broadRange.max = 100;
+	this.broadRange.step = 0.1;
+	this.broadRange.value = 0;
+	
+	this.preciseRange = document.createElement("input");
+	this.preciseRange.style.width = "25%";
+	this.preciseRange.style.display = "block";
+	this.preciseRange.type = "range";
+	this.preciseRange.max = 4;
+	this.preciseRange.step = 0.05;
+	this.preciseRange.value = 0;
+	
+	this.playPauseButton = document.createElement("button");
+	this.playPauseButton.innerHTML = "|> / ||";
+	
+	this.rangesDiv.addEventListener("input", evt => {
+        let t = parseFloat(this.broadRange.value) / 100 * this.songDuration 
+			+ parseFloat(this.preciseRange.value) * this.beatInterval;
+		game.seek(t);
+		game.renderGame();
+    });
+	
+	this.playPauseButton.addEventListener("click", evt => {
+		eventPropagator.togglePlay();
+	});
+	
+	this.rangesDiv.appendChild(this.preciseRange);
+	this.rangesDiv.appendChild(this.broadRange);
+	this.buttonDiv.appendChild(this.playPauseButton);
+	this.div.appendChild(this.rangesDiv);
+	this.div.appendChild(this.buttonDiv);
 }
 
 function Score(){
@@ -170,7 +192,7 @@ function Score(){
 	document.body.appendChild(this.scoreDiv);
 }
 
-function Menu(eventPropagater, controlsMap){
+function Menu(eventPropagator, controlsMap){
 	this.menuDiv;
 	this.currentDisplayed;
 	this.mainMenu; // each sub div contains an array of selections, each selection contains a select function
@@ -196,16 +218,18 @@ function Menu(eventPropagater, controlsMap){
 		this.currentDisplayed = this.controlsMenu;
 	}, "Controls");
 	this.mainMenu.addSelection(() => {
-		eventPropagater.enableEditor();
+		eventPropagator.enableEditor();
 	}, "Enable Editor");
 	this.mainMenu.addSelection(() => {
-		eventPropagater.disableEditor();
+		eventPropagator.disableEditor();
 	}, "Disable Editor");
 	
 	this.menuDiv.appendChild(this.mainMenu.domElement());
 	this.menuDiv.appendChild(this.controlsMenu.domElement());
 }
 
+// !!! add support for hiding buttons (making navigation ignore inactive buttons)
+	// !!! once done, make disable editor and enable editor buttons mutually exclusive / non buggy
 function MenuPanel(){
 	this.div;
 	this.eventListener;
@@ -317,8 +341,102 @@ function MenuSelection(onSelect, selectionText, parentPanelDiv){
 	parentPanelDiv.appendChild(this.div);
 }
 
+
+Overlay.prototype.updateEditor = function(time){
+	this.editorOverlay.updateTime(time);
+}
+
+Overlay.prototype.toggleElement = function(elementName){
+	if(this[elementName] != undefined){
+		this[elementName].toggle();
+	}
+	else{
+		console.log("the overlay does not have member \"" + elementName + "\"");
+	}
+}
+
+Overlay.prototype.updateScore = function(newScore){
+	this.score.update(newScore);
+}
+
+EditorOverlay.prototype.toggle = function(){
+	if(this.div.style.display != "none"){
+		this.div.style.display = "none";
+	}
+	else{
+		this.div.style.display = "block";
+	}
+}
+
+EditorOverlay.prototype.updateTime = function(time){
+	this.guidingLines.updateTime(time);
+	this.controls.updateTime(time);
+}
+
+EditorOverlay.prototype.domElement = function(){
+	return this.div;
+}
+
+EditorGuidingLines.prototype.domElement = function(){
+	return this.canvas;
+}
+
+// TODO faster if the canvas stays the same and is just repositioned on time changes. 
+	// However, if the game height is not the full screen height, lines would show outside the game's boundaries
+EditorGuidingLines.prototype.updateTime = function(time){
+	if(time < 0){
+		console.log("can't update to a negative time");
+		return;
+	}
+	
+	let ctx = this.canvas.getContext("2d");
+	ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+	
+	let quarterBeatInterval = this.beatInterval / 4;
+	let quarterBeatPixelInterval = this.beatPixelInterval / 4;
+	let timeIntoBeat = time % this.beatInterval;
+	let timeIntoQuarterBeat = time % quarterBeatInterval;
+	// round to next quarter beat interval
+	let posOffset = this.groundPosOffset;
+	posOffset -= timeIntoQuarterBeat / quarterBeatInterval * quarterBeatPixelInterval;
+	let quarterBeatCounter = Math.floor(timeIntoBeat / quarterBeatInterval);
+	for(let y = posOffset; y < this.canvas.height; y += quarterBeatPixelInterval){
+		if(quarterBeatCounter % 4 == 0){ // beat line
+			ctx.fillRect(0, y, this.canvas.width, 3);
+		}
+		else if(quarterBeatCounter % 4 == 2){ // half beat line
+			ctx.fillRect(0, y, this.canvas.width, 1);
+		}
+		else{ // quarter beat line
+			ctx.beginPath();
+			ctx.setLineDash([6, 16]);
+			ctx.moveTo(0, y);
+			ctx.lineTo(this.canvas.width, y);
+			ctx.stroke();
+		}
+		++quarterBeatCounter;
+	}
+}
+
+EditorControls.prototype.domElement = function(){
+	return this.div;
+}
+
+EditorControls.prototype.updateTime = function(time){
+	let prevT = parseFloat(this.broadRange.value) / 100 * this.songDuration 
+		+ parseFloat(this.preciseRange.value) * this.beatInterval;
+	if(time - prevT > 0.5 || prevT - time > 0.5){
+		this.broadRange.value = time / this.songDuration * 100;
+		this.preciseRange.value = 0;
+	}
+}
+
 MenuPanel.prototype.activate = function(){
-	this.selectionIdx = 0;
+	if(this.selectionIdx != 0){
+		this.selections[this.selectionIdx].toggleHighlight();
+		this.selections[0].toggleHighlight();
+		this.selectionIdx = 0;
+	}
 	document.addEventListener("keydown", this.eventListener);
 	this.div.style.display = "block";
 }
@@ -337,19 +455,6 @@ MenuPanel.prototype.addSelection = function(onSelect, selectionText){
 
 MenuPanel.prototype.domElement = function(){
 	return this.div;
-}
-
-Overlay.prototype.toggleElement = function(elementName){
-	if(this[elementName] != undefined){
-		this[elementName].toggle();
-	}
-	else{
-		console.log("the overlay does not have member \"" + elementName + "\"");
-	}
-}
-
-Overlay.prototype.updateScore = function(newScore){
-	this.score.update(newScore);
 }
 
 Score.prototype.domElement = function(){

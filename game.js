@@ -133,7 +133,8 @@ Game.prototype.songData = function(){
 	return {
 		beatInterval: this.gameData.beat_interval(),
 		brickSpeed: this.gameData.brick_speed(),
-		songTime: this.gameData.song_time()
+		songTime: this.gameData.song_time(),
+		songDuration: this.gameData.song_duration()
 	}
 }
 
@@ -145,6 +146,7 @@ Game.prototype.toEditor = function(){
 		return this;
 	}
 	
+	// !!! make broken notes reappear
 	Object.setPrototypeOf(this, Editor.prototype);
 	this.loadEditorComponent();
 	
@@ -170,6 +172,7 @@ Editor.prototype.load = async function(){
 	this.loadEditorComponent();
 }
 
+// >:< shall this be removed, store event listener in the overlay?
 Editor.prototype.loadEditorComponent = function(){
 	if(!this.onScreenClick){
 		this.onScreenClick = evt => {
@@ -190,15 +193,17 @@ Editor.prototype.createNote = function(x, y, t){
 	let sixteenthNoteTime = this.gameData.beat_interval() / 4;
 	
 	y -= wasm.ground_pos() * this.yFactor;
-	t += y / (this.gameData.brick_speed() * this.yFactor);
-	t += sixteenthNoteTime - (t % sixteenthNoteTime + sixteenthNoteTime) % sixteenthNoteTime; //subtract positive modulus
+	let brickT = t + y / (this.gameData.brick_speed() * this.yFactor);
+	brickT += sixteenthNoteTime - (brickT % sixteenthNoteTime + sixteenthNoteTime) % sixteenthNoteTime; //subtract positive modulus
 	let brickWidth = wasm.graphic_size(wasm.GraphicGroup.Brick).x * this.xFactor
 	
 	// >:< Because there are 32 notes, each x non overlapping. Magic number should be removed.
 		// probably want to narrow it down to 24 notes. Store note positions as 0-23? (modify midi conversion)
 	x = Math.floor(x / brickWidth) - 16;
 	
-	this.gameData.toggle_brick(0, t, x);	
+	this.gameData.toggle_brick(0, brickT, x);
+	this.seek(t); 
+	this.renderGame();	
 }
 
 Editor.prototype.toGame = function(){

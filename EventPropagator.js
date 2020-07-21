@@ -1,4 +1,6 @@
 
+import {Game, Editor} from "./Game.js";
+
 export function EventPropagator(){
 	this.game;
 	this.overlay;
@@ -25,8 +27,6 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	
 	this.gameLoop = () => {
 		if(this.paused) {
-			this.overlay.toggleElement("menu");
-			this.game.pause();
 			return;
 		}
 		
@@ -37,8 +37,6 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	
 	this.editorLoop = () => {
 		if(this.paused) {
-			this.overlay.toggleElement("menu");
-			this.game.pause();
 			return;
 		}
 		
@@ -48,36 +46,20 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 		requestAnimationFrame(this.loop);
 	}
 	
-	this.resumeGame = () => {
-		this.overlay.toggleElement("menu");
-		this.game.start(this.loop);
-	}
-	
-	this.togglePause = () => {
-		// unpause
-		if(this.paused){
-			this.paused = false;
-			this.resumeGame();
-			return;
-		}
-		
-		else{
-			// !!! handle game key states on pause/unpause (as of now fires key up events on pause)
-			// pause
-			for(const key in this.controls) {
-				let evt = new KeyboardEvent("keyup", {
-					keyCode: key,
-				});
-				this.handleKeyUp(evt);
-			}
-			this.paused = true;
-		}
-	}
-	
 	this.handleKeyDown = evt => {
 		// TODO faster handling of repeated key inputs from holding down a key?
 		if (evt.keyCode === 27){
-			this.togglePause();
+			this.overlay.toggleElement("menu");
+			
+			// >:< better way to resume game
+			if(!(this.game instanceof Editor)){
+				if(this.paused){
+					this.start();
+				}
+				else{
+					this.pause();
+				}
+			}
 		}
 		else if(typeof(this.controls[event.keyCode]) === "number" && !this.paused){
 			this.game.startControl(this.controls[event.keyCode]);
@@ -111,10 +93,30 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	window.addEventListener("resize", this.resize); 
 }
 
+EventPropagator.prototype.togglePlay = function(){
+	if(this.paused){
+		this.start();
+	}
+	else{
+		this.pause();
+	}
+}
+
 EventPropagator.prototype.start = function(){
 	this.paused = false;
 	this.resize();
-	this.game.start(this.gameLoop);
+	this.game.start(this.loop);
+}
+
+EventPropagator.prototype.pause = function(){
+	// !!! handle game key states on pause/unpause (as of now fires key up events on pause)
+	for(const key in this.controls) {
+		let evt = new KeyboardEvent("keyup", {
+			keyCode: key,
+		});
+		this.handleKeyUp(evt);
+	}
+	this.paused = true;
 }
 
 EventPropagator.prototype.enableEditor = function(){
