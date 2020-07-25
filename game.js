@@ -117,6 +117,7 @@ Game.prototype.tick = function(){
 	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
 	this.gameData.tick(timePassed); 
 	this.lastTick = now;
+	this.renderGame();
 }
 
 Game.prototype.startControl = function(cntrl){
@@ -135,12 +136,17 @@ Game.prototype.renderGame = function(){
 	this.graphics.render(instructions, this.xFactor, this.yFactor);
 }
 
+Game.prototype.score = function(){
+	return this.gameData.score();
+}
+
 Game.prototype.songData = function(){
 	return {
 		beatInterval: this.gameData.beat_interval(),
 		brickSpeed: this.gameData.brick_speed(),
 		songTime: this.gameData.song_time(),
-		songDuration: this.gameData.song_duration()
+		songDuration: this.gameData.song_duration(),
+		score: this.gameData.score()
 	}
 }
 
@@ -151,14 +157,33 @@ Game.prototype.songs = function(){
 }
 
 Game.prototype.loadSong = function(songID){
-	// >:< check if current song has been saved
+	// !!! check if current song has been saved (modified flag?) 
+		// No need to show a check for regular game usage where songs aren't edited
 	// !!! creating a new game to load a new song? Or create a load_song method? wasm garbage collected?
-	this.gameData = wasm.Game.new();
 	this.songID = songID;
-	let songData = this.database.loadSong(songID);
-	songData[0]["values"].forEach( note => {
-		this.gameData.toggle_brick(note[2], note[3], note[4]); // TODO flimsy way of indexing into note to retrieve correct values
+	let {notes, song} = this.database.loadSong(songID);
+	
+	let bpm, brickSpeed, duration;
+	song[0]["columns"].forEach( (columnName, idx) => {
+		if(columnName.toUpperCase() === "BPM"){
+			bpm = song[0]["values"][0][idx];
+		}
+		else if(columnName.toUpperCase() === "BRICKSPEED"){
+			brickSpeed = song[0]["values"][0][idx];
+		}
+		else if(columnName.toUpperCase() === "DURATION"){
+			duration = song[0]["values"][0][idx];
+		}
 	});
+	
+	this.gameData = wasm.Game.new(bpm, brickSpeed, duration);
+	
+	// TODO flimsy way of indexing into notes to retrieve correct values
+	notes[0]["values"].forEach( note => {
+		this.gameData.toggle_brick(note[2], note[3], note[4]); 
+	});
+	
+	this.renderGame();
 }
 
 Game.prototype.saveSong = function(songData, overwrite){
@@ -196,11 +221,13 @@ Object.setPrototypeOf(Editor.prototype, Game.prototype);
 
 Editor.prototype.seek = function(time){
 	this.gameData.seek(time);
+	this.renderGame();
 }
 
-Editor.prototype.createNote = function(x, y, t){
+Editor.prototype.createNote = function(x, y){
 	// !!! support for third, sixth, twelfth notes
 	let sixteenthNoteTime = this.gameData.beat_interval() / 4;
+	let t = this.gameData.song_time();
 	
 	y -= wasm.ground_pos() * this.yFactor;
 	let brickT = t + y / (this.gameData.brick_speed() * this.yFactor);
@@ -210,8 +237,10 @@ Editor.prototype.createNote = function(x, y, t){
 	x = Math.floor(x / brickWidth); // !!! do calculation in game.rs to ensure consistency
 	
 	this.gameData.toggle_brick(0, brickT, x);
+	
+	// to have the game add the note. 
+	// TODO, more robust way would be to add the note to on screen notes in toggle_brick, then just rerender with renderGame()
 	this.seek(t); 
-	this.renderGame();
 }
 
 Editor.prototype.toGame = function(){

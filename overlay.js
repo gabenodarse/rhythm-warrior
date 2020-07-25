@@ -11,8 +11,6 @@ g_keyCodeNames[87] = "w";
 g_keyCodeNames[69] = "e";
 g_keyCodeNames[82] = "r";
 
-// >:< 
-	// safely send game modifications through eventPropagator so that they don't happen if the game is running
 // !!! backspace for menu navigation?
 // !!! does overlay ever have to be resized?
 // !!! change toggle functions to display/hide functions
@@ -20,7 +18,7 @@ g_keyCodeNames[82] = "r";
 	// Having the editor overlay included in Editor class would allow game and overlay elements to synchronize more easily
 // TODO overlay editor modifies game object directly... should happen through event propagator? 
 	// root problem: How is it ensured that editor overlay is never active while the editor is inactive and the game is running?
-export function Overlay(game, eventPropagator, controlsMap){
+export function Overlay(songData, eventPropagator, controlsMap){
 	this.overlayDiv;
 	this.score;
 	this.menu;
@@ -29,7 +27,7 @@ export function Overlay(game, eventPropagator, controlsMap){
 	let overlayDiv = document.createElement("div");
 	let score = new Score();
 	let menu = new Menu(eventPropagator, controlsMap);
-	let editorOverlay = new EditorOverlay(game, eventPropagator);
+	let editorOverlay = new EditorOverlay(songData, eventPropagator);
 	
 	overlayDiv.style.width = "100vw";
 	overlayDiv.style.height = "100vh";
@@ -48,13 +46,7 @@ export function Overlay(game, eventPropagator, controlsMap){
 	this.editorOverlay = editorOverlay;
 }
 
-// >:< for when a game object isn't tied to 1 specific song
-// >:< scroller doesn't update overlay guiding lines
-	// how to send events from member objects up to parent?
-// Overlay.prototype.createNewEditor = function(game){
-// }
-
-function EditorOverlay(game, eventPropagator){
+function EditorOverlay(songData, eventPropagator){
 	this.div;
 	this.guidingLines;
 	this.scroller;
@@ -65,15 +57,15 @@ function EditorOverlay(game, eventPropagator){
 	this.div.style.height = "100vh";
 	this.div.style.display = "none";
 	
-	this.guidingLines = new EditorGuidingLines(game);
-	this.controls = new EditorControls(game, eventPropagator);
+	this.guidingLines = new EditorGuidingLines(songData, eventPropagator);
+	this.controls = new EditorControls(songData, eventPropagator);
 	
 	this.div.appendChild(this.guidingLines.domElement());
 	this.div.appendChild(this.controls.domElement());
 }
 
 // !!! allow triplet notes
-function EditorGuidingLines(game){
+function EditorGuidingLines(songData, eventPropagator){
 	this.canvas;
 	this.beatInterval; // how long between beats in seconds // !!! get from game every time or store as state?
 	this.beatPixelInterval; // how many pixels between beats
@@ -90,15 +82,16 @@ function EditorGuidingLines(game){
 	this.canvas.width = dims.x;
 	this.canvas.height = dims.y;
 	
-	let songData = game.songData();
 	this.beatInterval = songData.beatInterval;
 	this.beatPixelInterval = this.beatInterval * songData.brickSpeed;
 	
 	this.onclick = evt => {
 		let x = evt.clientX - this.canvas.offsetLeft;
 		let y = evt.clientY - this.canvas.offsetTop;
-		let t = game.songData().songTime;
-		game.createNote(x, y, t);
+		let fn = game => {
+			game.createNote(x, y);
+		}
+		eventPropagator.runOnGame(fn);
 	}
 	
 	this.canvas.addEventListener("click", this.onclick);
@@ -106,7 +99,7 @@ function EditorGuidingLines(game){
 }
 
 // !!! can move even when song is playing
-function EditorControls(game, eventPropagator){
+function EditorControls(songData, eventPropagator){
 	this.div;
 	this.rangesDiv;
 	this.buttonDiv;
@@ -116,7 +109,6 @@ function EditorControls(game, eventPropagator){
 	this.songDuration;
 	this.beatInterval;
 	
-	let songData = game.songData();
 	this.songDuration = songData.songDuration;
 	this.beatInterval = songData.beatInterval;
 	
@@ -160,8 +152,12 @@ function EditorControls(game, eventPropagator){
 	this.rangesDiv.addEventListener("input", evt => {
         let t = parseFloat(this.broadRange.value) / 100 * this.songDuration 
 			+ parseFloat(this.preciseRange.value) * this.beatInterval;
-		game.seek(t);
-		game.renderGame();
+			
+		let fn = game => {
+			game.seek(t);
+		}
+		
+		eventPropagator.runOnGame(fn, true);
     });
 	
 	this.playPauseButton.addEventListener("click", evt => {
@@ -230,7 +226,8 @@ function Menu(eventPropagator, controlsMap){
 	}, "Controls");
 	
 	this.mainMenu.addSelection(() => {
-		eventPropagator.restartSong();
+		let fn = game => { game.restart() }
+		eventPropagator.runOnGame(fn, true);
 	}, "Restart song");
 	
 	this.mainMenu.addSelection(() => {
@@ -393,8 +390,9 @@ function MenuSelection(onSelect, selectionText, parentPanelDiv){
 }
 
 
-Overlay.prototype.updateEditor = function(time){
-	this.editorOverlay.updateTime(time);
+Overlay.prototype.updateSongData = function(songData){
+	this.editorOverlay.updateSongData(songData);
+	this.updateScore(songData.score);
 }
 
 Overlay.prototype.toggleElement = function(elementName){
@@ -419,9 +417,9 @@ EditorOverlay.prototype.toggle = function(){
 	}
 }
 
-EditorOverlay.prototype.updateTime = function(time){
-	this.guidingLines.updateTime(time);
-	this.controls.updateTime(time);
+EditorOverlay.prototype.updateSongData = function(songData){
+	this.guidingLines.updateSongData(songData);
+	this.controls.updateSongData(songData);
 }
 
 EditorOverlay.prototype.domElement = function(){
@@ -434,7 +432,11 @@ EditorGuidingLines.prototype.domElement = function(){
 
 // TODO faster if the canvas stays the same and is just repositioned on time changes. 
 	// However, if the game height is not the full screen height, lines would show outside the game's boundaries
-EditorGuidingLines.prototype.updateTime = function(time){
+EditorGuidingLines.prototype.updateSongData = function(songData){
+	let time = songData.songTime;
+	let beatInterval = songData.beatInterval;
+	let beatPixelInterval = beatInterval * songData.brickSpeed;
+	
 	if(time < 0){
 		console.log("can't update to a negative time");
 		return;
@@ -443,9 +445,9 @@ EditorGuidingLines.prototype.updateTime = function(time){
 	let ctx = this.canvas.getContext("2d");
 	ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 	
-	let quarterBeatInterval = this.beatInterval / 4;
-	let quarterBeatPixelInterval = this.beatPixelInterval / 4;
-	let timeIntoBeat = time % this.beatInterval;
+	let quarterBeatInterval = beatInterval / 4;
+	let quarterBeatPixelInterval = beatPixelInterval / 4;
+	let timeIntoBeat = time % beatInterval;
 	let timeIntoQuarterBeat = time % quarterBeatInterval;
 	// round to next quarter beat interval
 	let posOffset = this.groundPosOffset;
@@ -473,7 +475,8 @@ EditorControls.prototype.domElement = function(){
 	return this.div;
 }
 
-EditorControls.prototype.updateTime = function(time){
+EditorControls.prototype.updateSongData = function(songData){
+	let time = songData.songTime;
 	let prevT = parseFloat(this.broadRange.value) / 100 * this.songDuration 
 		+ parseFloat(this.preciseRange.value) * this.beatInterval;
 	if(time - prevT > 0.5 || prevT - time > 0.5){
@@ -600,14 +603,18 @@ function changeControlDialog(callback){
 	enterKeyDiv.appendChild(enterKeyText);
 	document.body.appendChild(enterKeyDiv);
 	
+	// TODO preventDefault() and {capture: true} do not prevent event from being sent to other event handlers. 
+		// Way to make this temporarily the only even handler for key presses?
 	document.addEventListener("keydown", evt => {
-		evt.preventDefault(); // !!! doesn't even capture
-		callback(evt.keyCode);
+		if(evt.keyCode != 27){
+			callback(evt.keyCode);
+		}
 		enterKeyDiv.remove();
-	},{once: true, capture: true});
+	},{once: true});
 }
 
 // TODO less ugly, this and loadSongDialog
+// >:< Dialog class / universal createDialog function?
 function saveSongDialog(eventPropagator){
 	let div = document.createElement("div");
 	let submitButton = document.createElement("button");
@@ -619,7 +626,7 @@ function saveSongDialog(eventPropagator){
 	let difficultyField = document.createElement("input");
 	let bpmLabel = document.createElement("label");
 	let bpmField = document.createElement("input");
-	let brickSpeedLabel = document.createElement("label"); // >:< modify brick speed in editor
+	let brickSpeedLabel = document.createElement("label"); // !!! modify brick speed in editor
 	let brickSpeedField = document.createElement("input");
 	let durationLabel = document.createElement("label");
 	let durationField = document.createElement("input");
@@ -635,7 +642,7 @@ function saveSongDialog(eventPropagator){
 	artistLabel.innerHTML = "Artist";
 	difficultyLabel.innerHTML = "Difficulty";
 	bpmLabel.innerHTML = "BPM";
-	brickSpeedLabel.innerHTML = "Brick Speed"; // >:< modify brick speed in editor
+	brickSpeedLabel.innerHTML = "Brick Speed";
 	durationLabel.innerHTML = "Song Duration";
 	
 	nameField.type = "text";
@@ -662,7 +669,11 @@ function saveSongDialog(eventPropagator){
 	div.appendChild(submitButton);
 	
 	document.body.appendChild(div);
-	submitButton.addEventListener("click", () => {
+	
+	let onsubmit = () => {
+		document.removeEventListener("keydown", onkeydown);
+		submitButton.removeEventListener("click", onsubmit);
+		
 		let songData = {
 			name: nameField.value,
 			artist: artistField.value,
@@ -671,13 +682,25 @@ function saveSongDialog(eventPropagator){
 			brickSpeed: brickSpeedField.value,
 			duration: durationField.value
 		}
+		
 		let fn = game => {
 			game.saveSong(songData);
 		}
+		eventPropagator.runOnGame(fn);
 		
-		eventPropagator.runOnGame(fn); // !!! handle response?
 		div.remove();
-	}, {once: true});
+	};
+	let onkeydown = evt => {
+		if(evt.keyCode == 27){
+			document.removeEventListener("keydown", onkeydown);
+			submitButton.removeEventListener("click", onsubmit);
+			
+			div.remove();
+		}
+	}
+	
+	submitButton.addEventListener("click", onsubmit);
+	document.addEventListener("keydown", onkeydown);
 }
 
 function loadSongDialog(eventPropagator){
@@ -699,7 +722,7 @@ function loadSongDialog(eventPropagator){
 		return game.songs();
 	}
 	
-	let songs = eventPropagator.runOnGame(retrieveSongs); // !!! handle bad response?
+	let songs = eventPropagator.runOnGame(retrieveSongs);
 	let idIDX;
 	let nameIDX;
 	let artistIDX;
@@ -745,13 +768,27 @@ function loadSongDialog(eventPropagator){
 	div.appendChild(submitButton);
 	document.body.appendChild(div);
 	
-	submitButton.addEventListener("click", () => {
+	let onsubmit = () => {
+		document.removeEventListener("keydown", onkeydown);
+		submitButton.removeEventListener("click", onsubmit);
+		
 		let fn = game => {
 			game.loadSong(parseInt(songSelector.value));
 		}
+		eventPropagator.runOnGame(fn, true);
 		
-		eventPropagator.runOnGame(fn); // !!! handle response?
 		div.remove();
-	}, {once: true});
+	};
+	let onkeydown = evt => {
+		if(evt.keyCode == 27){
+			document.removeEventListener("keydown", onkeydown);
+			submitButton.removeEventListener("click", onsubmit);
+			
+			div.remove();
+		}
+	}
+	
+	submitButton.addEventListener("click", onsubmit);
+	document.addEventListener("keydown", onkeydown);
 }
 

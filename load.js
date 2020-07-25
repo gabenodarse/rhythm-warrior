@@ -14,9 +14,11 @@ MMDatabase.prototype.loadSong = function(songID){
 	}
 	
 	let sql = "SELECT * FROM NOTES WHERE SongID=" + songID +";";
-	let contents = this.database.exec(sql);
+	let notes = this.database.exec(sql);
+	sql = "SELECT * FROM SONGS WHERE SongID=" + songID +";";
+	let song = this.database.exec(sql);
 	
-	return contents;
+	return {song: song, notes: notes};
 }
 
 // >:< error handling on save and overwrite. Don't want to lose data

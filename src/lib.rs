@@ -82,7 +82,6 @@ mod game {
 	}
 	
 	struct Song {
-		song_name: String,
 		notes: BTreeSet<UpcomingNote>,
 		bpm: u32,
 		// !!! better location for brick speed? (inside brick struct so it isn't passed for every single brick? limitations?)
@@ -100,10 +99,10 @@ mod game {
 	
 	impl TimingThresholds {
 		fn from_brick_speed(brick_speed: f32) -> TimingThresholds {
-			let perfect = if 4000.0 / brick_speed > 10.0 { // how many milliseconds it takes to travel 4 pixels
-				4000.0 / brick_speed
+			let perfect = if 4.0 / brick_speed > 0.01 { // how many seconds it takes to travel 4 pixels
+				4.0 / brick_speed
 			} else {
-				10.0
+				0.01
 			};
 			
 			TimingThresholds {
@@ -156,23 +155,21 @@ mod game {
 	}
 	#[wasm_bindgen]
 	impl Game {
-		// >:< different new method
-		pub fn new () -> Game {
-			Game {
+		pub fn new(bpm: u32, brick_speed: f32, duration: f32) -> Game {
+			return Game {
 				time_running: 0.0,
 				player: Player::new((GAME_WIDTH / 2) as f32, 0.0),
 				bricks: VecDeque::new(), // bricks on screen, ordered by time they are meant to be played
 				score: 0,
 				song: Song { 
-					song_name: String::from(""),
 					notes: BTreeSet::new(),
-					bpm: 96,
-					brick_speed: 500.0,
-					duration: 120.0,
-					thresholds: TimingThresholds::from_brick_speed(500.0)
+					bpm,
+					brick_speed,
+					duration,
+					thresholds: TimingThresholds::from_brick_speed(brick_speed)
 				},
 				upcoming_note: None
-			}
+			};
 		}
 				
 		pub fn tick(&mut self, seconds_passed: f32) {
@@ -393,17 +390,6 @@ mod game {
 			match self.song.notes.iter().next() {
 				Some(note) => self.upcoming_note = Some(*note),
 				None => self.upcoming_note = None
-			}
-		}
-		
-		pub fn change_song(&mut self, song_name: String, bpm: u32, brick_speed: f32, duration: f32){
-			self.song = Song {
-				song_name,
-				notes: BTreeSet::new(),
-				bpm,
-				brick_speed,
-				duration,
-				thresholds: TimingThresholds::from_brick_speed(brick_speed)
 			}
 		}
 		

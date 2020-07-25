@@ -1,6 +1,9 @@
 
 import {Game, Editor} from "./Game.js";
 
+// !!! resizing resizes both overlay and screen div, prompt "your screen has been resized. OK to adjust"
+	// resizing retains aspect ratio, attempts to size sidebar to accommodate
+	
 export function EventPropagator(){
 	this.game;
 	this.overlay;
@@ -15,8 +18,6 @@ export function EventPropagator(){
 	this.handleKeyDown;
 	this.handleKeyUp;
 	this.resize;
-	
-	
 }
 
 // !!! moving functions to prototype means more difficult removal of listeners? or should some/all of this go to prototype?
@@ -31,7 +32,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 		}
 		
 		this.game.tick();
-		this.game.renderGame();
+		this.overlay.updateScore(this.game.score());
 		requestAnimationFrame(this.loop); // !!! set timeout or request animation frame better?
 	}
 	
@@ -41,8 +42,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 		}
 		
 		this.game.tick();
-		this.overlay.updateEditor(this.game.songData().songTime);
-		this.game.renderGame();
+		this.overlay.updateSongData(this.game.songData());
 		requestAnimationFrame(this.loop);
 	}
 	
@@ -124,25 +124,29 @@ EventPropagator.prototype.enableEditor = function(){
 	this.overlay.toggleElement("score");
 	this.game = this.game.toEditor();
 	this.loop = this.editorLoop;
-	this.overlay.updateEditor(this.game.songData().songTime);
+	this.overlay.updateSongData(this.game.songData());
 }
 // !!! make screwing with game through UI impossible. Through hacking IDC. 
 	// Distinction from game and editor (going to game from editor starts at 0?)
+// >:< pausing game with esc, enabling editor, playing then pausing, then disabling editor resumes the game
 EventPropagator.prototype.disableEditor = function(){
 	this.overlay.toggleElement("editorOverlay");
 	this.overlay.toggleElement("score");
 	this.game = this.game.toGame();
 	this.loop = this.gameLoop;
-	this.game.renderGame();
 }
 
 EventPropagator.prototype.restartSong = function(){
 	this.game.restart();
 }
 
-// !!! check if game is running and if so don't run the function?
-EventPropagator.prototype.runOnGame = function(functionToRun){
-	// !!! doesn't automatically render game. Solution is to make responsibility for rerendering game completely within Game class?
-	return functionToRun(this.game); 
+EventPropagator.prototype.runOnGame = function(functionToRun, updateEditor){
+	if(this.paused == false){
+		this.pause();
+	}
+	
+	let ret = functionToRun(this.game);
+	if(updateEditor === true) this.overlay.updateSongData(this.game.songData());
+	return ret;
 }
 
