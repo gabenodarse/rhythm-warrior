@@ -20,6 +20,8 @@ dbFileSelector.setAttribute('type', 'file');
 dbFileSelector.addEventListener('change', handleDBUpload, false);
 	
 if (window.File && window.FileReader && window.FileList && window.Blob) {
+	// !!! fix up. Use load.js API for querying
+	throw Error("THIS DOES NOT WORK RIGHT NOW");
 	// !!! upload song and db through buttons
 	document.addEventListener("keydown", event => {
 		if (event.keyCode == 49) { // 1

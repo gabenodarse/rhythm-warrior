@@ -15,6 +15,8 @@ export function Game () {
 	this.lastTick;
 	this.gameData;
 	this.graphics; // !!! can be either canvases or webGL. Add way to choose between them.
+	this.database;
+	this.songID;
 	this.isLoaded = false;
 	
 	this.audioContext = new AudioContext();
@@ -36,15 +38,17 @@ export function Game () {
 Game.prototype.load = async function () {
 	if(this.isLoaded){ return; }
 	
-	// >:< loader as member? (so different songs can be loaded without creating new loaders)
-		// load songs separately from graphics
 	let loader = new load.Loader();
 	
 	// TODO add error handling
 	await loader.init()
 		.then( () => loader.loadGraphics("webGL", this.screenDiv)) //canvases or webGL
 		.then( res => this.graphics = res );
+		
+	// !!! can happen same time as graphics are loading
+	this.database = await loader.loadDatabase();
 	
+	// !!! don't load song (mp3 and notes from database) on initialization
 	// TODO add error handling
 	await fetch("song.mp3")
 		.then(res => res.arrayBuffer())
@@ -60,10 +64,7 @@ Game.prototype.load = async function () {
 	this.xFactor = 1;
 	this.yFactor = 1;
 	
-	let songData = loader.getSong(2);
-	songData[0]["values"].forEach( note => {
-		this.gameData.toggle_brick(note[2], note[3], note[4]);
-	});
+	this.loadSong(2);
 	
 	this.isLoaded = true;
 }
@@ -103,6 +104,11 @@ Game.prototype.pause = function(){
 	this.audioSource.stop();
 }
 
+Game.prototype.restart = function(){
+	this.gameData.seek(0);
+	this.renderGame();
+}
+
 Game.prototype.tick = function(){
 	let now = new Date().getTime();
 	// !!! render asynchronously to keep game ticking???
@@ -138,6 +144,34 @@ Game.prototype.songData = function(){
 	}
 }
 
+Game.prototype.songs = function(){
+	let songs = this.database.searchSong();
+	
+	return songs;
+}
+
+Game.prototype.loadSong = function(songID){
+	// >:< check if current song has been saved
+	// !!! creating a new game to load a new song? Or create a load_song method? wasm garbage collected?
+	this.gameData = wasm.Game.new();
+	this.songID = songID;
+	let songData = this.database.loadSong(songID);
+	songData[0]["values"].forEach( note => {
+		this.gameData.toggle_brick(note[2], note[3], note[4]); // TODO flimsy way of indexing into note to retrieve correct values
+	});
+}
+
+Game.prototype.saveSong = function(songData, overwrite){
+	let notes = JSON.parse(this.gameData.song_notes_json());
+	if(overwrite === true){
+		songData.songID = this.songID;
+		this.database.overwriteSong(songData, notes);
+	}
+	else{
+		this.database.saveSong(songData, notes);
+	}
+}
+
 Game.prototype.toEditor = function(){
 	if(this.isLoaded == false) {
 		throw Error("game object has not been loaded");
@@ -148,7 +182,6 @@ Game.prototype.toEditor = function(){
 	
 	// !!! make broken notes reappear
 	Object.setPrototypeOf(this, Editor.prototype);
-	this.loadEditorComponent();
 	
 	return this;
 }
@@ -165,29 +198,6 @@ Editor.prototype.seek = function(time){
 	this.gameData.seek(time);
 }
 
-Editor.prototype.load = async function(){
-	if(!this.isLoaded){
-		await Game.prototype.load.call(this);
-	}
-	this.loadEditorComponent();
-}
-
-// >:< shall this be removed, store event listener in the overlay?
-Editor.prototype.loadEditorComponent = function(){
-	if(!this.onScreenClick){
-		this.onScreenClick = evt => {
-			let x = evt.clientX - this.screenDiv.offsetLeft;
-			let y = evt.clientY - this.screenDiv.offsetTop;
-			let t = this.gameData.song_time();
-			this.createNote(x, y, t);
-			this.gameData.seek(t); 
-			this.renderGame();
-		}
-		
-		this.screenDiv.addEventListener("click", this.onScreenClick); // TODO smarter way to add/remove this listener?
-	}
-}
-
 Editor.prototype.createNote = function(x, y, t){
 	// !!! support for third, sixth, twelfth notes
 	let sixteenthNoteTime = this.gameData.beat_interval() / 4;
@@ -197,13 +207,11 @@ Editor.prototype.createNote = function(x, y, t){
 	brickT += sixteenthNoteTime - (brickT % sixteenthNoteTime + sixteenthNoteTime) % sixteenthNoteTime; //subtract positive modulus
 	let brickWidth = wasm.graphic_size(wasm.GraphicGroup.Brick).x * this.xFactor
 	
-	// >:< Because there are 32 notes, each x non overlapping. Magic number should be removed.
-		// probably want to narrow it down to 24 notes. Store note positions as 0-23? (modify midi conversion)
-	x = Math.floor(x / brickWidth) - 16;
+	x = Math.floor(x / brickWidth); // !!! do calculation in game.rs to ensure consistency
 	
 	this.gameData.toggle_brick(0, brickT, x);
 	this.seek(t); 
-	this.renderGame();	
+	this.renderGame();
 }
 
 Editor.prototype.toGame = function(){
@@ -213,7 +221,8 @@ Editor.prototype.toGame = function(){
 	
 	this.screenDiv.removeEventListener("click", this.onScreenClick);
 	this.onScreenClick = undefined;
-	this.gameData.seek(0); // !!! rethink the relationship between editor and game. Seems flimsy.
+	// !!! rethink the relationship between editor and game. Seems flimsy to switch to game while retaining all game data.
+		// Clear hack right now, switch to editor and back to rewind song
 	Object.setPrototypeOf(this, Game.prototype);
 	
 	return this;

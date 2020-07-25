@@ -2,15 +2,10 @@
 // TODO
 // handle losing focus on window / possible browser events that disrupt the game
 
-// do wasm functions always happen synchronously ??? (if I have an event handler for key presses, will it only trigger after the
-	// wasm function ends??
 // object collision??
 	// object collision detecting more precise than using a minimum bounding rectangle
 // check-sum on loaded songs 
-// consider storing songs in a different format than JSON
 // Precise ticking even for longer delta times
-// More precise key-press timings than checking state every tick
-// Get time of event occurence rather than time receiving the event???
 // create the data structure to hold objects in order of layer
 
 // music_mercenary.js uses workaround because instantiateStreaming doesn't function correctly (MIME type not working??)
@@ -19,15 +14,17 @@
 // Make sure things work in all browsers, especially ESModules
 // expand on read-MIDI functionality, and add options to control generated output such as only use certain program numbers (instruments)
 	// or channels to generate notes, criteria for excluding notes if there are too many, etc.
-// Send commands on tick rather than asynchronously
-// find a better alternative to sqljs
+// stick with sqlite/sqljs?
 
 // TESTS
 // test that objects have correct dimensions
 
 // !!! pausing/unpausing messes up character pos
-// !!! might be better to use shifted ints rather than floats
 // !!! size offset, x offset, y offset for graphics that are sized differently than their objects
+// !!! cleanup cargo.toml, include features that are best for game.
+// !!! fix and extend midi-reader / song converter
+// !!! are as casts what I want / are they idiomatic Rust? Also, types seem to be arbitrary...
+	// (define floats and integer forms of constants so casting isn't needed?)
 
 // >:< dash has to go through to hit note
 
@@ -49,26 +46,38 @@ const GROUND_POS: f32 = TOP_BOUNDARY + 240.0; // !!! associate with the graphic 
 
 mod objects;
 
-// TODO remove
-#[wasm_bindgen]
-extern {
-    fn alert(s: &str);
-}
-
 mod game {
 	use crate::*;
-	use crate::objects::Object; // needed to use member's methods that are implemented as a part of trait Object
 	use std::collections::VecDeque;
+	use objects::Object; // needed to use member's methods that are implemented as a part of trait Object
 	use objects::Brick;
 	use objects::BrickType;
 	use objects::Player;
 	use objects::TempObjectState;
 	use objects::Direction;
 	
+	fn note_pos_to_x(pos: u8) -> f32 {
+		let pos = match pos >= objects::MAX_NOTES_PER_SCREEN_WIDTH {
+			true => objects::MAX_NOTES_PER_SCREEN_WIDTH - 1,
+			false => pos
+		};
+		
+		return (objects::BRICK_WIDTH * pos as u32) as f32;
+	}
+	fn note_pos_from_x(x: f32) -> u8 {
+		let pos = x as u8 / objects::BRICK_WIDTH as u8;
+		let pos = match pos >= objects::MAX_NOTES_PER_SCREEN_WIDTH {
+			true => objects::MAX_NOTES_PER_SCREEN_WIDTH - 1,
+			false => pos
+		};
+		
+		return pos;
+	}
+	
 	#[derive(Clone, Copy)]
 	pub struct UpcomingNote {
 		note_type: BrickType,
-		x: u32,
+		x: f32,
 		time: f32, // time the note is meant to be played
 	}
 	
@@ -307,6 +316,23 @@ mod game {
 			return self.song.duration;
 		}
 		
+		// >:< THIS NEEDS TO BE RELIABLE, OR ELSE USER CREATED SONG DATA MAY BE LOST
+		pub fn song_notes_json(&self) -> String {
+			let mut res = String::new();
+			
+			res.push_str("[");
+			for note in self.song.notes.iter() {
+				res.push_str(&format!("{{\"brickType\": {}, \"time\": {}, \"xPos\": {}}},", 
+					note.note_type as u8, 
+					note.time, 
+					note_pos_from_x(note.x) ));
+			}
+			res.pop(); // pop trailing comma
+			res.push_str("]");
+			
+			return res;
+		}
+		
 		pub fn input_command (&mut self, input: Input, t_since_tick: f32) {
 			match input {
 				Input::Jump => {
@@ -349,7 +375,7 @@ mod game {
 		}
 		
 		// TODO create a method load_song
-		pub fn toggle_brick (&mut self, bt: BrickType, time: f32, pos: u32) {
+		pub fn toggle_brick (&mut self, bt: BrickType, time: f32, pos: u8) {
 			if time > self.song.duration {
 				return;
 			}
@@ -357,7 +383,7 @@ mod game {
 			
 			let brick = UpcomingNote{
 				note_type: bt,
-				x: pos * objects::BRICK_WIDTH + (GAME_WIDTH / 2),
+				x: note_pos_to_x(pos),
 				time
 			};
 			if !self.song.notes.insert( brick ) {
@@ -400,7 +426,8 @@ mod game {
 						let time_difference = appearance_buffer - upcoming_note.time;
 						
 						let mut brick = Brick::new(
-							upcoming_note.x as f32,
+							upcoming_note.note_type,
+							upcoming_note.x,
 							GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32,
 							upcoming_note.time );
 						brick.tick(self.song.brick_speed, time_difference);
@@ -431,7 +458,8 @@ mod game {
 					let time_difference = appearance_buffer - note.time;
 					
 					let mut brick = Brick::new(
-						note.x as f32,
+						note.note_type,
+						note.x,
 						GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32,
 						note.time);
 					brick.tick(self.song.brick_speed, time_difference);

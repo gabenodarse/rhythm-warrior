@@ -5,23 +5,8 @@ import {EventPropagator} from "./EventPropagator.js";
 import {Overlay} from "./overlay.js";
 
 // >:< update score
-// >:< arrange overlay.js, EventPropagator
 // !!! resizing resizes both overlay and screen div, prompt "your screen has been resized. OK to adjust"
 	// resizing retains aspect ratio, attempts to size sidebar to accommodate
-// click through div or dispatch events from overlay to screen/body?
-// >:< 
-	// this.scroller.value = this.gameData.song_time();
-	// this.scroller.max = this.gameData.song_duration();
-	// this.scroller.step = this.gameData.beat_interval() * 2;
-	// this.scroller.addEventListener("input", evt => {
-		// let t = parseInt(this.scroller.value);
-		// this.seek(t);
-		// this.renderGame();
-	// });
-// >:< menu bugging out (wrong one highlighted, not toggling highlight on menu disable?)
-// !!! save each song as a separate json to eliminate possibility of accidental overwrite
-	// or create duplicate songs with same names in db (then create a db viewer)
-// >:< way to display one canvas element in multiple places? If not, # of canvases needs to be specified for each graphic
 
 export async function run(){
 	let game = new Game();

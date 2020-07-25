@@ -11,9 +11,13 @@ g_keyCodeNames[87] = "w";
 g_keyCodeNames[69] = "e";
 g_keyCodeNames[82] = "r";
 
+// >:< 
+	// safely send game modifications through eventPropagator so that they don't happen if the game is running
 // !!! backspace for menu navigation?
 // !!! does overlay ever have to be resized?
 // !!! change toggle functions to display/hide functions
+// !!! grouping all of overlay here may have been a mistake... 
+	// Having the editor overlay included in Editor class would allow game and overlay elements to synchronize more easily
 // TODO overlay editor modifies game object directly... should happen through event propagator? 
 	// root problem: How is it ensured that editor overlay is never active while the editor is inactive and the game is running?
 export function Overlay(game, eventPropagator, controlsMap){
@@ -45,6 +49,8 @@ export function Overlay(game, eventPropagator, controlsMap){
 }
 
 // >:< for when a game object isn't tied to 1 specific song
+// >:< scroller doesn't update overlay guiding lines
+	// how to send events from member objects up to parent?
 // Overlay.prototype.createNewEditor = function(game){
 // }
 
@@ -66,6 +72,7 @@ function EditorOverlay(game, eventPropagator){
 	this.div.appendChild(this.controls.domElement());
 }
 
+// !!! allow triplet notes
 function EditorGuidingLines(game){
 	this.canvas;
 	this.beatInterval; // how long between beats in seconds // !!! get from game every time or store as state?
@@ -98,6 +105,7 @@ function EditorGuidingLines(game){
 	
 }
 
+// !!! can move even when song is playing
 function EditorControls(game, eventPropagator){
 	this.div;
 	this.rangesDiv;
@@ -197,6 +205,7 @@ function Menu(eventPropagator, controlsMap){
 	this.currentDisplayed;
 	this.mainMenu; // each sub div contains an array of selections, each selection contains a select function
 	this.controlsMenu;
+	this.saveLoadMenu;
 	
 	this.menuDiv = document.createElement("div");
 	this.menuDiv.style.display = "none";
@@ -211,21 +220,58 @@ function Menu(eventPropagator, controlsMap){
 	
 	this.mainMenu = new MenuPanel();
 	this.controlsMenu = new ControlsMenu(controlsMap);
+	this.saveLoadMenu = new MenuPanel();
 	
+	// main menu items
 	this.mainMenu.addSelection(() => { 
 		this.mainMenu.deactivate();
 		this.controlsMenu.activate();
 		this.currentDisplayed = this.controlsMenu;
 	}, "Controls");
+	
+	this.mainMenu.addSelection(() => {
+		eventPropagator.restartSong();
+	}, "Restart song");
+	
+	this.mainMenu.addSelection(() => {
+		// !!! 
+	}, "Quit song");
+	
 	this.mainMenu.addSelection(() => {
 		eventPropagator.enableEditor();
 	}, "Enable Editor");
+	
 	this.mainMenu.addSelection(() => {
 		eventPropagator.disableEditor();
 	}, "Disable Editor");
 	
+	this.mainMenu.addSelection(() => {
+		this.mainMenu.deactivate();
+		this.saveLoadMenu.activate();
+		this.currentDisplayed = this.saveLoadMenu;
+	}, "Save/Load");
+	
+	// save load menu items
+	this.saveLoadMenu.addSelection(() => {
+		saveSongDialog(eventPropagator);
+	}, "Save song");
+	
+	this.saveLoadMenu.addSelection(() => {
+		loadSongDialog(eventPropagator);
+	}, "Load song");
+	
+	this.saveLoadMenu.addSelection(() => {
+		alert("Not yet implemented"); // >:< this and Load database button
+	}, "Load mp3");
+	
+	this.saveLoadMenu.addSelection(() => {
+		alert("Not yet implemented");
+	}, "Load database");
+
+	
 	this.menuDiv.appendChild(this.mainMenu.domElement());
 	this.menuDiv.appendChild(this.controlsMenu.domElement());
+	this.menuDiv.appendChild(this.saveLoadMenu.domElement());
 }
 
 // !!! add support for hiding buttons (making navigation ignore inactive buttons)
@@ -261,8 +307,9 @@ function MenuPanel(){
 	};
 }
 
-// !!! note that arrow keys disable other keys
-// !!! check if options correctly display the controls set when reactivating
+// !!! note to user that holding down arrow keys disable other keys on many keyboards
+// !!! redundancy check that the buttons are named correctly on menu panel activation.
+// TODO does control menu have to be a special subclass of MenuPanel? 
 function ControlsMenu(controlsMap){
 	MenuPanel.call(this);
 	this.selectionsNames = [];
@@ -292,6 +339,10 @@ function ControlsMenu(controlsMap){
 		
 		// create callback for when the selection is selected
 		let callback = (keyCode) => {
+			if(keyCode == 27){
+				return;
+			}
+			
 			let prevKey = null;
 			let newKeyName = g_keyCodeNames[keyCode] ? g_keyCodeNames[keyCode] : keyCode;
 			for (const key in controlsMap){
@@ -550,8 +601,157 @@ function changeControlDialog(callback){
 	document.body.appendChild(enterKeyDiv);
 	
 	document.addEventListener("keydown", evt => {
-		evt.preventDefault();
+		evt.preventDefault(); // !!! doesn't even capture
 		callback(evt.keyCode);
 		enterKeyDiv.remove();
 	},{once: true, capture: true});
 }
+
+// TODO less ugly, this and loadSongDialog
+function saveSongDialog(eventPropagator){
+	let div = document.createElement("div");
+	let submitButton = document.createElement("button");
+	let nameLabel = document.createElement("label");
+	let nameField = document.createElement("input");
+	let artistLabel = document.createElement("label");
+	let artistField = document.createElement("input");
+	let difficultyLabel = document.createElement("label");
+	let difficultyField = document.createElement("input");
+	let bpmLabel = document.createElement("label");
+	let bpmField = document.createElement("input");
+	let brickSpeedLabel = document.createElement("label"); // >:< modify brick speed in editor
+	let brickSpeedField = document.createElement("input");
+	let durationLabel = document.createElement("label");
+	let durationField = document.createElement("input");
+	
+	div.style.position = "absolute";
+	div.style.top = "10px";
+	div.style.left = "40%";
+	div.style.width = "20%";
+	div.style.backgroundColor = "rgb(180, 180, 180)";
+	div.style.zIndex = "300";
+	
+	nameLabel.innerHTML = "Song name";
+	artistLabel.innerHTML = "Artist";
+	difficultyLabel.innerHTML = "Difficulty";
+	bpmLabel.innerHTML = "BPM";
+	brickSpeedLabel.innerHTML = "Brick Speed"; // >:< modify brick speed in editor
+	durationLabel.innerHTML = "Song Duration";
+	
+	nameField.type = "text";
+	artistField.type = "text";
+	difficultyField.type = "text";
+	bpmField.type = "text";
+	brickSpeedField.type = "text";
+	durationField.type = "text";
+	
+	submitButton.innerHTML = "Save";
+	
+	div.appendChild(nameLabel);
+	div.appendChild(nameField);
+	div.appendChild(artistLabel);
+	div.appendChild(artistField);
+	div.appendChild(difficultyLabel);
+	div.appendChild(difficultyField);
+	div.appendChild(bpmLabel);
+	div.appendChild(bpmField);
+	div.appendChild(brickSpeedLabel);
+	div.appendChild(brickSpeedField);
+	div.appendChild(durationLabel);
+	div.appendChild(durationField);
+	div.appendChild(submitButton);
+	
+	document.body.appendChild(div);
+	submitButton.addEventListener("click", () => {
+		let songData = {
+			name: nameField.value,
+			artist: artistField.value,
+			difficulty: difficultyField.value,
+			bpm: bpmField.value,
+			brickSpeed: brickSpeedField.value,
+			duration: durationField.value
+		}
+		let fn = game => {
+			game.saveSong(songData);
+		}
+		
+		eventPropagator.runOnGame(fn); // !!! handle response?
+		div.remove();
+	}, {once: true});
+}
+
+function loadSongDialog(eventPropagator){
+	let div = document.createElement("div");
+	let songSelector = document.createElement("select");
+	let submitButton = document.createElement("button");
+	let options = [];
+	
+	div.style.position = "absolute";
+	div.style.top = "10px";
+	div.style.left = "40%";
+	div.style.width = "20%";
+	div.style.backgroundColor = "rgb(180, 180, 180)";
+	div.style.zIndex = "300";
+	
+	submitButton.innerHTML = "Load song";
+	
+	let retrieveSongs = game => {
+		return game.songs();
+	}
+	
+	let songs = eventPropagator.runOnGame(retrieveSongs); // !!! handle bad response?
+	let idIDX;
+	let nameIDX;
+	let artistIDX;
+	let difficultyIDX;
+	let durationIDX;
+	let timeCreatedIDX;
+	
+	if(songs.length != 0){
+		songs[0]["columns"].forEach( (columnName, idx) => {
+			if(columnName.toUpperCase() === "SONGID"){
+				idIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "NAME"){
+				nameIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "ARTIST"){
+				artistIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "DIFFICULTY"){
+				difficultyIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "DURATION"){
+				durationIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "TIMECREATED"){
+				timeCreatedIDX = idx;
+			}
+		});
+		songs[0]["values"].forEach( (song, idx) => {
+			let newOption = document.createElement("option");
+			let timeCreated = Date(song[timeCreatedIDX]).toString();
+			newOption.value = song[idIDX];
+			newOption.innerHTML = `Name: ${song[nameIDX]}, Artist: ${song[artistIDX]}, Difficulty: ${song[difficultyIDX]}, Duration: ${song[durationIDX]}, Time Created: ${timeCreated}`;
+			
+			options.push(newOption);
+		});
+	}
+	
+	options.forEach( option => {
+		songSelector.appendChild(option);
+	});
+	div.appendChild(songSelector);
+	div.appendChild(submitButton);
+	document.body.appendChild(div);
+	
+	submitButton.addEventListener("click", () => {
+		let fn = game => {
+			game.loadSong(parseInt(songSelector.value));
+		}
+		
+		eventPropagator.runOnGame(fn); // !!! handle response?
+		div.remove();
+	}, {once: true});
+}
+

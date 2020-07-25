@@ -15,9 +15,10 @@ use crate::TOP_BOUNDARY;
 const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -F32_ZERO and +F32_ZERO is essentially 0
 const GRAVITY: f32 = 500.0; // acceleration in pixels per second^2
 
+pub const MAX_NOTES_PER_SCREEN_WIDTH: u8 = 32;
 pub const PLAYER_WIDTH: u32 = 50;
 pub const PLAYER_HEIGHT: u32 = 100; 
-pub const BRICK_WIDTH: u32 = 60;
+pub const BRICK_WIDTH: u32 = (RIGHT_BOUNDARY - LEFT_BOUNDARY) as u32 / MAX_NOTES_PER_SCREEN_WIDTH as u32;
 pub const BRICK_HEIGHT: u32 = 120;
 pub const SLASH_WIDTH: u32 = 65;
 pub const SLASH_HEIGHT: u32 = 100;
@@ -71,6 +72,7 @@ pub enum BrickType {
 // !!! store brick type, match graphic to brick type
 #[derive(Clone, Copy)]
 pub struct Brick {
+	note_type: BrickType,
 	time: f32,
 	graphic: GraphicGroup,
 	bounds: ObjectBounds,
@@ -325,8 +327,9 @@ impl Object for Brick {
 }
 
 impl Brick {
-	pub fn new (x: f32, y: f32, t: f32) -> Brick {
+	pub fn new (note_type: BrickType, x: f32, y: f32, t: f32) -> Brick {
 		Brick {
+			note_type,
 			time: t,
 			graphic: GraphicGroup::Brick, 
 			bounds: ObjectBounds {
@@ -345,6 +348,10 @@ impl Brick {
 	
 	pub fn time(&self) -> f32 {
 		return self.time;
+	}
+	
+	pub fn note_type(&self) -> BrickType {
+		return self.note_type;
 	}
 	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {

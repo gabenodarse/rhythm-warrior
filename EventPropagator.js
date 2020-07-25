@@ -19,7 +19,7 @@ export function EventPropagator(){
 	
 }
 
-// >:< moving functions to prototype means more difficult removal of listeners? or should some/all of this go to prototype?
+// !!! moving functions to prototype means more difficult removal of listeners? or should some/all of this go to prototype?
 EventPropagator.prototype.init = function(game, overlay, controls){
 	this.game = game;
 	this.overlay = overlay;
@@ -51,7 +51,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 		if (evt.keyCode === 27){
 			this.overlay.toggleElement("menu");
 			
-			// >:< better way to resume game
+			// !!! doesn't work as intended if menu is open and song is playing (via editor before switching back to game)
 			if(!(this.game instanceof Editor)){
 				if(this.paused){
 					this.start();
@@ -64,7 +64,6 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 		else if(typeof(this.controls[event.keyCode]) === "number" && !this.paused){
 			this.game.startControl(this.controls[event.keyCode]);
 		}
-		evt.preventDefault();
 	}
 	
 	this.handleKeyUp = evt => {
@@ -87,6 +86,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	}
 	
 	this.loop = this.gameLoop;
+	this.resize();
 	
 	window.addEventListener("keydown", this.handleKeyDown);
 	window.addEventListener("keyup", this.handleKeyUp);
@@ -104,7 +104,6 @@ EventPropagator.prototype.togglePlay = function(){
 
 EventPropagator.prototype.start = function(){
 	this.paused = false;
-	this.resize();
 	this.game.start(this.loop);
 }
 
@@ -117,6 +116,7 @@ EventPropagator.prototype.pause = function(){
 		this.handleKeyUp(evt);
 	}
 	this.paused = true;
+	this.game.pause();
 }
 
 EventPropagator.prototype.enableEditor = function(){
@@ -134,5 +134,15 @@ EventPropagator.prototype.disableEditor = function(){
 	this.game = this.game.toGame();
 	this.loop = this.gameLoop;
 	this.game.renderGame();
+}
+
+EventPropagator.prototype.restartSong = function(){
+	this.game.restart();
+}
+
+// !!! check if game is running and if so don't run the function?
+EventPropagator.prototype.runOnGame = function(functionToRun){
+	// !!! doesn't automatically render game. Solution is to make responsibility for rerendering game completely within Game class?
+	return functionToRun(this.game); 
 }
 

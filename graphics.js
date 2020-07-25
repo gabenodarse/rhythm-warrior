@@ -4,6 +4,7 @@ import * as wasm from "./pkg/music_mercenary.js";
 // !!!
 // patiently awaiting webGPU. Hopefully better than webGL
 // >:< BG does not need to be refreshed. Separate, static canvas
+// >:< way to display one canvas element in multiple places? (for CanvasGraphics)
 
 function SizedTexture(texture, width, height){
 	this.texture = texture;
