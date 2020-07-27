@@ -44,6 +44,8 @@ const RIGHT_BOUNDARY: f32 = LEFT_BOUNDARY + GAME_WIDTH as f32;
 const TOP_BOUNDARY: f32 = 0.0;
 const GROUND_POS: f32 = TOP_BOUNDARY + 240.0; // !!! associate with the graphic for the ground
 
+const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -F32_ZERO and +F32_ZERO is essentially 0
+
 mod objects;
 
 mod game {
@@ -99,10 +101,10 @@ mod game {
 	
 	impl TimingThresholds {
 		fn from_brick_speed(brick_speed: f32) -> TimingThresholds {
-			let perfect = if 4.0 / brick_speed > 0.01 { // how many seconds it takes to travel 4 pixels
+			let perfect = if 6.0 / brick_speed > 0.014 { // how many seconds it takes to travel 6 pixels
 				4.0 / brick_speed
 			} else {
-				0.01
+				0.014
 			};
 			
 			TimingThresholds {
@@ -117,7 +119,8 @@ mod game {
 		fn eq(&self, other: &UpcomingNote) -> bool {
 			self.note_type == other.note_type
 			&& self.x == other.x
-			&& self.time == other.time
+			&& self.time - other.time < F32_ZERO
+			&& other.time - self.time < F32_ZERO
 		}
 	}
 	impl Eq for UpcomingNote {}
@@ -130,8 +133,8 @@ mod game {
 
 	impl Ord for UpcomingNote {
 		fn cmp(&self, other: &UpcomingNote) -> Ordering {
-			if self.time < other.time      { Ordering::Less }
-			else if self.time > other.time { Ordering::Greater }
+			if other.time - self.time > F32_ZERO      { Ordering::Less }
+			else if self.time - other.time > F32_ZERO { Ordering::Greater }
 			// arbitrary comparisons so that notes of the same time can exist within the same set
 			else if (self.note_type as u8) < (other.note_type as u8) { Ordering::Less }
 			else if (self.note_type as u8) > (other.note_type as u8) { Ordering::Greater }
@@ -158,7 +161,7 @@ mod game {
 		pub fn new(bpm: u32, brick_speed: f32, duration: f32) -> Game {
 			return Game {
 				time_running: 0.0,
-				player: Player::new((GAME_WIDTH / 2) as f32, 0.0),
+				player: Player::new((GAME_WIDTH / 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0),
 				bricks: VecDeque::new(), // bricks on screen, ordered by time they are meant to be played
 				score: 0,
 				song: Song { 
@@ -172,8 +175,30 @@ mod game {
 			};
 		}
 				
-		pub fn tick(&mut self, seconds_passed: f32) {
+		pub fn tick(&mut self, mut seconds_passed: f32) {
+			
+			// prevent disproportionally long ticks
+			if seconds_passed > 25.0 {
+				self.tick(seconds_passed - 20.0);
+				seconds_passed = 20.0;
+			}
+			
 			self.time_running += seconds_passed;
+			
+			// retrieve data from the next bricks to hit
+			// >:< bricks with time before current don't count
+			let mut bricks_iter = self.bricks.iter();
+			let next_brick_time;
+			let leftmost_x;
+			let rightmost_x;
+			match bricks_iter.next() {
+				Some(brick) => {
+					next_brick_time = brick.time();
+				},
+				None => {
+					
+				}					
+			}
 			
 			self.player.tick(seconds_passed);
 			
@@ -196,15 +221,25 @@ mod game {
 			}
 			
 			// get the destruction bounds for slashing or dashing
+			let destruction_type;
 			let destruction_bounds = [
 				match self.player.slashing() {
 					Some(slash) => {
 						match slash.state() {
-							TempObjectState::Active(_) => Some(slash.bounds()),
-							_ => None
+							TempObjectState::Active(_) => {
+								destruction_type = Some(slash.brick_type());
+								Some(slash.bounds())
+							},
+							_ => {
+								destruction_type = None;
+								None
+							}
 						}
 					},
-					None => None
+					None => {
+						destruction_type = None;
+						None
+					}
 				},
 				match self.player.dashing() {
 					Some(dash) => {
@@ -224,29 +259,34 @@ mod game {
 			let score = &mut self.score;
 			let bricks = &mut self.bricks;
 			let thresholds = &self.song.thresholds;
-			for bounds in destruction_bounds.iter() {
-				if let Some(bounds) = bounds {
-					bricks.retain(|&brick| -> bool {
-						let intersect = objects::intersect(&bounds, &brick.bounds());
-						if intersect {
-							let time_difference = if t > brick.time() { t - brick.time() } else { brick.time() - t };
-							*score += 
-								if time_difference < thresholds.perfect {
-									100
-								} 
-								else if time_difference < thresholds.good {
-									90
+			if let Some(destruction_type) = destruction_type {
+				for bounds in destruction_bounds.iter() {
+					if let Some(bounds) = bounds {
+						bricks.retain(|&brick| -> bool {
+							if destruction_type == brick.brick_type() {
+								let intersect = objects::intersect(&bounds, &brick.bounds());
+								if intersect {
+									let time_difference = if t > brick.time() { t - brick.time() } else { brick.time() - t };
+									*score += 
+										if time_difference < thresholds.perfect {
+											100
+										} 
+										else if time_difference < thresholds.good {
+											90
+										}
+										else if time_difference < thresholds.ok {
+											80
+										}
+										else {
+											70
+										};
+									return false;
 								}
-								else if time_difference < thresholds.ok {
-									80
-								}
-								else {
-									70
-								};
-							return false;
-						}
-						return true;
-					});
+								return true;
+							}
+							return true;
+						});
+					}
 				}
 			}
 			
@@ -332,8 +372,8 @@ mod game {
 		
 		pub fn input_command (&mut self, input: Input, t_since_tick: f32) {
 			match input {
-				Input::Jump => {
-					self.player.jump();
+				Input::Dash => {
+					self.player.dash(t_since_tick);
 				}
 				Input::Left => {
 					self.player.move_left();
@@ -342,12 +382,14 @@ mod game {
 					self.player.move_right();
 				}
 				Input::Ability1 => {
-					self.player.slash(t_since_tick);
+					self.player.slash(BrickType::Type1, t_since_tick);
 				}
 				Input::Ability2 => {
-					self.player.dash(t_since_tick);
+					self.player.slash(BrickType::Type2, t_since_tick);
 				}
-				Input::Ability3 => {}
+				Input::Ability3 => {
+					self.player.slash(BrickType::Type3, t_since_tick);
+				}
 				Input::Ability4	=> {}
 			}
 		}
@@ -355,8 +397,8 @@ mod game {
 		// TODO precision on press but not on release? (no t param)
 		pub fn stop_command (&mut self, key: Input) {
 			match key {
-				Input::Jump => {
-					return; // TODO can make jumping by holding space bar possible, pros/cons ??
+				Input::Dash => {
+					return;
 				}
 				Input::Left => {
 					self.player.stop_left();
@@ -371,20 +413,48 @@ mod game {
 			}
 		}
 		
-		// TODO create a method load_song
+		// TODO create a method load_song (but can't pass normal arrays/vec, moved or borrowed, through wasm_bindgen)
+		// TODO separate toggling/rotating through brick types and strictly adding bricks
 		pub fn toggle_brick (&mut self, bt: BrickType, time: f32, pos: u8) {
 			if time > self.song.duration {
 				return;
 			}
 			// !!! just as there is a max time, there should be a min time. During the intro min time a metronome can establish tempo
 			
+			// >:< 
 			let brick = UpcomingNote{
-				note_type: bt,
+				note_type: BrickType::Type1,
 				x: note_pos_to_x(pos),
 				time
 			};
-			if !self.song.notes.insert( brick ) {
+			let brick2 = UpcomingNote{
+				note_type: BrickType::Type2,
+				x: note_pos_to_x(pos),
+				time
+			};
+			let brick3 = UpcomingNote{
+				note_type: BrickType::Type3,
+				x: note_pos_to_x(pos),
+				time
+			};
+			
+			if self.song.notes.contains( &brick ) == true {
 				self.song.notes.remove( &brick );
+				self.song.notes.insert( brick2 );
+			}
+			else if self.song.notes.contains( &brick2 ) == true {
+				self.song.notes.remove( &brick2 );
+				self.song.notes.insert( brick3 );
+			}
+			else if self.song.notes.contains( &brick3 ) == true {
+				self.song.notes.remove( &brick3 );
+			}
+			else {
+				self.song.notes.insert( UpcomingNote{
+					note_type: bt,
+					x: note_pos_to_x(pos),
+					time
+				});	
 			}
 			
 			match self.song.notes.iter().next() {
@@ -476,8 +546,14 @@ pub enum GraphicGroup {
 	Background,
 	Player,
 	Brick,
+	Brick2,
+	Brick3,
 	SlashRight,
+	SlashRight2,
+	SlashRight3,
 	SlashLeft,
+	SlashLeft2,
+	SlashLeft3,
 	Dash,
 	DashR0, 
 	DashR1,
@@ -510,16 +586,19 @@ pub fn graphic_size(g: GraphicGroup) -> PositionedGraphic {
 			x: objects::PLAYER_WIDTH as i32,
 			y: objects::PLAYER_HEIGHT as i32,
 		}},
-		GraphicGroup::Brick => { PositionedGraphic {
+		GraphicGroup::Brick | GraphicGroup::Brick2 | GraphicGroup::Brick3 => { PositionedGraphic {
 			g,
 			x: objects::BRICK_WIDTH as i32,
 			y: objects::BRICK_HEIGHT as i32,
 		}},
-		GraphicGroup::SlashRight | GraphicGroup::SlashLeft => { PositionedGraphic {
-			g,
-			x: objects::SLASH_WIDTH as i32,
-			y: objects::SLASH_HEIGHT as i32
-		}},
+		GraphicGroup::SlashRight | GraphicGroup::SlashRight2 | GraphicGroup::SlashRight3
+		| GraphicGroup::SlashLeft | GraphicGroup::SlashLeft2 | GraphicGroup::SlashLeft3 => { 
+			PositionedGraphic {
+				g,
+				x: objects::SLASH_WIDTH as i32,
+				y: objects::SLASH_HEIGHT as i32
+			}
+		},
 		GraphicGroup::Dash => { PositionedGraphic {
 			g,
 			x: objects::DASH_WIDTH as i32,
@@ -553,8 +632,9 @@ pub fn max_graphics(g: GraphicGroup) -> u32 {
 	match g {
 		GraphicGroup::Background => 1,
 		GraphicGroup::Player => 1,
-		GraphicGroup::Brick => 64,
-		GraphicGroup::SlashRight | GraphicGroup::SlashLeft => 1,
+		GraphicGroup::Brick | GraphicGroup::Brick2 | GraphicGroup::Brick3 => 32,
+		GraphicGroup::SlashRight | GraphicGroup::SlashRight2 | GraphicGroup::SlashRight3
+		| GraphicGroup::SlashLeft | GraphicGroup::SlashLeft2 | GraphicGroup::SlashLeft3 => 1,
 		GraphicGroup::Dash => 1,
 		GraphicGroup::DashR0 | GraphicGroup::DashL0 => 1,
 		GraphicGroup::DashR1 | GraphicGroup::DashL1 => 1,
@@ -567,7 +647,7 @@ pub fn max_graphics(g: GraphicGroup) -> u32 {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, EnumVariantCount)]
 pub enum Input {
-	Jump,
+	Dash,
 	Left,
 	Right,
 	Ability1,

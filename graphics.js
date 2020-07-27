@@ -108,6 +108,11 @@ export function WebGLGraphics(images, screenDiv){
 	// set view port to convert clip space to pixels
 	gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 	
+	// enable alpha channel
+	// TODO does it calculate 1-alpha for each pixel rendered? if so, how about setting alpha beforehand when loading texture?
+	gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); 
+	gl.enable(gl.BLEND);
+	
 	// create a buffer to put the points of two triangles which will comprise the rectangle to be rendered
 	this.positionBuffer = gl.createBuffer();
 	const positionBuffer = this.positionBuffer;
@@ -143,7 +148,6 @@ export function WebGLGraphics(images, screenDiv){
 	gl.vertexAttribPointer( texLoc, size, type, normalize, stride, offset);
 	
 	// create textures for each image
-	// >:< make transparent pixels for textures work
 	images.forEach( (img,idx) => {
 		const texture = gl.createTexture();
 		const dimensions = wasm.graphic_size(idx);

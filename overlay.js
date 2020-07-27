@@ -13,7 +13,7 @@ g_keyCodeNames[82] = "r";
 
 // !!! backspace for menu navigation?
 // !!! does overlay ever have to be resized?
-// !!! change toggle functions to display/hide functions
+// >:< change toggle functions to display/hide functions
 // !!! grouping all of overlay here may have been a mistake... 
 	// Having the editor overlay included in Editor class would allow game and overlay elements to synchronize more easily
 // TODO overlay editor modifies game object directly... should happen through event propagator? 
