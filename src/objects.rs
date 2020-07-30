@@ -21,8 +21,9 @@ pub const BRICK_WIDTH: u32 = (RIGHT_BOUNDARY - LEFT_BOUNDARY) as u32 / MAX_NOTES
 pub const BRICK_HEIGHT: u32 = 120;
 pub const SLASH_WIDTH: u32 = 65;
 pub const SLASH_HEIGHT: u32 = 100;
-pub const DASH_WIDTH: u32 = BRICK_WIDTH * 3 / 2;
+pub const DASH_WIDTH: u32 = BRICK_WIDTH * 4 / 3;
 pub const DASH_HEIGHT: u32 = 100;
+pub const DASH_CD: f32 = 0.12;
 
 pub trait Object {
 	fn bounds (&self) -> ObjectBounds; // TODO copying the full object bounds may be extra work in some instances
@@ -188,32 +189,48 @@ impl Player {
 	}
 	
 	// tick the players state, taking into account input commands
-	pub fn tick(&mut self, seconds_passed: f32) {
+	pub fn tick(&mut self, seconds_passed: f32, upcoming_bricks_time_until: f32, 
+	upcoming_bricks_leftmost_x: f32, upcoming_bricks_rightmost_x: f32) {
 		
 		// TODO move a new slash unconditionally to player's position, so its position is set when it actually appears?
 		// Tick slash. If it's new check if the dash is also new, in which case they link
+		
+		// link the dash and slash if they are both new
+		let dash = &mut self.dash;
+		let slash = &mut self.slash;
+		match (slash, dash) {
+			(Some(slash), Some(dash)) => {
+				match (slash.state(), dash.state()) {
+					(TempObjectState::New(slash_t), TempObjectState::New(dash_t)) => {
+						// in case a movement input was immediately after 1 or both inputs
+						let direction = self.face_dir;
+						// position slash to the end of the dash
+						slash.link_dash_slash(dash.bounds.left_x, direction, *dash_t);
+							
+						dash.direction = direction;
+						dash.brick_type = Some(slash.brick_type);
+					},
+					_ => ()
+				}
+			},
+			_ => ()
+		}
+		
+		// tick slash
 		if let Some(slash) = &mut self.slash {
 			match slash.state() {
-				TempObjectState::New(_) => {
-					if let Some(dash) = &mut self.dash {
-						if let TempObjectState::New(t) = dash.state() {
-							// TODO should they be set to hit at the same time too?
-							// position slash to the end of the dash
-							slash.link_dash_slash(dash.bounds.left_x, dash.direction, *t);
-							dash.brick_type = Some(slash.brick_type);
-						}
-					}
-					slash.tick(seconds_passed);
-				},
 				TempObjectState::Lingering(t) if *t < 0.0 => self.slash = None,
 				_ => slash.tick(seconds_passed)
 			}
 		}
 		
+		// tick dash and/or move
 		if let Some(dash) = &mut self.dash {
 			match dash.state() {
 				TempObjectState::Lingering(t) if *t < 0.0 => {
 					self.dash = None;
+					self.regular_move(seconds_passed, upcoming_bricks_time_until, 
+						upcoming_bricks_leftmost_x, upcoming_bricks_rightmost_x);
 				},
 				_ => {
 					dash.tick(seconds_passed);
@@ -225,26 +242,121 @@ impl Player {
 						self.bounds.right_x = dash.bounds.left_x;
 						self.bounds.left_x = self.bounds.right_x - PLAYER_WIDTH as f32;
 					}
+					self.dx = 0.0;
 				}
 			}
 		}
 		else {
-			self.regular_move(seconds_passed);
+			self.regular_move(seconds_passed, upcoming_bricks_time_until, 
+				upcoming_bricks_leftmost_x, upcoming_bricks_rightmost_x);
 		}
 	}
 	
-	fn regular_move(&mut self, seconds_passed: f32) {
-		//>:< get rid of magic numbers (PID without a PHD)
+	fn regular_move(&mut self, seconds_passed: f32, upcoming_bricks_time_until: f32, 
+	upcoming_bricks_leftmost_x: f32, upcoming_bricks_rightmost_x: f32) {
+		const MAX_PLAYER_SPEED: f32 = 400.0;
+		const MIN_PLAYER_SPEED: f32 = 100.0;
 		
-		// handle lateral movement
+		let mut target_speed; // absolute value of velocity dx needed to reach the brick in time to hit it
+		let same_direction; // whether player has a dx in the same direction as the target direction
+		let current_speed; // absolute value of current dx
+		
+		// calculate target speed
+		// !!! calculate target speed based on integral of current speed from now until upcoming brick, and use this better
+			// target speed to command a finer grainer / better feeling acceleration
+		// TODO positions/times of upcoming bricks aren't changing as often as every tick
+			// ever worth it to store some information/calculations in between ticks for the many instances they don't change?
 		if self.moving_right ^ self.moving_left {
-			if self.moving_right {
-				self.dx = ((self.dx + 1200.0) / 4.0) * seconds_passed + self.dx * (1.0 - seconds_passed); 
-			} else {
-				self.dx = ((self.dx - 1200.0) / 4.0) * seconds_passed + self.dx * (1.0 - seconds_passed); 
+			// the order of the direction check in both directions is important due to how acceleration is handled for a self.dx == 0
+				// this can be made less flimsy by adding a single extra calculation check for self.dx == 0.0
+				// in which same_direction is false when moving left and true when moving right
+			// if the distance needed is sufficiently far, specify a target speed to overshoot the distance, so that player
+				// will go faster than strictly necessary to reach brick, and then slow down once approaching the brick
+			let mut distance_away;
+			if self.moving_left {
+				if upcoming_bricks_rightmost_x < self.bounds.left_x {
+					distance_away = (self.bounds.left_x - upcoming_bricks_rightmost_x);
+				} else { // else get to the left of the leftmost brick
+					distance_away = (self.bounds.right_x - upcoming_bricks_leftmost_x);
+				}
+				
+				if self.dx < 0.0 { 
+					same_direction = true;
+					current_speed = -self.dx;
+					if distance_away > DASH_WIDTH as f32 { 
+						distance_away += PLAYER_WIDTH as f32;
+					}
+				} else { 
+					same_direction = false;
+					current_speed = self.dx;
+					distance_away += PLAYER_WIDTH as f32;
+				}
 			}
-		} else {
-			self.dx = (self.dx / 10.0) * seconds_passed + self.dx * (1.0 - seconds_passed);
+			else {
+				if upcoming_bricks_leftmost_x > self.bounds.right_x {
+					distance_away = (upcoming_bricks_leftmost_x - self.bounds.right_x);
+				} else { // else get to the right of the rightmost brick
+					distance_away = (upcoming_bricks_rightmost_x - self.bounds.left_x);
+				}
+				
+				if self.dx < 0.0 { 
+					same_direction = false;
+					current_speed = -self.dx;
+					distance_away += PLAYER_WIDTH as f32;
+				} else { 
+					same_direction = true;
+					current_speed = self.dx;
+					if distance_away > DASH_WIDTH as f32 { 
+						distance_away += PLAYER_WIDTH as f32;
+					}
+				};
+			}
+			
+			target_speed = distance_away / upcoming_bricks_time_until;
+			if target_speed > MAX_PLAYER_SPEED {
+				target_speed = MAX_PLAYER_SPEED;
+				// TODO go slightly over max speed depending on how far away brick is?
+			} else if target_speed < MIN_PLAYER_SPEED {
+				target_speed = MIN_PLAYER_SPEED;
+			}
+		}
+		else {
+			target_speed = 0.0;
+			same_direction = true;
+			if self.dx > 0.0 { 
+				current_speed = self.dx;
+			} else {
+				current_speed = -self.dx;
+			};
+		}
+		
+		// accelerate/decelerate
+		if target_speed - current_speed > F32_ZERO || current_speed - target_speed > F32_ZERO || !same_direction {
+			let speeding_up = if (target_speed > current_speed) && same_direction { true } else { false };
+			let mut new_speed;
+			if current_speed < MIN_PLAYER_SPEED {
+				if speeding_up {
+					new_speed = current_speed + (800.0 * seconds_passed);
+				} else {
+					new_speed = current_speed - (1600.0 * seconds_passed);
+				}
+			}
+			else {
+				if speeding_up {
+					new_speed = current_speed + (600.0 * seconds_passed);
+				} else {
+					new_speed = current_speed - (1200.0 * seconds_passed);
+				}
+			}
+			if speeding_up {
+				if new_speed > target_speed {
+					new_speed = target_speed;
+				}
+			} else if same_direction && new_speed < target_speed {
+				new_speed = target_speed;
+			}
+			
+			self.dx = if self.dx < 0.0 { -new_speed} else { new_speed }
 		}
 		
 		// calculate resulting position, while checking to not go past any boundaries
@@ -396,12 +508,22 @@ impl Slash {
 		self.state = TempObjectState::New(sync_t);
 		match dir {
 			Direction::Left => {
-				self.bounds.left_x = x - DASH_WIDTH as f32 - SLASH_WIDTH as f32;
-				self.bounds.right_x = x - DASH_WIDTH as f32;
+				self.bounds.left_x = x - DASH_WIDTH as f32 - PLAYER_WIDTH as f32 - SLASH_WIDTH as f32;
+				self.bounds.right_x = x - DASH_WIDTH as f32 - PLAYER_WIDTH as f32;
+				self.graphic = match self.brick_type {
+					BrickType::Type1 => GraphicGroup::SlashLeft,
+					BrickType::Type2 => GraphicGroup::SlashLeft2,
+					BrickType::Type3 => GraphicGroup::SlashLeft3
+				}
 			},
 			Direction::Right => {
-				self.bounds.left_x = x + DASH_WIDTH as f32;
-				self.bounds.right_x = x + DASH_WIDTH as f32 + SLASH_WIDTH as f32;
+				self.bounds.left_x = x + DASH_WIDTH as f32 + PLAYER_WIDTH as f32;
+				self.bounds.right_x = x + DASH_WIDTH as f32 + PLAYER_WIDTH as f32 + SLASH_WIDTH as f32;
+				self.graphic = match self.brick_type {
+					BrickType::Type1 => GraphicGroup::SlashRight,
+					BrickType::Type2 => GraphicGroup::SlashRight2,
+					BrickType::Type3 => GraphicGroup::SlashRight3
+				}
 			}
 		}
 	}
@@ -433,13 +555,17 @@ impl Slash {
 		}
 	}
 	
-	pub fn rendering_instruction(&self) -> PositionedGraphic {
-		// >:< if not new, this and Dash
-		PositionedGraphic {
-			g: self.graphic,
-			x: self.bounds.left_x as i32,
-			y: self.bounds.top_y as i32,
+	pub fn rendering_instruction(&self) -> Option<PositionedGraphic> {
+		if let TempObjectState::New(_) = self.state {
+			return None;
+		} else {
+			return Some( PositionedGraphic {
+				g: self.graphic,
+				x: self.bounds.left_x as i32,
+				y: self.bounds.top_y as i32,
+			});
 		}
+		
 	}
 }
 
@@ -514,13 +640,15 @@ impl Dash {
 			},
 			TempObjectState::Active(t) => {
 				// update bounds and graphic
-				self.state = TempObjectState::Lingering(*t - seconds_passed + 0.08);
+				self.state = TempObjectState::Lingering(*t - seconds_passed + DASH_CD);
 			},
 			TempObjectState::Lingering(t) => self.state = TempObjectState::Lingering(*t - seconds_passed)
 		}
 	}
 	
 	pub fn rendering_instruction(&self) -> Option<PositionedGraphic> {
+		// !!! if dash is always going to be instantaneous, self.graphic does not have to be Option type
+			// because here is only 1 graphic (per brick type), and if the dash's state is new return None for this function
 		match self.graphic {
 			None => None,
 			Some(g) => {

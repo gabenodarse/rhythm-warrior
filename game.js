@@ -64,7 +64,7 @@ Game.prototype.load = async function () {
 	this.xFactor = 1;
 	this.yFactor = 1;
 	
-	this.loadSong(2);
+	this.loadSong(3);
 	
 	this.isLoaded = true;
 }

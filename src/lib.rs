@@ -26,7 +26,6 @@
 // !!! are as casts what I want / are they idiomatic Rust? Also, types seem to be arbitrary...
 	// (define floats and integer forms of constants so casting isn't needed?)
 
-// >:< dash has to go through to hit note
 
 
 use std::collections::btree_set::BTreeSet; 
@@ -185,22 +184,43 @@ mod game {
 			
 			self.time_running += seconds_passed;
 			
-			// retrieve data from the next bricks to hit
-			// >:< bricks with time before current don't count
+			// retrieve necessary data from the next bricks to hit: 
+				// the time of the upcoming bricks, the leftmost x of those bricks and the rightmost x
 			let mut bricks_iter = self.bricks.iter();
-			let next_brick_time;
-			let leftmost_x;
-			let rightmost_x;
-			match bricks_iter.next() {
-				Some(brick) => {
-					next_brick_time = brick.time();
-				},
-				None => {
+			let mut upcoming_bricks_data = None;
+	
+			while let Some(brick) = bricks_iter.next() {
+				if brick.time() > self.time_running {
+					let bricks_time = brick.time();
+					let mut bricks_leftmost_x = brick.bounds().left_x;
+					let mut bricks_rightmost_x = brick.bounds().right_x;
+					while let Some(brick) = bricks_iter.next() {
+						if brick.time() - bricks_time > F32_ZERO {
+							break;
+						}
+						else if brick.bounds().left_x < bricks_leftmost_x {
+							bricks_leftmost_x = brick.bounds().left_x;
+						}
+						// should be mutually exclusive from other else if statement
+						else if brick.bounds().right_x > bricks_rightmost_x { 
+							bricks_rightmost_x = brick.bounds().right_x;
+						}
+					}
 					
-				}					
+					upcoming_bricks_data = Some( (bricks_time, bricks_leftmost_x, bricks_rightmost_x) );
+					break;
+				}
 			}
 			
-			self.player.tick(seconds_passed);
+			// tick player
+			match upcoming_bricks_data {
+				Some( (u_time, u_leftmost_x, u_rightmost_x) ) => {
+					self.player.tick(seconds_passed, u_time - self.time_running, u_leftmost_x, u_rightmost_x);
+				}
+				None => {
+					self.player.tick(seconds_passed, 99999.9, 0.0, 0.0);
+				}
+			}
 			
 			// tick bricks while discarding any bricks off screen 
 			// TODO might not need to check on screen for all notes
@@ -312,7 +332,11 @@ mod game {
 			}
 			
 			if let Some(slash) = self.player.slashing() {
-				instructions.push(slash.rendering_instruction()); };
+				let ri = slash.rendering_instruction();
+				if let Some(ri) = ri {
+					instructions.push(ri);
+				}
+			};
 			
 			if let Some(dash) = self.player.dashing() {
 				let ri = dash.rendering_instruction();
@@ -421,7 +445,6 @@ mod game {
 			}
 			// !!! just as there is a max time, there should be a min time. During the intro min time a metronome can establish tempo
 			
-			// >:< 
 			let brick = UpcomingNote{
 				note_type: BrickType::Type1,
 				x: note_pos_to_x(pos),
@@ -669,4 +692,10 @@ pub fn num_graphic_groups() -> usize {
 #[wasm_bindgen]
 pub fn num_possible_inputs() -> usize {
 	return Input::num_variants();
+}
+
+#[wasm_bindgen]
+extern {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
 }

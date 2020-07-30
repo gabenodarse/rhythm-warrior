@@ -6,13 +6,16 @@ let g_keyCodeNames = [];
 g_keyCodeNames[32] = "space";
 g_keyCodeNames[188] = ", (<)";
 g_keyCodeNames[190] = ". (>)";
-g_keyCodeNames[81] = "q";
-g_keyCodeNames[87] = "w";
-g_keyCodeNames[69] = "e";
-g_keyCodeNames[82] = "r";
+g_keyCodeNames[219] = "[";
+g_keyCodeNames[221] = "]";
+g_keyCodeNames[81] = "Q";
+g_keyCodeNames[87] = "W";
+g_keyCodeNames[69] = "E";
+g_keyCodeNames[82] = "R";
 
 // !!! backspace for menu navigation?
 // !!! does overlay ever have to be resized?
+// !!! scroll wheel for editor
 // >:< change toggle functions to display/hide functions
 // !!! grouping all of overlay here may have been a mistake... 
 	// Having the editor overlay included in Editor class would allow game and overlay elements to synchronize more easily
@@ -335,13 +338,14 @@ function ControlsMenu(controlsMap){
 		}
 		
 		// create callback for when the selection is selected
-		let callback = (keyCode) => {
+		let callback = (keyEvt) => {
+			let keyCode = keyEvt.keyCode;
 			if(keyCode == 27){
 				return;
 			}
 			
 			let prevKey = null;
-			let newKeyName = g_keyCodeNames[keyCode] ? g_keyCodeNames[keyCode] : keyCode;
+			let newKeyName = g_keyCodeNames[keyCode] ? g_keyCodeNames[keyCode] : keyEvt.key;
 			for (const key in controlsMap){
 				if(controlsMap[key] == i){
 					controlsMap[key] = undefined;
@@ -432,6 +436,7 @@ EditorGuidingLines.prototype.domElement = function(){
 
 // TODO faster if the canvas stays the same and is just repositioned on time changes. 
 	// However, if the game height is not the full screen height, lines would show outside the game's boundaries
+	// !!! range scroller isn't modified when the song is modified
 EditorGuidingLines.prototype.updateSongData = function(songData){
 	let time = songData.songTime;
 	let beatInterval = songData.beatInterval;
@@ -607,7 +612,7 @@ function changeControlDialog(callback){
 		// Way to make this temporarily the only even handler for key presses?
 	document.addEventListener("keydown", evt => {
 		if(evt.keyCode != 27){
-			callback(evt.keyCode);
+			callback(evt);
 		}
 		enterKeyDiv.remove();
 	},{once: true});
