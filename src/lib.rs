@@ -153,7 +153,8 @@ mod game {
 		bricks: VecDeque<Brick>,
 		// !!! create a song type to hold song notes and meta data
 		song: Song, 
-		upcoming_note: Option<UpcomingNote>
+		upcoming_note: Option<UpcomingNote>,
+		bricks_broken: u8
 	}
 	#[wasm_bindgen]
 	impl Game {
@@ -170,7 +171,8 @@ mod game {
 					duration,
 					thresholds: TimingThresholds::from_brick_speed(brick_speed)
 				},
-				upcoming_note: None
+				upcoming_note: None,
+				bricks_broken: 0
 			};
 		}
 				
@@ -278,6 +280,7 @@ mod game {
 			let t = self.time_running;
 			let score = &mut self.score;
 			let bricks = &mut self.bricks;
+			let bricks_broken = &mut self.bricks_broken;
 			let thresholds = &self.song.thresholds;
 			if let Some(destruction_type) = destruction_type {
 				for bounds in destruction_bounds.iter() {
@@ -300,6 +303,7 @@ mod game {
 										else {
 											70
 										};
+									*bricks_broken += 1;
 									return false;
 								}
 								return true;
@@ -350,6 +354,12 @@ mod game {
 		
 		pub fn score(&self) -> i32 {
 			return self.score;
+		}
+		
+		pub fn bricks_broken(&mut self) -> u8 {
+			let ret = self.bricks_broken;
+			self.bricks_broken = 0;
+			return ret;
 		}
 		
 		pub fn max_score(&self) -> i32 {

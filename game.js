@@ -16,13 +16,17 @@ export function Game () {
 	this.gameData;
 	this.graphics; // !!! can be either canvases or webGL. Add way to choose between them.
 	this.database;
-	this.songID;
+	this.song;
 	this.isLoaded = false;
 	
 	this.audioContext = new AudioContext();
 	this.audioSource;
 	this.audioBuffer;
 	this.audioTimeSafetyBuffer = 0.15;
+	
+	this.brickBreakAudioContext = new AudioContext();
+	this.brickBreakAudioSource;
+	this.brickBreakAudioBuffer;
 	
 	//initialize screen div
 	this.screenDiv = document.createElement("div");
@@ -48,12 +52,24 @@ Game.prototype.load = async function () {
 	// !!! can happen same time as graphics are loading
 	this.database = await loader.loadDatabase();
 	
-	// !!! don't load song (mp3 and notes from database) on initialization
+	// !!! associate with Songs table in database and load as needed using loader
 	// TODO add error handling
 	await fetch("song.mp3")
 		.then(res => res.arrayBuffer())
 		.then(res => this.audioContext.decodeAudioData(res))
 		.then(res => { this.audioBuffer = res; }
+	);
+	
+	// !!! make part of loader
+	await fetch("pop.wav")
+		.then(res => res.arrayBuffer())
+		.then(res => this.brickBreakAudioContext.decodeAudioData(res))
+		.then(res => { 
+			this.brickBreakAudioBuffer = res; 
+			this.brickBreakAudioSource = this.brickBreakAudioContext.createBufferSource(); 
+			this.brickBreakAudioSource.buffer = this.brickBreakAudioBuffer;
+			this.brickBreakAudioSource.connect(this.brickBreakAudioContext.destination);
+		}
 	);
 	
 	this.gameData = wasm.Game.new();
@@ -64,7 +80,7 @@ Game.prototype.load = async function () {
 	this.xFactor = 1;
 	this.yFactor = 1;
 	
-	this.loadSong(3);
+	this.loadSong(6);
 	
 	this.isLoaded = true;
 }
@@ -118,6 +134,13 @@ Game.prototype.tick = function(){
 	this.gameData.tick(timePassed); 
 	this.lastTick = now;
 	this.renderGame();
+	if( this.gameData.bricks_broken() > 0 ){
+		// play sound then create a new audio source in preparation for subsequent bricks breaking
+		this.brickBreakAudioSource.start();
+		this.brickBreakAudioSource = this.brickBreakAudioContext.createBufferSource(); 
+		this.brickBreakAudioSource.buffer = this.brickBreakAudioBuffer;
+		this.brickBreakAudioSource.connect(this.brickBreakAudioContext.destination);
+	}
 }
 
 Game.prototype.startControl = function(cntrl){
@@ -141,13 +164,10 @@ Game.prototype.score = function(){
 }
 
 Game.prototype.songData = function(){
-	return {
-		beatInterval: this.gameData.beat_interval(),
-		brickSpeed: this.gameData.brick_speed(),
-		songTime: this.gameData.song_time(),
-		songDuration: this.gameData.song_duration(),
-		score: this.gameData.score()
-	}
+	this.song.beatInterval = this.gameData.beat_interval();
+	this.song.songTime = this.gameData.song_time();
+	this.song.score = this.gameData.score()
+	return this.song;
 }
 
 Game.prototype.songs = function(){
@@ -156,40 +176,70 @@ Game.prototype.songs = function(){
 	return songs;
 }
 
-Game.prototype.loadSong = function(songID){
+Game.prototype.newSong = function(bpm, brickSpeed, duration){
 	// !!! check if current song has been saved (modified flag?) 
 		// No need to show a check for regular game usage where songs aren't edited
 	// !!! creating a new game to load a new song? Or create a load_song method? wasm garbage collected?
-	this.songID = songID;
-	let {notes, song} = this.database.loadSong(songID);
+	let createSong = true;
+	if(createSong){
+		this.gameData = wasm.Game.new(bpm, brickSpeed, duration);
+		this.song = {};
+		this.song.bpm = bpm;
+		this.song.brickSpeed = brickSpeed;
+		this.song.duration = duration;
+	}
 	
-	let bpm, brickSpeed, duration;
+	return createSong;
+}
+
+Game.prototype.loadSong = function(songID){
+	
+	let {notes, song} = this.database.loadSong(songID);
+	let songValues = {};
+	
 	song[0]["columns"].forEach( (columnName, idx) => {
-		if(columnName.toUpperCase() === "BPM"){
-			bpm = song[0]["values"][0][idx];
+		if(columnName.toUpperCase() === "SONGID"){
+			songValues.songID = song[0]["values"][0][idx];
+		}
+		else if(columnName.toUpperCase() === "NAME"){
+			songValues.name = song[0]["values"][0][idx];
+		}
+		else if(columnName.toUpperCase() === "ARTIST"){
+			songValues.artist = song[0]["values"][0][idx];
+		}
+		else if(columnName.toUpperCase() === "DIFFICULTY"){
+			songValues.difficulty = song[0]["values"][0][idx];
+		}
+		else if(columnName.toUpperCase() === "BPM"){
+			songValues.bpm = song[0]["values"][0][idx];
 		}
 		else if(columnName.toUpperCase() === "BRICKSPEED"){
-			brickSpeed = song[0]["values"][0][idx];
+			songValues.brickSpeed = song[0]["values"][0][idx];
 		}
 		else if(columnName.toUpperCase() === "DURATION"){
-			duration = song[0]["values"][0][idx];
+			songValues.duration = song[0]["values"][0][idx];
+		}
+		else if(columnName.toUpperCase() === "TIMECREATED"){
+			songValues.timeCreated = song[0]["values"][0][idx];
 		}
 	});
 	
-	this.gameData = wasm.Game.new(bpm, brickSpeed, duration);
+	if(this.newSong(songValues.bpm, songValues.brickSpeed, songValues.duration) == true){
+		// TODO flimsy way of indexing into notes to retrieve correct values
+		notes[0]["values"].forEach( note => {
+			this.gameData.toggle_brick(note[2], note[3], note[4]); 
+		});
+	}
 	
-	// TODO flimsy way of indexing into notes to retrieve correct values
-	notes[0]["values"].forEach( note => {
-		this.gameData.toggle_brick(note[2], note[3], note[4]); 
-	});
-	
+	this.song = songValues;
+	// TODO doesn't show song immediately after load, and seek isn't a member of Game so can't seek to show
 	this.renderGame();
 }
 
 Game.prototype.saveSong = function(songData, overwrite){
 	let notes = JSON.parse(this.gameData.song_notes_json());
 	if(overwrite === true){
-		songData.songID = this.songID;
+		songData.songID = this.song.songID;
 		this.database.overwriteSong(songData, notes);
 	}
 	else{
@@ -241,6 +291,7 @@ Editor.prototype.createNote = function(x, y){
 	// to have the game add the note. 
 	// TODO, more robust way would be to add the note to on screen notes in toggle_brick, then just rerender with renderGame()
 	this.seek(t); 
+	
 }
 
 Editor.prototype.toGame = function(){

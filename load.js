@@ -60,9 +60,51 @@ MMDatabase.prototype.saveSong = function(songData, notes){
 }
 
 MMDatabase.prototype.overwriteSong = function(songData, notes){
-	// >:< implement
-		// make sure data is inserted before deleting old data, in case write doesn't work.
-	this.saveSong(songData, notes);
+	// TODO if write doesn't work, data isn't saved while old data in database is lost. Problem?
+	let {songID, name, artist, difficulty, bpm, brickSpeed, duration} = songData;
+	let now = new Date().getTime();
+			
+	let sql = "INSERT INTO SONGS (Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, TimeCreated) VALUES (\"" 
+		+ name + "\", \""
+		+ artist + "\", \""
+		+ difficulty + "\", "
+		+ bpm + ", "
+		+ brickSpeed + ", "
+		+ duration + ", "
+		+ now 
+		+ ");"
+	;
+	
+	this.database.run(sql);
+	let lastInsert = this.database.exec("SELECT last_insert_rowid()");
+	let newSongID = lastInsert[0].values[0];
+	
+	// TODO combine insertion of all notes into 1 large query?
+	notes.forEach( note => {
+		let {brickType, time, xPos} = note;
+		let sql = "INSERT INTO NOTES \
+			(SongID, BrickType, Time, XPos) \
+			VALUES (" 
+			+ newSongID + ", "
+			+ brickType + ", "
+			+ time + ", " 
+			+ xPos + ");"
+		;
+		
+		this.database.run(sql);
+	});
+	
+	// After everything has been inserted, delete old values set the songID of the new values to the old songID
+	sql = `DELETE FROM SONGS WHERE SONGID=${songID}`;
+	this.database.run(sql);
+	sql = `DELETE FROM NOTES WHERE SONGID=${songID}`;
+	this.database.run(sql);
+	sql = `UPDATE SONGS SET SONGID=${songID} WHERE SONGID=${newSongID}`;
+	this.database.run(sql);
+	sql = `UPDATE NOTES SET SONGID=${songID} WHERE SONGID=${newSongID}`;
+	this.database.run(sql);
+	
+	this.exportDatabase();
 }
 
 MMDatabase.prototype.searchSong = function(songData){

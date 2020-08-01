@@ -15,12 +15,9 @@ g_keyCodeNames[82] = "R";
 
 // !!! backspace for menu navigation?
 // !!! does overlay ever have to be resized?
-// !!! scroll wheel for editor
 // >:< change toggle functions to display/hide functions
 // !!! grouping all of overlay here may have been a mistake... 
 	// Having the editor overlay included in Editor class would allow game and overlay elements to synchronize more easily
-// TODO overlay editor modifies game object directly... should happen through event propagator? 
-	// root problem: How is it ensured that editor overlay is never active while the editor is inactive and the game is running?
 export function Overlay(songData, eventPropagator, controlsMap){
 	this.overlayDiv;
 	this.score;
@@ -37,6 +34,7 @@ export function Overlay(songData, eventPropagator, controlsMap){
 	overlayDiv.style.position = "absolute";
 	overlayDiv.style.left = "0";
 	overlayDiv.style.top = "0";
+	overlayDiv.style.fontFamily = "Arial"
 	
 	overlayDiv.appendChild(score.domElement());
 	overlayDiv.appendChild(menu.domElement());
@@ -97,11 +95,25 @@ function EditorGuidingLines(songData, eventPropagator){
 		eventPropagator.runOnGame(fn);
 	}
 	
+	this.onwheel = evt => {
+		let time;
+		let getTime = game => {
+			return game.songData().songTime;
+		}
+		let updateTime = game => {
+			game.seek(time);
+		}
+		
+		time = eventPropagator.runOnGame(getTime);
+		time += evt.deltaY / 16;
+		eventPropagator.runOnGame(updateTime, true);
+	}
+	
 	this.canvas.addEventListener("click", this.onclick);
+	this.canvas.addEventListener("wheel", this.onwheel);
 	
 }
 
-// !!! can move even when song is playing
 function EditorControls(songData, eventPropagator){
 	this.div;
 	this.rangesDiv;
@@ -112,7 +124,7 @@ function EditorControls(songData, eventPropagator){
 	this.songDuration;
 	this.beatInterval;
 	
-	this.songDuration = songData.songDuration;
+	this.songDuration = songData.duration;
 	this.beatInterval = songData.beatInterval;
 	
 	this.div = document.createElement("div");
@@ -261,6 +273,10 @@ function Menu(eventPropagator, controlsMap){
 	}, "Load song");
 	
 	this.saveLoadMenu.addSelection(() => {
+		alert("Not yet implemented"); // >:< 
+	}, "New song");
+	
+	this.saveLoadMenu.addSelection(() => {
 		alert("Not yet implemented"); // >:< this and Load database button
 	}, "Load mp3");
 	
@@ -381,6 +397,7 @@ function MenuSelection(onSelect, selectionText, parentPanelDiv){
 	this.div = document.createElement("div");
 	this.div.style.width = "100%";
 	this.div.style.height = "20%";
+	this.div.style.marginBottom = "2px";
 	
 	this.selectionText = document.createElement("p");
 	this.selectionText.innerHTML = selectionText;
@@ -622,7 +639,8 @@ function changeControlDialog(callback){
 // >:< Dialog class / universal createDialog function?
 function saveSongDialog(eventPropagator){
 	let div = document.createElement("div");
-	let submitButton = document.createElement("button");
+	let saveButton = document.createElement("button");
+	let overwriteButton = document.createElement("button");
 	let nameLabel = document.createElement("label");
 	let nameField = document.createElement("input");
 	let artistLabel = document.createElement("label");
@@ -635,6 +653,7 @@ function saveSongDialog(eventPropagator){
 	let brickSpeedField = document.createElement("input");
 	let durationLabel = document.createElement("label");
 	let durationField = document.createElement("input");
+	let newLine = () => { return document.createElement("br"); }
 	
 	div.style.position = "absolute";
 	div.style.top = "10px";
@@ -650,34 +669,55 @@ function saveSongDialog(eventPropagator){
 	brickSpeedLabel.innerHTML = "Brick Speed";
 	durationLabel.innerHTML = "Song Duration";
 	
-	nameField.type = "text";
-	artistField.type = "text";
-	difficultyField.type = "text";
-	bpmField.type = "text";
-	brickSpeedField.type = "text";
-	durationField.type = "text";
+	let songData = eventPropagator.runOnGame(game => {
+		return game.songData();
+	});
 	
-	submitButton.innerHTML = "Save";
+	nameField.type = "text";
+	nameField.value = songData.name;
+	artistField.type = "text";
+	artistField.value = songData.artist;
+	difficultyField.type = "text";
+	difficultyField.value = songData.difficulty;
+	bpmField.type = "text";
+	bpmField.value = songData.bpm;
+	brickSpeedField.type = "text";
+	brickSpeedField.value = songData.brickSpeed;
+	durationField.type = "text";
+	durationField.value = songData.duration;
+	
+	saveButton.innerHTML = "Save";
+	overwriteButton.innerHTML = "Overwrite";
 	
 	div.appendChild(nameLabel);
 	div.appendChild(nameField);
+	div.appendChild(newLine());
 	div.appendChild(artistLabel);
 	div.appendChild(artistField);
+	div.appendChild(newLine());
 	div.appendChild(difficultyLabel);
 	div.appendChild(difficultyField);
+	div.appendChild(newLine());
 	div.appendChild(bpmLabel);
 	div.appendChild(bpmField);
+	div.appendChild(newLine());
 	div.appendChild(brickSpeedLabel);
 	div.appendChild(brickSpeedField);
+	div.appendChild(newLine());
 	div.appendChild(durationLabel);
 	div.appendChild(durationField);
-	div.appendChild(submitButton);
+	div.appendChild(newLine());
+	div.appendChild(saveButton);
+	div.appendChild(overwriteButton);
 	
 	document.body.appendChild(div);
 	
-	let onsubmit = () => {
+	let onsubmit = evt => {
 		document.removeEventListener("keydown", onkeydown);
-		submitButton.removeEventListener("click", onsubmit);
+		saveButton.removeEventListener("click", onsubmit);
+		overwriteButton.removeEventListener("click", onsubmit);
+		
+		let overwrite = (evt.target == overwriteButton) ? true : false;
 		
 		let songData = {
 			name: nameField.value,
@@ -689,7 +729,7 @@ function saveSongDialog(eventPropagator){
 		}
 		
 		let fn = game => {
-			game.saveSong(songData);
+			game.saveSong(songData, overwrite);
 		}
 		eventPropagator.runOnGame(fn);
 		
@@ -698,13 +738,15 @@ function saveSongDialog(eventPropagator){
 	let onkeydown = evt => {
 		if(evt.keyCode == 27){
 			document.removeEventListener("keydown", onkeydown);
-			submitButton.removeEventListener("click", onsubmit);
+			saveButton.removeEventListener("click", onsubmit);
+			overwriteButton.removeEventListener("click", onsubmit);
 			
 			div.remove();
 		}
 	}
 	
-	submitButton.addEventListener("click", onsubmit);
+	saveButton.addEventListener("click", onsubmit);
+	overwriteButton.addEventListener("click", onsubmit);
 	document.addEventListener("keydown", onkeydown);
 }
 
