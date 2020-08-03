@@ -13,11 +13,13 @@ g_keyCodeNames[87] = "W";
 g_keyCodeNames[69] = "E";
 g_keyCodeNames[82] = "R";
 
+// >:< change toggle functions to display/hide functions
 // !!! backspace for menu navigation?
 // !!! does overlay ever have to be resized?
-// >:< change toggle functions to display/hide functions
-// !!! grouping all of overlay here may have been a mistake... 
-	// Having the editor overlay included in Editor class would allow game and overlay elements to synchronize more easily
+// TODO having the editor overlay included in game.js Editor class might make more sense
+	// would allow game and overlay elements to synchronize more easily
+// !!! enable/disable editor compatibility
+// TODO space for playing/pausing editor?
 export function Overlay(songData, eventPropagator, controlsMap){
 	this.overlayDiv;
 	this.score;
@@ -121,6 +123,7 @@ function EditorControls(songData, eventPropagator){
 	this.broadRange;
 	this.preciseRange;
 	this.playPauseButton;
+	this.enableTicksButton;
 	this.songDuration;
 	this.beatInterval;
 	
@@ -163,6 +166,8 @@ function EditorControls(songData, eventPropagator){
 	
 	this.playPauseButton = document.createElement("button");
 	this.playPauseButton.innerHTML = "|> / ||";
+	this.enableTicksButton = document.createElement("button");
+	this.enableTicksButton.innerHTML = "Ticking";
 	
 	this.rangesDiv.addEventListener("input", evt => {
         let t = parseFloat(this.broadRange.value) / 100 * this.songDuration 
@@ -179,9 +184,16 @@ function EditorControls(songData, eventPropagator){
 		eventPropagator.togglePlay();
 	});
 	
+	this.enableTicksButton.addEventListener("click", evt => {
+		eventPropagator.runOnGame( game => {
+			game.toggleTickingSound();
+		});
+	});
+	
 	this.rangesDiv.appendChild(this.preciseRange);
 	this.rangesDiv.appendChild(this.broadRange);
 	this.buttonDiv.appendChild(this.playPauseButton);
+	this.buttonDiv.appendChild(this.enableTicksButton);
 	this.div.appendChild(this.rangesDiv);
 	this.div.appendChild(this.buttonDiv);
 }
@@ -250,7 +262,7 @@ function Menu(eventPropagator, controlsMap){
 	}, "Quit song");
 	
 	this.mainMenu.addSelection(() => {
-		eventPropagator.enableEditor();
+		eventPropagator.enableEditor(); // !!! await?
 	}, "Enable Editor");
 	
 	this.mainMenu.addSelection(() => {
@@ -453,7 +465,7 @@ EditorGuidingLines.prototype.domElement = function(){
 
 // TODO faster if the canvas stays the same and is just repositioned on time changes. 
 	// However, if the game height is not the full screen height, lines would show outside the game's boundaries
-	// !!! range scroller isn't modified when the song is modified
+	// >:< range scroller isn't modified when the song is modified
 EditorGuidingLines.prototype.updateSongData = function(songData){
 	let time = songData.songTime;
 	let beatInterval = songData.beatInterval;

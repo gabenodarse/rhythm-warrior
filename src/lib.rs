@@ -50,6 +50,7 @@ mod objects;
 mod game {
 	use crate::*;
 	use std::collections::VecDeque;
+	use std::collections::vec_deque;
 	use objects::Object; // needed to use member's methods that are implemented as a part of trait Object
 	use objects::Brick;
 	use objects::BrickType;
@@ -189,40 +190,7 @@ mod game {
 			// retrieve necessary data from the next bricks to hit: 
 				// the time of the upcoming bricks, the leftmost x of those bricks and the rightmost x
 			let mut bricks_iter = self.bricks.iter();
-			let mut upcoming_bricks_data = None;
-	
-			while let Some(brick) = bricks_iter.next() {
-				if brick.time() > self.time_running {
-					let bricks_time = brick.time();
-					let mut bricks_leftmost_x = brick.bounds().left_x;
-					let mut bricks_rightmost_x = brick.bounds().right_x;
-					while let Some(brick) = bricks_iter.next() {
-						if brick.time() - bricks_time > F32_ZERO {
-							break;
-						}
-						else if brick.bounds().left_x < bricks_leftmost_x {
-							bricks_leftmost_x = brick.bounds().left_x;
-						}
-						// should be mutually exclusive from other else if statement
-						else if brick.bounds().right_x > bricks_rightmost_x { 
-							bricks_rightmost_x = brick.bounds().right_x;
-						}
-					}
-					
-					upcoming_bricks_data = Some( (bricks_time, bricks_leftmost_x, bricks_rightmost_x) );
-					break;
-				}
-			}
-			
-			// tick player
-			match upcoming_bricks_data {
-				Some( (u_time, u_leftmost_x, u_rightmost_x) ) => {
-					self.player.tick(seconds_passed, u_time - self.time_running, u_leftmost_x, u_rightmost_x);
-				}
-				None => {
-					self.player.tick(seconds_passed, 99999.9, 0.0, 0.0);
-				}
-			}
+			self.player.tick(seconds_passed, bricks_iter, self.time_running);
 			
 			// tick bricks while discarding any bricks off screen 
 			// TODO might not need to check on screen for all notes
@@ -409,12 +377,8 @@ mod game {
 				Input::Dash => {
 					self.player.dash(t_since_tick);
 				}
-				Input::Left => {
-					self.player.move_left();
-				}
-				Input::Right => {
-					self.player.move_right();
-				}
+				Input::Left => (),
+				Input::Right => (),
 				Input::Ability1 => {
 					self.player.slash(BrickType::Type1, t_since_tick);
 				}
@@ -434,12 +398,8 @@ mod game {
 				Input::Dash => {
 					return;
 				}
-				Input::Left => {
-					self.player.stop_left();
-				}
-				Input::Right => {
-					self.player.stop_right();
-				}
+				Input::Left => (),
+				Input::Right => (),
 				Input::Ability1 => {}
 				Input::Ability2 => {}
 				Input::Ability3 => {}

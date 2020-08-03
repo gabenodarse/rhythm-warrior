@@ -14,7 +14,7 @@ export function Game () {
 	this.screenDiv;
 	this.lastTick;
 	this.gameData;
-	this.graphics; // !!! can be either canvases or webGL. Add way to choose between them.
+	this.graphics; // !!! can be either canvases or webGL. Asdd way to choose between them.
 	this.database;
 	this.song;
 	this.isLoaded = false;
@@ -83,6 +83,17 @@ Game.prototype.load = async function () {
 	this.loadSong(6);
 	
 	this.isLoaded = true;
+}
+
+Game.prototype.toEditor = async function(){
+	if(!(this instanceof Editor)){
+		// !!! make broken notes reappear
+		Object.setPrototypeOf(this, Editor.prototype);
+		Editor.call(this);
+	}
+	
+	await this.load();
+	return this;
 }
 
 Game.prototype.resize = function(){
@@ -247,31 +258,91 @@ Game.prototype.saveSong = function(songData, overwrite){
 	}
 }
 
-Game.prototype.toEditor = function(){
-	if(this.isLoaded == false) {
-		throw Error("game object has not been loaded");
-	}
-	if(this instanceof Editor){
-		return this;
-	}
-	
-	// !!! make broken notes reappear
-	Object.setPrototypeOf(this, Editor.prototype);
-	
-	return this;
-}
-
 export function Editor () {
-	Game.call(this);
+	this.editorLoaded;
+	this.notes;
+	this.notesIdx;
 	
-	this.onScreenClick;
+	this.playTickingSound = false;
+	this.tickAudioContext;
+	this.tickAudioBuffer;
+	this.tickAudioSource;
+	
+	if(!(this instanceof Game)){
+		Game.call(this);
+	}
+	
+	this.editorLoaded = false;
+	this.tickAudioContext = new AudioContext();
 }
 
 Object.setPrototypeOf(Editor.prototype, Game.prototype);
 
+Editor.prototype.load = async function(){
+	if(!this.isLoaded){
+		await Game.prototype.load.call(this);
+	}
+	if(this.editorLoaded){
+		return;
+	}
+	
+	let json = JSON.parse(this.gameData.song_notes_json());
+	this.notes = [];
+	this.notesIdx = 0;
+	json.forEach( note => {
+		this.notes.push(note.time);
+	});
+	
+	await fetch("tick.wav")
+		.then(res => res.arrayBuffer())
+		.then(res => this.tickAudioContext.decodeAudioData(res))
+		.then(res => { 
+			this.tickAudioBuffer = res; 
+			this.tickAudioSource = this.tickAudioContext.createBufferSource(); 
+			this.tickAudioSource.buffer = this.tickAudioBuffer;
+			this.tickAudioSource.connect(this.tickAudioContext.destination);
+		}
+	);
+	
+	this.editorLoaded = true;
+}
+
+Editor.prototype.tick = function(){
+	Game.prototype.tick.call(this);
+	
+	
+	let notePassed = false;
+	while(this.notes[this.notesIdx] < this.gameData.song_time()){
+		++this.notesIdx;
+		notePassed = true;
+	}
+	if(this.playTickingSound === true && notePassed){
+		this.tickAudioSource.start();
+		this.tickAudioSource = this.tickAudioContext.createBufferSource(); 
+		this.tickAudioSource.buffer = this.tickAudioBuffer;
+		this.tickAudioSource.connect(this.tickAudioContext.destination);
+	}
+}
+
+Editor.prototype.toggleTickingSound = function(){
+	if(this.playTickingSound === true){
+		this.playTickingSound = false;
+	}
+	else{
+		this.playTickingSound = true;
+	}
+}
+
 Editor.prototype.seek = function(time){
 	this.gameData.seek(time);
 	this.renderGame();
+	
+	this.notesIdx = 0;
+	for(let i = 0; i < this.notes.length; ++i){
+		if(time > this.notes[i]){
+			this.notesIdx = i;
+		}
+	}
 }
 
 Editor.prototype.createNote = function(x, y){
@@ -292,6 +363,17 @@ Editor.prototype.createNote = function(x, y){
 	// TODO, more robust way would be to add the note to on screen notes in toggle_brick, then just rerender with renderGame()
 	this.seek(t); 
 	
+	// TODO only add/remove new/removed notes, don't reload whole song
+	let json = JSON.parse(this.gameData.song_notes_json());
+	let songTime = this.gameData.song_time();
+	this.notes = [];
+	this.notesIdx = 0;
+	json.forEach( note => {
+		this.notes.push(note.time);
+		if(songTime > note.time){
+			++this.notesIdx;
+		}
+	});
 }
 
 Editor.prototype.toGame = function(){
@@ -299,8 +381,6 @@ Editor.prototype.toGame = function(){
 		throw Error("game object has not been loaded");
 	}
 	
-	this.screenDiv.removeEventListener("click", this.onScreenClick);
-	this.onScreenClick = undefined;
 	// !!! rethink the relationship between editor and game. Seems flimsy to switch to game while retaining all game data.
 		// Clear hack right now, switch to editor and back to rewind song
 	Object.setPrototypeOf(this, Game.prototype);

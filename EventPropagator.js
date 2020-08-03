@@ -48,6 +48,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	
 	this.handleKeyDown = evt => {
 		// TODO faster handling of repeated key inputs from holding down a key?
+		evt.preventDefault(); // only explicit events handlers are run
 		if (evt.keyCode === 27){
 			this.overlay.toggleElement("menu");
 			
@@ -90,7 +91,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	
 	window.addEventListener("keydown", this.handleKeyDown);
 	window.addEventListener("keyup", this.handleKeyUp);
-	window.addEventListener("resize", this.resize); 
+	window.addEventListener("resize", this.resize);
 }
 
 EventPropagator.prototype.togglePlay = function(){
@@ -119,16 +120,15 @@ EventPropagator.prototype.pause = function(){
 	this.game.pause();
 }
 
-EventPropagator.prototype.enableEditor = function(){
+EventPropagator.prototype.enableEditor = async function(){
 	this.overlay.toggleElement("editorOverlay");
 	this.overlay.toggleElement("score");
-	this.game = this.game.toEditor();
+	this.game = await this.game.toEditor();
 	this.loop = this.editorLoop;
 	this.overlay.updateSongData(this.game.songData());
 }
 // !!! make screwing with game through UI impossible. Through hacking IDC. 
 	// Distinction from game and editor (going to game from editor starts at 0?)
-// >:< pausing game with esc, enabling editor, playing then pausing, then disabling editor resumes the game
 EventPropagator.prototype.disableEditor = function(){
 	this.overlay.toggleElement("editorOverlay");
 	this.overlay.toggleElement("score");

@@ -4,6 +4,7 @@
 
 use std::cmp::Ordering;
 use wasm_bindgen::prelude::*;
+use std::collections::vec_deque;
 
 use crate::GraphicGroup;
 use crate::PositionedGraphic;
@@ -38,7 +39,7 @@ pub struct ObjectBounds {
 	pub bottom_y: f32
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Direction {
 	Left,
 	Right,
@@ -47,15 +48,12 @@ pub enum Direction {
 pub struct Player {
 	graphic: GraphicGroup,
 	
-	dash_time: f32,
-	
 	bounds: ObjectBounds,
 	dx: f32, // in pixels per second
 	
 	slash: Option<Slash>,
 	dash: Option<Dash>,
-	moving_left: bool,
-	moving_right: bool,
+	dash_dir: Direction,
 	face_dir: Direction,
 }
 
@@ -119,7 +117,6 @@ impl Player {
 	pub fn new(x: f32) -> Player {
 		Player {
 			graphic: GraphicGroup::Player,
-			dash_time: 0.01,
 			bounds: ObjectBounds {
 				left_x: x,
 				top_y: GROUND_POS as f32 - PLAYER_HEIGHT as f32,
@@ -130,8 +127,7 @@ impl Player {
 			dx: 0.0,
 			slash: None,
 			dash: None,
-			moving_left: false,
-			moving_right: false,
+			dash_dir: Direction::Right,
 			face_dir: Direction::Right,
 		}
 	}
@@ -155,26 +151,6 @@ impl Player {
 			else {
 				self.dash = Some(Dash::new( self.bounds.left_x, self.bounds.top_y, t_since_tick, self.face_dir)); }}
 	}
-	pub fn move_left (&mut self) {
-		self.moving_left = true;
-		self.face_dir = Direction::Left;
-	}
-	pub fn move_right (&mut self) {
-		self.moving_right = true;
-		self.face_dir = Direction::Right;
-	}
-	pub fn stop_left (&mut self) {
-		self.moving_left = false;
-		if self.moving_right {
-			self.face_dir = Direction::Right;
-		}
-	}
-	pub fn stop_right (&mut self) {
-		self.moving_right = false;
-		if self.moving_left {
-			self.face_dir = Direction::Left;
-		}
-	}
 	
 	pub fn face_direction(&self) -> &Direction {
 		&self.face_dir
@@ -189,8 +165,7 @@ impl Player {
 	}
 	
 	// tick the players state, taking into account input commands
-	pub fn tick(&mut self, seconds_passed: f32, upcoming_bricks_time_until: f32, 
-	upcoming_bricks_leftmost_x: f32, upcoming_bricks_rightmost_x: f32) {
+	pub fn tick(&mut self, seconds_passed: f32, bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
 		
 		// TODO move a new slash unconditionally to player's position, so its position is set when it actually appears?
 		// Tick slash. If it's new check if the dash is also new, in which case they link
@@ -203,7 +178,7 @@ impl Player {
 				match (slash.state(), dash.state()) {
 					(TempObjectState::New(slash_t), TempObjectState::New(dash_t)) => {
 						// in case a movement input was immediately after 1 or both inputs
-						let direction = self.face_dir;
+						let direction = self.dash_dir;
 						// position slash to the end of the dash
 						slash.link_dash_slash(dash.bounds.left_x, direction, *dash_t);
 							
@@ -227,10 +202,14 @@ impl Player {
 		// tick dash and/or move
 		if let Some(dash) = &mut self.dash {
 			match dash.state() {
-				TempObjectState::Lingering(t) if *t < 0.0 => {
-					self.dash = None;
-					self.regular_move(seconds_passed, upcoming_bricks_time_until, 
-						upcoming_bricks_leftmost_x, upcoming_bricks_rightmost_x);
+				TempObjectState::Lingering(t) => {
+					if *t < 0.0 {
+						self.dash = None;
+					}
+					else {
+						dash.tick(seconds_passed);
+						self.regular_move(seconds_passed, bricks_iter, time_running);
+					}
 				},
 				_ => {
 					dash.tick(seconds_passed);
@@ -247,117 +226,219 @@ impl Player {
 			}
 		}
 		else {
-			self.regular_move(seconds_passed, upcoming_bricks_time_until, 
-				upcoming_bricks_leftmost_x, upcoming_bricks_rightmost_x);
+			self.regular_move(seconds_passed, bricks_iter, time_running);
 		}
 	}
 	
-	fn regular_move(&mut self, seconds_passed: f32, upcoming_bricks_time_until: f32, 
-	upcoming_bricks_leftmost_x: f32, upcoming_bricks_rightmost_x: f32) {
-		const MAX_PLAYER_SPEED: f32 = 400.0;
+	fn regular_move(&mut self, seconds_passed: f32, mut bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
+		const MAX_PLAYER_SPEED: f32 = 440.0;
+		const MID_PLAYER_SPEED: f32 = 300.0;
 		const MIN_PLAYER_SPEED: f32 = 100.0;
 		
-		let mut target_speed; // absolute value of velocity dx needed to reach the brick in time to hit it
-		let same_direction; // whether player has a dx in the same direction as the target direction
-		let current_speed; // absolute value of current dx
-		
-		// calculate target speed
-		// !!! calculate target speed based on integral of current speed from now until upcoming brick, and use this better
-			// target speed to command a finer grainer / better feeling acceleration
+		// get data on upcoming bricks
 		// TODO positions/times of upcoming bricks aren't changing as often as every tick
 			// ever worth it to store some information/calculations in between ticks for the many instances they don't change?
-		if self.moving_right ^ self.moving_left {
-			// the order of the direction check in both directions is important due to how acceleration is handled for a self.dx == 0
-				// this can be made less flimsy by adding a single extra calculation check for self.dx == 0.0
-				// in which same_direction is false when moving left and true when moving right
-			// if the distance needed is sufficiently far, specify a target speed to overshoot the distance, so that player
-				// will go faster than strictly necessary to reach brick, and then slow down once approaching the brick
-			let mut distance_away;
-			if self.moving_left {
-				if upcoming_bricks_rightmost_x < self.bounds.left_x {
-					distance_away = (self.bounds.left_x - upcoming_bricks_rightmost_x);
-				} else { // else get to the left of the leftmost brick
-					distance_away = (self.bounds.right_x - upcoming_bricks_leftmost_x);
+		let mut upcoming_bricks_data = None;
+		// this is the time threshold before which the player will go after a note
+		// !!! smarter buffer determination + dash/slash (dash_dir) that goes after a brick if it's still hittable
+		let time_with_buffer = time_running - 0.06; 
+		while let Some(brick) = bricks_iter.next() {
+			if brick.time() > time_with_buffer {
+				let bricks_time = brick.time();
+				let mut bricks_leftmost_x = brick.bounds().left_x;
+				let mut bricks_rightmost_x = brick.bounds().right_x;
+				while let Some(brick) = bricks_iter.next() {
+					if brick.time() - bricks_time > F32_ZERO {
+						break;
+					}
+					else if brick.bounds().left_x < bricks_leftmost_x {
+						bricks_leftmost_x = brick.bounds().left_x;
+					}
+					// should be mutually exclusive from other else if statement
+					else if brick.bounds().right_x > bricks_rightmost_x { 
+						bricks_rightmost_x = brick.bounds().right_x;
+					}
 				}
 				
-				if self.dx < 0.0 { 
-					same_direction = true;
-					current_speed = -self.dx;
-					if distance_away > DASH_WIDTH as f32 { 
-						distance_away += PLAYER_WIDTH as f32;
-					}
-				} else { 
-					same_direction = false;
-					current_speed = self.dx;
-					distance_away += PLAYER_WIDTH as f32;
-				}
+				upcoming_bricks_data = Some( (bricks_time, bricks_leftmost_x, bricks_rightmost_x) );
+				break;
 			}
-			else {
-				if upcoming_bricks_leftmost_x > self.bounds.right_x {
-					distance_away = (upcoming_bricks_leftmost_x - self.bounds.right_x);
-				} else { // else get to the right of the rightmost brick
-					distance_away = (upcoming_bricks_rightmost_x - self.bounds.left_x);
-				}
-				
-				if self.dx < 0.0 { 
-					same_direction = false;
-					current_speed = -self.dx;
-					distance_away += PLAYER_WIDTH as f32;
-				} else { 
-					same_direction = true;
-					current_speed = self.dx;
-					if distance_away > DASH_WIDTH as f32 { 
-						distance_away += PLAYER_WIDTH as f32;
-					}
-				};
-			}
-			
-			target_speed = distance_away / upcoming_bricks_time_until;
-			if target_speed > MAX_PLAYER_SPEED {
-				target_speed = MAX_PLAYER_SPEED;
-				// TODO go slightly over max speed depending on how far away brick is?
-			} else if target_speed < MIN_PLAYER_SPEED {
-				target_speed = MIN_PLAYER_SPEED;
-			}
-		}
-		else {
-			target_speed = 0.0;
-			same_direction = true;
-			if self.dx > 0.0 { 
-				current_speed = self.dx;
-			} else {
-				current_speed = -self.dx;
-			};
 		}
 		
-		// accelerate/decelerate
-		if target_speed - current_speed > F32_ZERO || current_speed - target_speed > F32_ZERO || !same_direction {
-			let speeding_up = if (target_speed > current_speed) && same_direction { true } else { false };
-			let mut new_speed;
-			if current_speed < MIN_PLAYER_SPEED {
-				if speeding_up {
-					new_speed = current_speed + (800.0 * seconds_passed);
-				} else {
-					new_speed = current_speed - (1600.0 * seconds_passed);
-				}
-			}
-			else {
-				if speeding_up {
-					new_speed = current_speed + (600.0 * seconds_passed);
-				} else {
-					new_speed = current_speed - (1200.0 * seconds_passed);
-				}
-			}
-			if speeding_up {
-				if new_speed > target_speed {
-					new_speed = target_speed;
-				}
-			} else if same_direction && new_speed < target_speed {
-				new_speed = target_speed;
-			}
-			
-			self.dx = if self.dx < 0.0 { -new_speed} else { new_speed }
+		enum MovementType{
+			Stopping,
+			Turning,
+			Running(f32), // specifies target speed (what speed is desired)
 		}
+		let movement: MovementType;
+		let target_direction: Direction;
+		let current_speed: f32; // absolute value of current dx
+		let current_direction: Option<Direction>;
+		let upcoming_bricks_time_until: Option<f32>;
+		
+		// get current speed and direction
+		if self.dx < -F32_ZERO { 
+			current_speed = -self.dx;
+			current_direction = Some(Direction::Left);
+		} else if self.dx > F32_ZERO { 
+			current_speed = self.dx;
+			current_direction = Some(Direction::Right);
+		} else {
+			current_speed = self.dx;
+			current_direction = None;
+		}
+		
+		// get movement type and target direction
+		match upcoming_bricks_data {
+			None => {
+				movement = MovementType::Stopping;
+				target_direction = Direction::Right;
+				upcoming_bricks_time_until = None;
+			}
+			Some(brick_data) => {
+				upcoming_bricks_time_until = Some(brick_data.0 - time_running);
+				let upcoming_bricks_time_until = upcoming_bricks_time_until.unwrap();
+				let upcoming_bricks_leftmost_x = brick_data.1;
+				let upcoming_bricks_rightmost_x = brick_data.2;
+				
+				let mut distance_left = self.bounds.left_x - upcoming_bricks_rightmost_x;
+				let mut distance_right = upcoming_bricks_leftmost_x - self.bounds.right_x;
+				let mut distance_away;
+				const separation_space: f32 = 8.0;
+				
+				if distance_left > 0.0 {
+					target_direction = Direction::Left;
+					distance_away = distance_left - separation_space;
+					self.dash_dir = Direction::Left;
+				} else if distance_right > 0.0 {
+					target_direction = Direction::Right;
+					distance_away = distance_right - separation_space;
+					self.dash_dir = Direction::Right;
+				} 
+				else if distance_left > distance_right {
+					target_direction = Direction::Right;
+					distance_away = -distance_left + separation_space;
+					if distance_away < BRICK_WIDTH as f32 {
+						self.dash_dir = Direction::Left;
+					} else {
+						self.dash_dir = Direction::Right;
+					}
+				} else {
+					target_direction = Direction::Left;
+					distance_away = -distance_right + separation_space;
+					if distance_away < BRICK_WIDTH as f32 {
+						self.dash_dir = Direction::Right;
+					} else {
+						self.dash_dir = Direction::Left;
+					}
+				}
+				
+				let same_direction = if let Some(direction) = current_direction {
+					direction == target_direction
+				} else {
+					true
+				};
+				
+				if !same_direction {
+					movement = MovementType::Turning;
+				} else if distance_away < DASH_WIDTH as f32 {
+					if current_speed * upcoming_bricks_time_until > distance_away {
+						movement = MovementType::Stopping;
+					}
+					else {
+						movement = MovementType::Running(distance_away / upcoming_bricks_time_until);
+					}
+				} else {
+					// overshoot the distance, so that player will go faster than strictly necessary to reach brick, 
+						// and then slow down once approaching the brick
+					let mut target_speed = distance_away * 1.2 / upcoming_bricks_time_until;
+					target_speed = 
+						if target_speed > MAX_PLAYER_SPEED { 
+							MAX_PLAYER_SPEED
+						} else if target_speed < MIN_PLAYER_SPEED {
+							MIN_PLAYER_SPEED
+						} else {
+							target_speed
+						};
+					movement = MovementType::Running(target_speed);
+				}
+			}
+		}
+		
+		// accelerate/decelerate at a rate depending on how fast the player is currently moving
+		let mut new_speed;
+		if current_speed < MIN_PLAYER_SPEED {
+			match movement {
+				MovementType::Stopping | MovementType::Turning => {
+					new_speed = current_speed - (3000.0 * seconds_passed);
+					if new_speed < 0.0 { new_speed = 0.0 };
+				}
+				MovementType::Running(target_speed) => {
+					let speed_difference = target_speed - current_speed;
+					let mut acceleration = speed_difference * 3.0 / upcoming_bricks_time_until.unwrap();
+					if acceleration > 1600.0 {
+						acceleration = 1600.0;
+					}
+					new_speed = current_speed + (acceleration * seconds_passed);
+					if (new_speed - current_speed) / speed_difference > 1.0 {
+						new_speed = target_speed;
+					}
+				}
+			}
+		} else if current_speed < MID_PLAYER_SPEED {
+			match movement {
+				MovementType::Stopping | MovementType::Turning => {
+					new_speed = current_speed - (2200.0 * seconds_passed);
+				}
+				MovementType::Running(target_speed) => {
+					let speed_difference = target_speed - current_speed;
+					let mut acceleration = speed_difference * 3.0 / upcoming_bricks_time_until.unwrap();
+					if acceleration > 1200.0 {
+						acceleration = 1200.0;
+					}
+					new_speed = current_speed + (acceleration * seconds_passed);
+					if (new_speed - current_speed) / speed_difference > 1.0 {
+						new_speed = target_speed;
+					}
+				}
+			}
+		} else {
+			match movement {
+				MovementType::Stopping | MovementType::Turning => {
+					new_speed = current_speed - (2200.0 * seconds_passed);
+				}
+				MovementType::Running(target_speed) => {
+					let speed_difference = target_speed - current_speed;
+					let mut acceleration = speed_difference * 3.0 / upcoming_bricks_time_until.unwrap();
+					if acceleration > 800.0 {
+						acceleration = 800.0;
+					}
+					new_speed = current_speed + (acceleration * seconds_passed);
+					if (new_speed - current_speed) / speed_difference > 1.0 {
+						new_speed = target_speed;
+					}
+				}
+			}
+		}
+		
+		// set dx to the new speed in the correct direction
+		if let Some(direction) = current_direction { 
+			self.dx = match direction {
+				Direction::Left => -new_speed,
+				Direction::Right => new_speed
+			}
+		} else {
+			match target_direction {
+				Direction::Left => {
+					self.dx = -new_speed;
+					self.face_dir = Direction::Left;
+				},
+				Direction::Right => {
+					self.dx = new_speed;
+					self.face_dir = Direction::Right;
+				}
+			}
+		};
 		
 		// calculate resulting position, while checking to not go past any boundaries
 		self.bounds.left_x += self.dx * seconds_passed;
@@ -550,7 +631,7 @@ impl Slash {
 					self.state = TempObjectState::Active( effective_slash_t );
 				}
 			},
-			TempObjectState::Active(t) => self.state = TempObjectState::Lingering(0.1 + *t - seconds_passed),
+			TempObjectState::Active(t) => self.state = TempObjectState::Lingering(0.06 + *t - seconds_passed),
 			TempObjectState::Lingering(t) => self.state = TempObjectState::Lingering(*t - seconds_passed)
 		}
 	}
