@@ -1,5 +1,6 @@
 
 import * as wasm from "./pkg/music_mercenary.js";
+import {wasmMemory} from "./index.js";
 
 // !!!
 // patiently awaiting webGPU. Hopefully better than webGL
@@ -49,17 +50,28 @@ CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
 	});
 	
 	// move and make canvases visible
-	instructions.forEach( instruction => {
-		let graphicIdx = instruction.g;
+	let end = instructions.num_graphics * 3;
+	let i32buf = new Int32Array(wasmMemory().buffer, instructions.graphics_ptr, end);
+	let u8buf = new Uint8Array(wasmMemory().buffer, instructions.graphics_ptr, end*4);
+	let i = 0;
+	while(i < end){
+		let x = i32buf[i];
+		++i;
+		let y = i32buf[i];
+		++i;
+		let graphicIdx = u8buf[i*4];
+		let graphicSubID = u8buf[i*4 + 1];
+		++i;
+		
 		let canvasGroup = this.canvases[graphicIdx];
 		let idx = canvasGroup.nextCanvasIdx;
 		
 		canvasGroup.canvases[idx].style.visibility = "visible";
-		canvasGroup.canvases[idx].style.left = instruction.x * xFactor + "px";
-		canvasGroup.canvases[idx].style.top = instruction.y * yFactor + "px";
+		canvasGroup.canvases[idx].style.left = x * xFactor + "px";
+		canvasGroup.canvases[idx].style.top = y * yFactor + "px";
 		
 		++canvasGroup.nextCanvasIdx;
-	});
+	}
 }
 
 CanvasGraphics.prototype.resize = function(xFactor, yFactor){
@@ -182,14 +194,25 @@ WebGLGraphics.prototype.render = function(instructions, xFactor, yFactor){
 	gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 	let positions = new Float32Array(12);
 	
-	instructions.forEach( instruction => {
-		let graphicIdx = instruction.g;
+	// move and make canvases visible
+	let end = instructions.num_graphics * 3;
+	let i32buf = new Int32Array(wasmMemory().buffer, instructions.graphics_ptr, end);
+	let u8buf = new Uint8Array(wasmMemory().buffer, instructions.graphics_ptr, end*4);
+	let i = 0;
+	while(i < end){
+		let x = i32buf[i];
+		++i;
+		let y = i32buf[i];
+		++i;
+		let graphicIdx = u8buf[i*4];
+		let graphicSubID = u8buf[i*4 + 1];
+		++i;
 		
 		let sizedTexture = textures[graphicIdx];
 		
 		gl.bindTexture(gl.TEXTURE_2D, sizedTexture.texture);
-		let startX = instruction.x * xFactor / this.canvas.width * 2.0 - 1.0;
-		let startY = -(instruction.y * yFactor / this.canvas.height * 2.0 - 1.0);
+		let startX = x * xFactor / this.canvas.width * 2.0 - 1.0;
+		let startY = -(y * yFactor / this.canvas.height * 2.0 - 1.0);
 		let endX = startX + sizedTexture.width * xFactor / this.canvas.width * 2.0;
 		let endY = startY - sizedTexture.height * yFactor / this.canvas.height * 2.0;
 		positions[0] = startX; positions[1] = startY;
@@ -201,7 +224,7 @@ WebGLGraphics.prototype.render = function(instructions, xFactor, yFactor){
 		gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
 		
 		gl.drawArrays(gl.TRIANGLES, 0, pointCount);
-	});
+	}
 }
 
 vertexShader = `

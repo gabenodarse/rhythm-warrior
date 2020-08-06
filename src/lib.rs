@@ -155,6 +155,7 @@ mod game {
 		// !!! create a song type to hold song notes and meta data
 		song: Song, 
 		upcoming_note: Option<UpcomingNote>,
+		graphics: Vec<PositionedGraphic>,
 		bricks_broken: u8
 	}
 	#[wasm_bindgen]
@@ -173,6 +174,7 @@ mod game {
 					thresholds: TimingThresholds::from_brick_speed(brick_speed)
 				},
 				upcoming_note: None,
+				graphics: Vec::with_capacity(512), // TODO what should the upper limit be? Make it a hard limit
 				bricks_broken: 0
 			};
 		}
@@ -286,38 +288,57 @@ mod game {
 			self.add_upcoming_notes();
 		}
 		
+		// >:< 
+		// pub fn elmo() -> *const PositionedGraphic {
+			// const x: PositionedGraphic = PositionedGraphic { // !!! use a background canvas instead of rerendering background each tick?
+				// g: GraphicGroup::Background,
+				// x: 967874,
+				// y: -1
+			// };
+			
+			// return &x;
+		// }
+		
 		// !!! let javascript keep a pointer to the rendering instructions inside wasm, and only update them with this function
 			// so there are no races?
-		pub fn rendering_instructions(&self) -> Array {
-			let mut instructions = vec!(
+		pub fn rendering_instructions(&mut self) -> RenderingInstructions {
+			let graphics = &mut self.graphics;
+			
+			graphics.clear();
+			
+			// >:< 
+			graphics.push(
 				PositionedGraphic { // !!! use a background canvas instead of rerendering background each tick?
-					g: GraphicGroup::Background,
+					g: Graphic{ g: GraphicGroup::Background, sub_id: 0 },
 					x: 0,
 					y: 0
 				},
 			);
 			
-			instructions.push(self.player.rendering_instruction());
+			graphics.push(self.player.rendering_instruction());
 			
 			for brick in &self.bricks {
-				instructions.push(brick.rendering_instruction());
+				graphics.push(brick.rendering_instruction());
 			}
 			
 			if let Some(slash) = self.player.slashing() {
 				let ri = slash.rendering_instruction();
 				if let Some(ri) = ri {
-					instructions.push(ri);
+					graphics.push(ri);
 				}
 			};
 			
 			if let Some(dash) = self.player.dashing() {
 				let ri = dash.rendering_instruction();
 				if let Some(ri) = ri {
-					instructions.push(ri);
+					graphics.push(ri);
 				}
 			}
 			
-			instructions.into_iter().map(JsValue::from).collect()
+			return RenderingInstructions {
+				num_graphics: graphics.len(),
+				graphics_ptr: graphics.as_ptr()
+			}
 		}
 		
 		pub fn score(&self) -> i32 {
@@ -523,14 +544,13 @@ mod game {
 	#[wasm_bindgen]
 	pub fn game_dimensions() -> PositionedGraphic {
 		PositionedGraphic {
-			g: GraphicGroup::Background, // TODO dummy value. Might be smarter just to get height and width separately
+			// dummy value. TODO use a Position struct rather than PositionedGraphic
+			g: Graphic { g: GraphicGroup::Background, sub_id: 0 },
 			x: GAME_WIDTH as i32,
 			y: GAME_HEIGHT as i32,
 		}
 	}
 }
-
-
 
 #[wasm_bindgen]
 #[repr(u8)]
@@ -559,16 +579,31 @@ pub enum GraphicGroup {
 }
 
 #[wasm_bindgen]
-pub struct PositionedGraphic {
+#[derive(Clone, Copy)]
+pub struct Graphic {
 	pub g: GraphicGroup,
+	pub sub_id: u8
+}
+
+#[wasm_bindgen]
+pub struct RenderingInstructions {
+	pub num_graphics: usize,
+	pub graphics_ptr: *const PositionedGraphic
+}
+
+#[wasm_bindgen]
+pub struct PositionedGraphic {
+	pub g: Graphic,
 	pub x: i32,
 	pub y: i32,
 }
 
 // TODO split object dimensions and graphic dimensions
+// TODO simply return a position
 #[wasm_bindgen]
 pub fn graphic_size(g: GraphicGroup) -> PositionedGraphic {
-	return match g {
+	let g = Graphic { g, sub_id: 0 };
+	return match g.g {
 		GraphicGroup::Background => { PositionedGraphic {
 			g,
 			x: GAME_WIDTH as i32,

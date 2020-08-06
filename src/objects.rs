@@ -7,6 +7,7 @@ use wasm_bindgen::prelude::*;
 use std::collections::vec_deque;
 
 use crate::GraphicGroup;
+use crate::Graphic;
 use crate::PositionedGraphic;
 use crate::GROUND_POS;
 use crate::LEFT_BOUNDARY;
@@ -456,7 +457,7 @@ impl Player {
 	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
 		PositionedGraphic {
-			g: self.graphic,
+			g: Graphic { g: self.graphic, sub_id: 0 },
 			x: self.bounds.left_x as i32,
 			y: self.bounds.top_y as i32,
 		}
@@ -528,7 +529,7 @@ impl Brick {
 	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
 		PositionedGraphic {
-			g: self.graphic,
+			g: Graphic { g: self.graphic, sub_id: 0},
 			x: self.bounds.left_x as i32,
 			y: self.bounds.top_y as i32,
 		}
@@ -641,7 +642,7 @@ impl Slash {
 			return None;
 		} else {
 			return Some( PositionedGraphic {
-				g: self.graphic,
+				g: Graphic { g: self.graphic, sub_id: 0 },
 				x: self.bounds.left_x as i32,
 				y: self.bounds.top_y as i32,
 			});
@@ -734,7 +735,7 @@ impl Dash {
 			None => None,
 			Some(g) => {
 				Some(PositionedGraphic {
-					g,
+					g: Graphic { g, sub_id: 0},
 					x: self.bounds.left_x as i32,
 					y: self.bounds.top_y as i32,
 				})
