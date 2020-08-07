@@ -19,6 +19,7 @@ g_keyCodeNames[82] = "R";
 // TODO having the editor overlay included in game.js Editor class might make more sense
 	// would allow game and overlay elements to synchronize more easily
 // !!! enable/disable editor compatibility
+// !!! mouse over menu
 // TODO space for playing/pausing editor?
 export function Overlay(songData, eventPropagator, controlsMap){
 	this.overlayDiv;

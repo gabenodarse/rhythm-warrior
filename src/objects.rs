@@ -8,12 +8,14 @@ use std::collections::vec_deque;
 
 use crate::GraphicGroup;
 use crate::Graphic;
+use crate::GraphicFlags;
 use crate::PositionedGraphic;
 use crate::GROUND_POS;
 use crate::LEFT_BOUNDARY;
 use crate::RIGHT_BOUNDARY;
 use crate::TOP_BOUNDARY;
 use crate::F32_ZERO;
+use crate::MAX_TIME_BETWEEN_TICKS;
 
 
 pub const MAX_NOTES_PER_SCREEN_WIDTH: u8 = 32;
@@ -26,6 +28,8 @@ pub const SLASH_HEIGHT: u32 = 100;
 pub const DASH_WIDTH: u32 = BRICK_WIDTH * 4 / 3;
 pub const DASH_HEIGHT: u32 = 100;
 pub const DASH_CD: f32 = 0.12;
+pub const NUM_MOVEMENT_FRAMES: u8 = 23;
+
 
 pub trait Object {
 	fn bounds (&self) -> ObjectBounds; // TODO copying the full object bounds may be extra work in some instances
@@ -47,7 +51,9 @@ pub enum Direction {
 }
 
 pub struct Player {
-	graphic: GraphicGroup,
+	graphic: Graphic, // >:< all objects store Graphic
+	movement_frame: u8,
+	movement_frame_t: f32,
 	
 	bounds: ObjectBounds,
 	dx: f32, // in pixels per second
@@ -72,7 +78,7 @@ pub enum BrickType {
 pub struct Brick {
 	brick_type: BrickType,
 	time: f32,
-	graphic: GraphicGroup,
+	graphic: Graphic,
 	bounds: ObjectBounds,
 }
 
@@ -85,14 +91,14 @@ pub enum TempObjectState {
 pub struct Slash {
 	brick_type: BrickType,
 	state: TempObjectState,
-	graphic: GraphicGroup,
+	graphic: Graphic,
 	bounds: ObjectBounds,
 }
 
 pub struct Dash {
 	brick_type: Option<BrickType>,
 	state: TempObjectState,
-	graphic: Option<GraphicGroup>,
+	graphic: Graphic,
 	direction: Direction,
 	bounds: ObjectBounds,
 }
@@ -117,7 +123,7 @@ impl Player {
 	
 	pub fn new(x: f32) -> Player {
 		Player {
-			graphic: GraphicGroup::Player,
+			graphic: Graphic { g: GraphicGroup::Player, sub_id: 0, flags: 0 },
 			bounds: ObjectBounds {
 				left_x: x,
 				top_y: GROUND_POS as f32 - PLAYER_HEIGHT as f32,
@@ -130,6 +136,8 @@ impl Player {
 			dash: None,
 			dash_dir: Direction::Right,
 			face_dir: Direction::Right,
+			movement_frame: 0,
+			movement_frame_t: 0.0,
 		}
 	}
 	
@@ -232,7 +240,7 @@ impl Player {
 	}
 	
 	fn regular_move(&mut self, seconds_passed: f32, mut bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
-		const MAX_PLAYER_SPEED: f32 = 440.0;
+		const MAX_PLAYER_SPEED: f32 = 450.0;
 		const MID_PLAYER_SPEED: f32 = 300.0;
 		const MIN_PLAYER_SPEED: f32 = 100.0;
 		
@@ -293,7 +301,7 @@ impl Player {
 		match upcoming_bricks_data {
 			None => {
 				movement = MovementType::Stopping;
-				target_direction = Direction::Right;
+				target_direction = self.face_dir;
 				upcoming_bricks_time_until = None;
 			}
 			Some(brick_data) => {
@@ -453,11 +461,31 @@ impl Player {
 			self.bounds.right_x -= self.bounds.right_x - RIGHT_BOUNDARY;
 			self.dx = 0.0;
 		}
+		
+		// update the graphic
+		if self.dx > F32_ZERO || self.dx < -F32_ZERO {
+			self.movement_frame_t += seconds_passed; 
+			// >:< common shortest fps (16.7? or less?) variable for graphics, and have all images stored with assumption of the fps
+			while self.movement_frame_t > 0.0167 { 
+				self.movement_frame_t -= 0.0167;
+				self.movement_frame = (self.movement_frame + 1) % NUM_MOVEMENT_FRAMES;
+			}
+		} else {
+			self.movement_frame = 0;
+			self.movement_frame_t = 0.0;
+		}
+		
+		let flags = match self.face_dir {
+			Direction::Right => 0,
+			Direction::Left => GraphicFlags::HorizontalFlip as u8
+		};
+		let sub_id = if current_speed < MID_PLAYER_SPEED { self.movement_frame } else { self.movement_frame + NUM_MOVEMENT_FRAMES };
+		self.graphic = Graphic { g: GraphicGroup::Player, sub_id, flags };
 	}
 	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
 		PositionedGraphic {
-			g: Graphic { g: self.graphic, sub_id: 0 },
+			g: self.graphic,
 			x: self.bounds.left_x as i32,
 			y: self.bounds.top_y as i32,
 		}
@@ -495,10 +523,12 @@ impl Object for Brick {
 
 impl Brick {
 	pub fn new (brick_type: BrickType, x: f32, y: f32, t: f32) -> Brick {
+		let sub_id = 0;
+		let flags = 0;
 		let graphic = match brick_type {
-			BrickType::Type1 => GraphicGroup::Brick,
-			BrickType::Type2 => GraphicGroup::Brick2,
-			BrickType::Type3 => GraphicGroup::Brick3
+			BrickType::Type1 => Graphic{ g: GraphicGroup::Brick, sub_id, flags },
+			BrickType::Type2 => Graphic{ g: GraphicGroup::Brick2, sub_id, flags },
+			BrickType::Type3 => Graphic{ g: GraphicGroup::Brick3, sub_id, flags }
 		};
 		
 		return Brick {
@@ -529,7 +559,7 @@ impl Brick {
 	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
 		PositionedGraphic {
-			g: Graphic { g: self.graphic, sub_id: 0},
+			g: self.graphic,
 			x: self.bounds.left_x as i32,
 			y: self.bounds.top_y as i32,
 		}
@@ -546,7 +576,10 @@ impl Object for Slash {
 impl Slash {
 	pub fn new(x: f32, y: f32, brick_type: BrickType, t_since_tick: f32, dir: Direction) -> Slash {
 		
-		let graphic;
+		let graphic_group;
+		let sub_id = 0;
+		let flags = 0;
+		
 		let left_x;
 		let right_x;
 		
@@ -556,9 +589,9 @@ impl Slash {
 				right_x = x;
 				
 				match brick_type {
-					BrickType::Type1 => graphic = GraphicGroup::SlashLeft,
-					BrickType::Type2 => graphic = GraphicGroup::SlashLeft2,
-					BrickType::Type3 => graphic = GraphicGroup::SlashLeft3
+					BrickType::Type1 => graphic_group = GraphicGroup::SlashLeft,
+					BrickType::Type2 => graphic_group = GraphicGroup::SlashLeft2,
+					BrickType::Type3 => graphic_group = GraphicGroup::SlashLeft3
 				}
 			},
 			Direction::Right => {
@@ -566,9 +599,9 @@ impl Slash {
 				right_x = x + SLASH_WIDTH as f32;
 				
 				match brick_type {
-					BrickType::Type1 => graphic = GraphicGroup::SlashRight,
-					BrickType::Type2 => graphic = GraphicGroup::SlashRight2,
-					BrickType::Type3 => graphic = GraphicGroup::SlashRight3
+					BrickType::Type1 => graphic_group = GraphicGroup::SlashRight,
+					BrickType::Type2 => graphic_group = GraphicGroup::SlashRight2,
+					BrickType::Type3 => graphic_group = GraphicGroup::SlashRight3
 				}
 			}
 		}
@@ -576,7 +609,7 @@ impl Slash {
 		return Slash {
 			brick_type,
 			state: TempObjectState::New(t_since_tick),
-			graphic,
+			graphic: Graphic{ g: graphic_group, sub_id, flags },
 			bounds: ObjectBounds {
 				left_x,
 				top_y: y,
@@ -592,7 +625,7 @@ impl Slash {
 			Direction::Left => {
 				self.bounds.left_x = x - DASH_WIDTH as f32 - PLAYER_WIDTH as f32 - SLASH_WIDTH as f32;
 				self.bounds.right_x = x - DASH_WIDTH as f32 - PLAYER_WIDTH as f32;
-				self.graphic = match self.brick_type {
+				self.graphic.g = match self.brick_type {
 					BrickType::Type1 => GraphicGroup::SlashLeft,
 					BrickType::Type2 => GraphicGroup::SlashLeft2,
 					BrickType::Type3 => GraphicGroup::SlashLeft3
@@ -601,7 +634,7 @@ impl Slash {
 			Direction::Right => {
 				self.bounds.left_x = x + DASH_WIDTH as f32 + PLAYER_WIDTH as f32;
 				self.bounds.right_x = x + DASH_WIDTH as f32 + PLAYER_WIDTH as f32 + SLASH_WIDTH as f32;
-				self.graphic = match self.brick_type {
+				self.graphic.g = match self.brick_type {
 					BrickType::Type1 => GraphicGroup::SlashRight,
 					BrickType::Type2 => GraphicGroup::SlashRight2,
 					BrickType::Type3 => GraphicGroup::SlashRight3
@@ -642,7 +675,7 @@ impl Slash {
 			return None;
 		} else {
 			return Some( PositionedGraphic {
-				g: Graphic { g: self.graphic, sub_id: 0 },
+				g: self.graphic,
 				x: self.bounds.left_x as i32,
 				y: self.bounds.top_y as i32,
 			});
@@ -659,11 +692,15 @@ impl Object for Dash {
 
 impl Dash {
 	pub fn new(x: f32, y: f32, t_since_tick: f32, dir: Direction) -> Dash {
+		let flags = 0;
+		let sub_id = 0;
+		let graphic = Graphic{ g: GraphicGroup::Dash0, sub_id, flags };
+		
 		if let Direction::Right = dir {
 			Dash {
 				brick_type: None,
 				state: TempObjectState::New(t_since_tick),
-				graphic: None,
+				graphic,
 				direction: Direction::Right,
 				bounds: ObjectBounds {
 					left_x: x,
@@ -677,7 +714,7 @@ impl Dash {
 			Dash {
 				brick_type: None,
 				state: TempObjectState::New(t_since_tick),
-				graphic: None,
+				graphic,
 				direction: Direction::Left,
 				bounds: ObjectBounds {
 					left_x: x,
@@ -700,6 +737,7 @@ impl Dash {
 	pub fn tick(&mut self, seconds_passed: f32) {
 		match &mut self.state {
 			TempObjectState::New(t) => {
+				let flags = 0;
 				// compromise between event register time and tick time
 				let effective_slash_t = (-seconds_passed + *t) / 2.0;
 				
@@ -708,13 +746,19 @@ impl Dash {
 					self.state = TempObjectState::New( effective_slash_t );
 				}
 				else {
-					if let Direction::Right = self.direction {
-						self.graphic = Some(GraphicGroup::Dash);
-						self.bounds.right_x = self.bounds.left_x + DASH_WIDTH as f32;
+					match self.direction {
+						Direction::Right => self.bounds.right_x = self.bounds.left_x + DASH_WIDTH as f32,
+						Direction::Left => self.bounds.left_x = self.bounds.right_x - DASH_WIDTH as f32
 					}
-					else {
-						self.graphic = Some(GraphicGroup::Dash);
-						self.bounds.left_x = self.bounds.right_x - DASH_WIDTH as f32;
+					match self.brick_type {
+						None => self.graphic.g = GraphicGroup::Dash0,
+						Some(brick_type) => {
+							match brick_type {
+								BrickType::Type1 => self.graphic.g = GraphicGroup::Dash,
+								BrickType::Type2 => self.graphic.g = GraphicGroup::Dash2,
+								BrickType::Type3 => self.graphic.g = GraphicGroup::Dash3
+							}
+						}
 					}
 					
 					self.state = TempObjectState::Active( effective_slash_t );
@@ -729,17 +773,14 @@ impl Dash {
 	}
 	
 	pub fn rendering_instruction(&self) -> Option<PositionedGraphic> {
-		// !!! if dash is always going to be instantaneous, self.graphic does not have to be Option type
-			// because here is only 1 graphic (per brick type), and if the dash's state is new return None for this function
-		match self.graphic {
-			None => None,
-			Some(g) => {
-				Some(PositionedGraphic {
-					g: Graphic { g, sub_id: 0},
-					x: self.bounds.left_x as i32,
-					y: self.bounds.top_y as i32,
-				})
-			}
+		if let TempObjectState::New(_) = self.state {
+			return None;
+		} else {
+			return Some( PositionedGraphic {
+				g: self.graphic,
+				x: self.bounds.left_x as i32,
+				y: self.bounds.top_y as i32,
+			});
 		}
 	}
 }

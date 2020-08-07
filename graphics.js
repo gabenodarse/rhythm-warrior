@@ -3,9 +3,9 @@ import * as wasm from "./pkg/music_mercenary.js";
 import {wasmMemory} from "./index.js";
 
 // !!!
-// patiently awaiting webGPU. Hopefully better than webGL
+	// implement webGPU when it becomes an option
+	// implement OffscreenCanvas when it becomes an option, or there a way to share contexts between canvases?
 // >:< BG does not need to be refreshed. Separate, static canvas
-// >:< way to display one canvas element in multiple places? (for CanvasGraphics)
 
 function SizedTexture(texture, width, height){
 	this.texture = texture;
@@ -13,40 +13,53 @@ function SizedTexture(texture, width, height){
 	this.height = height;
 }
 
+function CanvasGroup(fullsizeCanvas, numCanvases, screenDiv){
+	this.fullsize = fullsizeCanvas;
+	this.nextCanvasIdx = 0; // the index of the next canvas of the group to make visible
+	this.canvases = new Array(numCanvases);
+	
+	for(let i = 0; i < numCanvases; ++i){
+		this.canvases[i] = document.createElement("canvas");
+		this.canvases[i].width = fullsizeCanvas.width;
+		this.canvases[i].height = fullsizeCanvas.height;
+		this.canvases[i].getContext("2d").drawImage(fullsizeCanvas, 0, 0, fullsizeCanvas.width, fullsizeCanvas.height);
+		this.canvases[i].style.visibility = "hidden"; // >:< visibility vs display performance
+		screenDiv.appendChild( this.canvases[i] );
+	}
+}
+
 let vertexShader;
 let fragmentShader;
 
 export function CanvasGraphics(images, screenDiv){
-	this.canvases = [];
+	this.canvases = new Array(images.length);
 	// create canvases for each image
-	images.forEach( (img,gIdx) => {
+	images.forEach( (imgArray,gIdx) => {
 		let dimensions = wasm.graphic_size(gIdx);
 		let numCanvases = wasm.max_graphics(gIdx);
-		let fullsize = document.createElement("canvas");
-		fullsize.width = dimensions.x;
-		fullsize.height = dimensions.y;
-		fullsize.getContext("2d").drawImage(img, 0, 0, dimensions.x, dimensions.y);
-		this.canvases[gIdx] = {nextCanvasIdx: 0, canvases: [], fullsize: fullsize};
-		for(let i = 0; i < numCanvases; ++i){
-			this.canvases[gIdx].canvases[i] = document.createElement("canvas");
-			this.canvases[gIdx].canvases[i].width = dimensions.x;
-			this.canvases[gIdx].canvases[i].height = dimensions.y;
-			this.canvases[gIdx].canvases[i].getContext("2d").drawImage(fullsize, 0, 0, dimensions.x, dimensions.y);
-			this.canvases[gIdx].canvases[i].style.visibility = "hidden"; // >:< visibility vs display performance
-			screenDiv.appendChild( this.canvases[gIdx].canvases[i] );
-		}
+		this.canvases[gIdx] = [];
+		imgArray.forEach( (img, gSubID) => {
+			let fullsize = document.createElement("canvas");
+			fullsize.width = dimensions.x;
+			fullsize.height = dimensions.y;
+			fullsize.getContext("2d").drawImage(img, 0, 0, dimensions.x, dimensions.y);
+			
+			this.canvases[gIdx][gSubID] = new CanvasGroup(fullsize, numCanvases, screenDiv);
+		});
 	});
 }
 
 CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
 	// clear old canvases
-	this.canvases.forEach( canvasGroup => {
-		if(canvasGroup.nextCanvasIdx != 0){
-			for(let i = canvasGroup.nextCanvasIdx - 1; i >= 0; --i){
-				canvasGroup.canvases[i].style.visibility = "hidden";
+	this.canvases.forEach( graphicGroup => {
+		graphicGroup.forEach( canvasGroup => {
+			if(canvasGroup.nextCanvasIdx != 0){
+				for(let i = canvasGroup.nextCanvasIdx - 1; i >= 0; --i){
+					canvasGroup.canvases[i].style.visibility = "hidden";
+				}
+				canvasGroup.nextCanvasIdx = 0;
 			}
-			canvasGroup.nextCanvasIdx = 0;
-		}
+		});
 	});
 	
 	// move and make canvases visible
@@ -61,28 +74,44 @@ CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
 		++i;
 		let graphicIdx = u8buf[i*4];
 		let graphicSubID = u8buf[i*4 + 1];
+		let graphicFlags = u8buf[i*4 + 2];
 		++i;
 		
-		let canvasGroup = this.canvases[graphicIdx];
+		let canvasGroup = this.canvases[graphicIdx][graphicSubID];
 		let idx = canvasGroup.nextCanvasIdx;
 		
-		canvasGroup.canvases[idx].style.visibility = "visible";
 		canvasGroup.canvases[idx].style.left = x * xFactor + "px";
 		canvasGroup.canvases[idx].style.top = y * yFactor + "px";
+		if(graphicFlags != 0){
+			canvasGroup.canvases[idx].style.transform = "";
+			if(graphicFlags & wasm.GraphicFlags.HorizontalFlip){
+				canvasGroup.canvases[idx].style.transform += "scaleX(-1) ";
+			}
+			if(graphicFlags & wasm.GraphicFlags.VerticalFlip){
+				canvasGroup.canvases[idx].style.transform += "scaleY(-1) ";
+			}
+		}
+		else {
+			canvasGroup.canvases[idx].style.transform = "";
+		}
+		
+		canvasGroup.canvases[idx].style.visibility = "visible";
 		
 		++canvasGroup.nextCanvasIdx;
 	}
 }
 
 CanvasGraphics.prototype.resize = function(xFactor, yFactor){
-	this.canvases.forEach( (canvasGroup, gIdx) => {
-		let dimensions = wasm.graphic_size(gIdx);
-		let fullsize = canvasGroup.fullsize;
-		canvasGroup.canvases.forEach( canvas => {
-			canvas.width = dimensions.x * xFactor;
-			canvas.height = dimensions.y * yFactor;
-			canvas.getContext("2d").drawImage(fullsize, 0, 0, canvas.width, canvas.height);
-		})
+	this.canvases.forEach( (graphicGroup, gID) => {
+		let dimensions = wasm.graphic_size(gID);
+		graphicGroup.forEach( (canvasGroup, gIdx) => {
+			let fullsize = canvasGroup.fullsize;
+			canvasGroup.canvases.forEach( canvas => {
+				canvas.width = dimensions.x * xFactor;
+				canvas.height = dimensions.y * yFactor;
+				canvas.getContext("2d").drawImage(fullsize, 0, 0, canvas.width, canvas.height);
+			})
+		});
 	});
 }
 
@@ -160,21 +189,25 @@ export function WebGLGraphics(images, screenDiv){
 	gl.vertexAttribPointer( texLoc, size, type, normalize, stride, offset);
 	
 	// create textures for each image
-	images.forEach( (img,idx) => {
-		const texture = gl.createTexture();
-		const dimensions = wasm.graphic_size(idx);
-		gl.bindTexture(gl.TEXTURE_2D, texture);
+	images.forEach( (imgArray,gIdx) => {
+		let dimensions = wasm.graphic_size(gIdx);
+		this.textures[gIdx] = new Array(imgArray.length);
+		imgArray.forEach( (img, gSubID) => {
+			const texture = gl.createTexture();
+			gl.bindTexture(gl.TEXTURE_2D, texture);
 
-		// Set the parameters so we can render any size image (not only powers of 2)
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+			// Set the parameters so we can render any size image (not only powers of 2)
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-		// Upload the image into the texture.
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-		
-		this.textures[idx] = new SizedTexture(texture, dimensions.x, dimensions.y);
+			// Upload the image into the texture.
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+			
+			// TODO dimensions can be stored less redundantly, because each texture in a graphic group has the same dimensions
+			this.textures[gIdx][gSubID] = new SizedTexture(texture, dimensions.x, dimensions.y);
+		});
 	});
 }
 
@@ -206,21 +239,34 @@ WebGLGraphics.prototype.render = function(instructions, xFactor, yFactor){
 		++i;
 		let graphicIdx = u8buf[i*4];
 		let graphicSubID = u8buf[i*4 + 1];
+		let graphicFlags = u8buf[i*4 + 2];
 		++i;
 		
-		let sizedTexture = textures[graphicIdx];
+		let sizedTexture = textures[graphicIdx][graphicSubID];
 		
 		gl.bindTexture(gl.TEXTURE_2D, sizedTexture.texture);
 		let startX = x * xFactor / this.canvas.width * 2.0 - 1.0;
 		let startY = -(y * yFactor / this.canvas.height * 2.0 - 1.0);
 		let endX = startX + sizedTexture.width * xFactor / this.canvas.width * 2.0;
 		let endY = startY - sizedTexture.height * yFactor / this.canvas.height * 2.0;
+		
+		if(graphicFlags != 0){
+			// >:< have to use a different shader to flip?
+			if(graphicFlags & wasm.GraphicFlags.HorizontalFlip){
+				
+			}
+			if(graphicFlags & wasm.GraphicFlags.VerticalFlip){
+				
+			}
+		}
 		positions[0] = startX; positions[1] = startY;
 		positions[2] = endX;   positions[3] = startY;
 		positions[4] = startX; positions[5] = endY;
 		positions[6] = startX; positions[7] = endY;
 		positions[8] = endX;   positions[9] = startY;
 		positions[10] = endX;  positions[11] = endY;
+		
+		
 		gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
 		
 		gl.drawArrays(gl.TRIANGLES, 0, pointCount);

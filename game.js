@@ -46,7 +46,7 @@ Game.prototype.load = async function () {
 	
 	// TODO add error handling
 	await loader.init()
-		.then( () => loader.loadGraphics("webGL", this.screenDiv)) //canvases or webGL
+		.then( () => loader.loadGraphics("canvases", this.screenDiv)) //canvases or webGL
 		.then( res => this.graphics = res );
 		
 	// !!! can happen same time as graphics are loading

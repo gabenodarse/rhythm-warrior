@@ -42,6 +42,7 @@ const LEFT_BOUNDARY: f32 = 0.0;
 const RIGHT_BOUNDARY: f32 = LEFT_BOUNDARY + GAME_WIDTH as f32;
 const TOP_BOUNDARY: f32 = 0.0;
 const GROUND_POS: f32 = TOP_BOUNDARY + 240.0; // !!! associate with the graphic for the ground
+const MAX_TIME_BETWEEN_TICKS: f32 = 0.025;
 
 const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -F32_ZERO and +F32_ZERO is essentially 0
 
@@ -182,9 +183,9 @@ mod game {
 		pub fn tick(&mut self, mut seconds_passed: f32) {
 			
 			// prevent disproportionally long ticks
-			if seconds_passed > 25.0 {
-				self.tick(seconds_passed - 20.0);
-				seconds_passed = 20.0;
+			if seconds_passed > MAX_TIME_BETWEEN_TICKS {
+				self.tick(seconds_passed - 0.02);
+				seconds_passed = 0.02;
 			}
 			
 			self.time_running += seconds_passed;
@@ -288,17 +289,6 @@ mod game {
 			self.add_upcoming_notes();
 		}
 		
-		// >:< 
-		// pub fn elmo() -> *const PositionedGraphic {
-			// const x: PositionedGraphic = PositionedGraphic { // !!! use a background canvas instead of rerendering background each tick?
-				// g: GraphicGroup::Background,
-				// x: 967874,
-				// y: -1
-			// };
-			
-			// return &x;
-		// }
-		
 		// !!! let javascript keep a pointer to the rendering instructions inside wasm, and only update them with this function
 			// so there are no races?
 		pub fn rendering_instructions(&mut self) -> RenderingInstructions {
@@ -306,10 +296,9 @@ mod game {
 			
 			graphics.clear();
 			
-			// >:< 
 			graphics.push(
-				PositionedGraphic { // !!! use a background canvas instead of rerendering background each tick?
-					g: Graphic{ g: GraphicGroup::Background, sub_id: 0 },
+				PositionedGraphic {
+					g: Graphic{ g: GraphicGroup::Background, sub_id: 0, flags: 0 },
 					x: 0,
 					y: 0
 				},
@@ -542,10 +531,8 @@ mod game {
 	}
 	
 	#[wasm_bindgen]
-	pub fn game_dimensions() -> PositionedGraphic {
-		PositionedGraphic {
-			// dummy value. TODO use a Position struct rather than PositionedGraphic
-			g: Graphic { g: GraphicGroup::Background, sub_id: 0 },
+	pub fn game_dimensions() -> Position {
+		Position {
 			x: GAME_WIDTH as i32,
 			y: GAME_HEIGHT as i32,
 		}
@@ -567,22 +554,25 @@ pub enum GraphicGroup {
 	SlashLeft,
 	SlashLeft2,
 	SlashLeft3,
+	Dash0,
 	Dash,
-	DashR0, 
-	DashR1,
-	DashR2,
-	DashR3,
-	DashL0,
-	DashL1,
-	DashL2,
-	DashL3
+	Dash2,
+	Dash3,
 }
 
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
+// fits within 32 bits
 pub struct Graphic {
 	pub g: GraphicGroup,
-	pub sub_id: u8
+	pub sub_id: u8,
+	pub flags: u8
+}
+
+#[wasm_bindgen]
+pub enum GraphicFlags {
+	HorizontalFlip = 1,
+	VerticalFlip = 2,
 }
 
 #[wasm_bindgen]
@@ -598,60 +588,39 @@ pub struct PositionedGraphic {
 	pub y: i32,
 }
 
-// TODO split object dimensions and graphic dimensions
-// TODO simply return a position
 #[wasm_bindgen]
-pub fn graphic_size(g: GraphicGroup) -> PositionedGraphic {
-	let g = Graphic { g, sub_id: 0 };
-	return match g.g {
-		GraphicGroup::Background => { PositionedGraphic {
-			g,
+pub struct Position {
+	pub x: i32,
+	pub y: i32
+}
+
+// TODO split object dimensions and graphic dimensions
+#[wasm_bindgen]
+pub fn graphic_size(g: GraphicGroup) -> Position {
+	return match g {
+		GraphicGroup::Background => { Position {
 			x: GAME_WIDTH as i32,
 			y: GAME_HEIGHT as i32,
 		}},
-		GraphicGroup::Player => { PositionedGraphic {
-			g,
+		GraphicGroup::Player => { Position {
 			x: objects::PLAYER_WIDTH as i32,
 			y: objects::PLAYER_HEIGHT as i32,
 		}},
-		GraphicGroup::Brick | GraphicGroup::Brick2 | GraphicGroup::Brick3 => { PositionedGraphic {
-			g,
+		GraphicGroup::Brick | GraphicGroup::Brick2 | GraphicGroup::Brick3 => { Position {
 			x: objects::BRICK_WIDTH as i32,
 			y: objects::BRICK_HEIGHT as i32,
 		}},
 		GraphicGroup::SlashRight | GraphicGroup::SlashRight2 | GraphicGroup::SlashRight3
 		| GraphicGroup::SlashLeft | GraphicGroup::SlashLeft2 | GraphicGroup::SlashLeft3 => { 
-			PositionedGraphic {
-				g,
+			Position {
 				x: objects::SLASH_WIDTH as i32,
 				y: objects::SLASH_HEIGHT as i32
 			}
 		},
-		GraphicGroup::Dash => { PositionedGraphic {
-			g,
+		GraphicGroup::Dash0 | GraphicGroup::Dash | GraphicGroup::Dash2 | GraphicGroup::Dash3 => { Position {
 			x: objects::DASH_WIDTH as i32,
 			y: objects::DASH_HEIGHT as i32
 		}},
-		GraphicGroup::DashR0 | GraphicGroup::DashL0 => { PositionedGraphic {
-			g,
-			x: objects::DASH_WIDTH as i32 / 5,
-			y: objects::DASH_HEIGHT as i32
-		}},
-		GraphicGroup::DashR1 | GraphicGroup::DashL1 => { PositionedGraphic {
-			g,
-			x: objects::DASH_WIDTH as i32 * 2 / 5 ,
-			y: objects::DASH_HEIGHT as i32
-		}},
-		GraphicGroup::DashR2 | GraphicGroup::DashL2 => { PositionedGraphic {
-			g,
-			x: objects::DASH_WIDTH as i32 * 3 / 5,
-			y: objects::DASH_HEIGHT as i32
-		}},
-		GraphicGroup::DashR3 | GraphicGroup::DashL3 => { PositionedGraphic {
-			g,
-			x: objects::DASH_WIDTH as i32 * 4 / 5,
-			y: objects::DASH_HEIGHT as i32
-		}}
 	};
 }
 
@@ -663,11 +632,11 @@ pub fn max_graphics(g: GraphicGroup) -> u32 {
 		GraphicGroup::Brick | GraphicGroup::Brick2 | GraphicGroup::Brick3 => 32,
 		GraphicGroup::SlashRight | GraphicGroup::SlashRight2 | GraphicGroup::SlashRight3
 		| GraphicGroup::SlashLeft | GraphicGroup::SlashLeft2 | GraphicGroup::SlashLeft3 => 1,
+		GraphicGroup::Dash0 => 1,
 		GraphicGroup::Dash => 1,
-		GraphicGroup::DashR0 | GraphicGroup::DashL0 => 1,
-		GraphicGroup::DashR1 | GraphicGroup::DashL1 => 1,
-		GraphicGroup::DashR2 | GraphicGroup::DashL2 => 1,
-		GraphicGroup::DashR3 | GraphicGroup::DashL3 => 1
+		GraphicGroup::Dash2 => 1,
+		GraphicGroup::Dash3 => 1,
+		
 	}
 }
 

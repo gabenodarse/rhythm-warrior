@@ -179,19 +179,21 @@ Loader.prototype.loadGraphics = async function(type, screenDiv){
 	
 	let numGraphics = wasm.num_graphic_groups();
 	if(Object.keys(resourceLocations).length != numGraphics){
-		throw Error("Expected number of graphics " + numGraphics +
+		throw Error("Expected number of graphic groups " + numGraphics +
 			" and number of resource locations " + Object.keys(resourceLocations).length + " do not match");
 	}
 	
 	let numLoaded = 0;
 	let images = new Array(numGraphics);
+	let totalImages = 0;
 	let done;
 	let p = new Promise((res, rej) => {
 		done = res;
 	});
+	
 	let imgLoaded = function(){
 		++numLoaded;
-		if(numLoaded == numGraphics){
+		if(numLoaded == totalImages){
 			if(type == "webGL"){
 				done(new WebGLGraphics(images, screenDiv));
 			}
@@ -203,9 +205,14 @@ Loader.prototype.loadGraphics = async function(type, screenDiv){
 	}
 	
 	for(const resourcesKey in resourceLocations){
-		images[ wasm.GraphicGroup[resourcesKey] ] = new Image();
-		images[ wasm.GraphicGroup[resourcesKey] ].onload = imgLoaded;
-		images[ wasm.GraphicGroup[resourcesKey] ].src = resourceLocations[resourcesKey];;
+		let graphicGroup = wasm.GraphicGroup[resourcesKey];
+		images[ graphicGroup ] = [];
+		for(let i = 0; i < resourceLocations[resourcesKey].length; ++i){
+			++totalImages;
+			images[ graphicGroup ][i] = new Image();
+			images[ graphicGroup ][i].onload = imgLoaded;
+			images[ graphicGroup ][i].src = resourceLocations[resourcesKey][i];
+		}
 	}
 	
 	return p;
