@@ -51,6 +51,7 @@ export function CanvasGraphics(images, screenDiv){
 
 CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
 	// clear old canvases
+	// !!! only clear if they are unused in this iteration this section is taking as long as the value updates themselves
 	this.canvases.forEach( graphicGroup => {
 		graphicGroup.forEach( canvasGroup => {
 			if(canvasGroup.nextCanvasIdx != 0){

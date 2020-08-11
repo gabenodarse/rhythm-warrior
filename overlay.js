@@ -813,7 +813,7 @@ function loadSongDialog(eventPropagator){
 		});
 		songs[0]["values"].forEach( (song, idx) => {
 			let newOption = document.createElement("option");
-			let timeCreated = Date(song[timeCreatedIDX]).toString();
+			let timeCreated = new Date(song[timeCreatedIDX]).toString();
 			newOption.value = song[idIDX];
 			newOption.innerHTML = `Name: ${song[nameIDX]}, Artist: ${song[artistIDX]}, Difficulty: ${song[difficultyIDX]}, Duration: ${song[durationIDX]}, Time Created: ${timeCreated}`;
 			

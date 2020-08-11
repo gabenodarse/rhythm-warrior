@@ -334,13 +334,19 @@ Editor.prototype.toggleTickingSound = function(){
 }
 
 Editor.prototype.seek = function(time){
+	if(time < 0){
+		return;
+	}
 	this.gameData.seek(time);
 	this.renderGame();
 	
 	this.notesIdx = 0;
 	for(let i = 0; i < this.notes.length; ++i){
 		if(time > this.notes[i]){
-			this.notesIdx = i;
+			this.notesIdx = i + 1;
+		}
+		else{
+			break;
 		}
 	}
 }

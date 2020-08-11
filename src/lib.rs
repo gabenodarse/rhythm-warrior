@@ -19,7 +19,7 @@
 // TESTS
 // test that objects have correct dimensions
 
-// !!! pausing/unpausing messes up character pos
+// !!! logging
 // !!! size offset, x offset, y offset for graphics that are sized differently than their objects
 // !!! cleanup cargo.toml, include features that are best for game.
 // !!! fix and extend midi-reader / song converter
