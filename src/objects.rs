@@ -1,11 +1,10 @@
 
-// TODO
-// Log objects going beyond boundaries
-
 use std::cmp::Ordering;
 use wasm_bindgen::prelude::*;
+use std::collections::VecDeque;
 use std::collections::vec_deque;
 
+use crate::note_pos_from_x; // !!! calculates note pos back from x when it would be better to store note pos in each brick
 use crate::GraphicGroup;
 use crate::Graphic;
 use crate::GraphicFlags;
@@ -16,7 +15,7 @@ use crate::RIGHT_BOUNDARY;
 use crate::TOP_BOUNDARY;
 use crate::F32_ZERO;
 use crate::MAX_TIME_BETWEEN_TICKS;
-
+use crate::log;
 
 pub const MAX_NOTES_PER_SCREEN_WIDTH: u8 = 32;
 pub const PLAYER_WIDTH: u32 = 50;
@@ -25,10 +24,11 @@ pub const BRICK_WIDTH: u32 = (RIGHT_BOUNDARY - LEFT_BOUNDARY) as u32 / MAX_NOTES
 pub const BRICK_HEIGHT: u32 = 100;
 pub const SLASH_WIDTH: u32 = 60;
 pub const SLASH_HEIGHT: u32 = 90;
-pub const DASH_WIDTH: u32 = BRICK_WIDTH;
+pub const DASH_WIDTH: u32 = BRICK_WIDTH; // !!! remove as constant
 pub const DASH_HEIGHT: u32 = PLAYER_HEIGHT * 9 / 10;
 pub const DASH_CD: f32 = 0.12;
 pub const NUM_MOVEMENT_FRAMES: u8 = 23;
+pub const BRICK_DATA_BUFFER_SIZE: usize = 4;
 
 
 pub trait Object {
@@ -50,18 +50,50 @@ pub enum Direction {
 	Right,
 }
 
+struct UpcomingBricksData {
+	time: f32,
+	leftmost_brick_pos: u8,
+	rightmost_brick_pos: u8,
+	left_of_x: f32, // x position player has to be left of bricks (i.e. x pos of left brick - PLAYER_WIDTH)
+	right_of_x: f32, // x position player has to be right of bricks (i.e. rightmost brick's right bound)
+	group: bool
+}
+
 pub struct Player {
-	graphic: Graphic, // >:< all objects store Graphic
+	graphic: Graphic, // !!! all objects store Graphic
 	movement_frame: u8,
 	movement_frame_t: f32,
 	
 	bounds: ObjectBounds,
 	dx: f32, // in pixels per second
 	
+	movement: Option<Movement>,
 	slash: Option<Slash>,
 	dash: Option<Dash>,
 	hit_dir: Direction,
 	face_dir: Direction,
+	upcoming_bricks_data: VecDeque<UpcomingBricksData>
+}
+
+#[derive(Clone, Copy)]
+enum MovementType {
+	Constant(f32), // speed
+	Accelerating,
+	Decelerating,
+}
+
+#[derive(Clone)]
+struct MovementInterval {
+	movement_type: MovementType,
+	direction: Direction,
+	effective_start_t: f32, // start_t if starting at 0 speed (accelerating) or MAX_SPEED (decelerating)
+	effective_start_x: f32, // start_pos if starting at 0 speed / MAX_SPEED
+	end_t: f32
+} 
+
+struct Movement {
+	intervals: Vec<MovementInterval>,
+	current_interval: usize
 }
 
 #[wasm_bindgen]
@@ -113,6 +145,33 @@ pub fn intersect(obj1: &ObjectBounds, obj2: &ObjectBounds) -> bool {
 	return true;
 }
 
+impl std::fmt::Display for Movement {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		let mut interval_id = self.current_interval;
+        while interval_id < self.intervals.len() {
+			let interval = &self.intervals[interval_id];
+			
+			write!(f, "Interval {}\n", interval_id)?;
+			match interval.movement_type {
+				MovementType::Constant(s) => write!(f, "movement_type: Constant({})\n", s)?,
+				MovementType::Accelerating => write!(f, "movement_type: Accelerating\n")?,
+				MovementType::Decelerating => write!(f, "movement_type: Decelerating\n")?
+			}
+			match interval.direction {
+				Direction::Left => write!(f, "direction: Left\n")?,
+				Direction::Right => write!(f, "direction: Right\n")?
+			}
+			write!(f, "Effective Start T: {}\n", interval.effective_start_t)?;
+			write!(f, "Effective Start X: {}\n", interval.effective_start_x)?;
+			write!(f, "End T: {}\n\n", interval.end_t)?;
+			
+			interval_id += 1;
+		}
+		
+		return Ok(());
+    }
+}
+
 impl Object for Player {
 	
 	fn bounds(&self) -> ObjectBounds {
@@ -132,12 +191,14 @@ impl Player {
 			},
 			
 			dx: 0.0,
+			movement: None,
 			slash: None,
 			dash: None,
 			hit_dir: Direction::Right,
 			face_dir: Direction::Right,
 			movement_frame: 0,
 			movement_frame_t: 0.0,
+			upcoming_bricks_data: VecDeque::with_capacity(BRICK_DATA_BUFFER_SIZE)
 		}
 	}
 	
@@ -184,14 +245,14 @@ impl Player {
 		let slash = &mut self.slash;
 		match (slash, dash) {
 			(Some(slash), Some(dash)) => {
-				// >:< necessary since movement no longer is player controlled?
 				match (slash.state(), dash.state()) {
 					(TempObjectState::New(slash_t), TempObjectState::New(dash_t)) => {
 						// in case a movement input was immediately after 1 or both inputs
 						let direction = self.hit_dir;
+						
 						// position slash to the end of the dash
 						slash.link_dash_slash(dash.bounds.left_x, direction, *dash_t);
-							
+						
 						dash.direction = direction;
 						dash.brick_type = Some(slash.brick_type);
 					},
@@ -218,8 +279,8 @@ impl Player {
 					}
 					else {
 						dash.tick(seconds_passed);
-						self.regular_move(seconds_passed, bricks_iter, time_running);
 					}
+					self.regular_move(seconds_passed, bricks_iter, time_running);
 				},
 				_ => {
 					dash.tick(seconds_passed);
@@ -243,306 +304,810 @@ impl Player {
 	fn regular_move(&mut self, seconds_passed: f32, mut bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
 		// INVARIANT: seconds_passed is never greater than MAX_TIME_BETWEEN_TICKS
 		
-		enum MovementType{
-			Stopping(f32), // specifies how far to go before stopping completely
-			Turning,
-			Running(f32), // specifies target speed (what speed is desired)
+		// movement is deterministic based on time of calculation, targets, and speed
+			// means easier debuggability and more importantly no intra-movement variation as tick time varies
+		// >:< 
+			// How to handle calculation when the next bricks aren't showing yet on bricks_iter, but they will matter?
+				// e.g. when there haven't been notes on the screen so the next ones are new, 
+				// but the ones after haven't been accounted for yet
+
+		// !!! 
+			// take out as many branches as possible / group branches together
+			// storing speed and direction (as well as dx) in self... may cause less branching
+			// create tests for this function because it is too complex
+			// lower max tick time is important, lower average tick time is not (consistent tick times are preferable)
+				// how to profile branches and ticks to see what causes longest ticks?
+			// ever want to back up before running?
+			// ever want to run further past the bricks than necessary to gather speed?
+			// Acceleration factor determined then saved? - changes curve parameters?
+				// or just use a constant factor which will also reduce max speed
+				// if used, store in MovementInterval struct
+		
+		// position given by: MAIN_COEFFICIENT/3 * (t + T_OFFSET)^3 + SECONDARY_COEFFICIENT * t + ZERO_T_POS_OFFSET
+			// example: -8000/3 * (t - 0.25)^3 + 500t + c
+			// the velocity is given by the derivative, up to MAX_SPEED_TIME at which the velocity is maxed out
+		const MAIN_COEFFICIENT: f32 = -8000.0;
+		const SECONDARY_COEFFICIENT: f32 = 500.0;
+		const T_OFFSET: f32 = -0.25;
+		const MAX_SPEED_TIME: f32 = 0.2; // time to reach max speed, effectively determining what the max speed is
+		
+		const ZERO_T_POS_OFFSET: f32 = -((MAIN_COEFFICIENT / 3.0) * T_OFFSET * T_OFFSET * T_OFFSET);
+		const MAX_SPEED: f32 = MAIN_COEFFICIENT * (MAX_SPEED_TIME + T_OFFSET) * (MAX_SPEED_TIME + T_OFFSET) + SECONDARY_COEFFICIENT;
+		const MAX_SPEED_POS: f32 = 
+			(MAIN_COEFFICIENT / 3.0) * ((MAX_SPEED_TIME + T_OFFSET) * (MAX_SPEED_TIME + T_OFFSET) * (MAX_SPEED_TIME + T_OFFSET)) 
+			+ (SECONDARY_COEFFICIENT * MAX_SPEED_TIME) + ZERO_T_POS_OFFSET;
+		
+		const RUN_GRAPHIC_THRESHOLD: f32 = 200.0; // threshold past which the player graphic will be running
+		
+		struct Target {
+			target: f32,
+			left_bound: f32,
+			right_bound: f32,
+			target_v: f32, // !!! Option? for when approaching a group?
+			priority: u8
 		}
 		
-		const MAX_PLAYER_SPEED: f32 = 460.0;
-		const MID_PLAYER_SPEED: f32 = 300.0;
-		const MIN_PLAYER_SPEED: f32 = 100.0;
+		let solve_s_given_t = |time: f32| {
+			if time > MAX_SPEED_TIME {
+				return MAX_SPEED;
+			} else if time >= 0.0{
+				return -8000.0 * (time - 0.25) * (time - 0.25) + 500.0;
+			} else {
+				return 0.0;
+			}
+		};
 		
-		// get data on upcoming bricks
-		// TODO positions/times of upcoming bricks aren't changing as often as every tick
-			// ever worth it to store some information/calculations in between ticks for the many instances they don't change?
-		let mut upcoming_bricks_data = None;
+		// if accelerating is false, returns p travelled if decelerating from max speed
+		let solve_p_given_t = |time: f32, accelerating: bool| {
+			
+			if time < 0.0 { return 0.0; }
+			if accelerating {
+				let accel_time;
+				let overtime;
+				if time > MAX_SPEED_TIME {
+					accel_time = MAX_SPEED_TIME;
+					overtime = time - MAX_SPEED_TIME;
+				} else {
+					accel_time = time;
+					overtime = 0.0;
+				}
+				
+				let pos = (-8000.0 / 3.0) 
+					* ((accel_time - 0.25) * (accel_time - 0.25) * (accel_time - 0.25)) 
+					+ (500.0 * accel_time) + ZERO_T_POS_OFFSET;
+				let overpos = MAX_SPEED * overtime;
+				
+				return pos + overpos;
+			} else {
+				if time >= MAX_SPEED_TIME {
+					return MAX_SPEED_POS;
+				} else {
+					let remaining_decel_time = MAX_SPEED_TIME - time;
+					let remaining_pos = (-8000.0 / 3.0) 
+						* ((remaining_decel_time - 0.25) * (remaining_decel_time - 0.25) * (remaining_decel_time - 0.25))
+						+ (500.0 * remaining_decel_time) + ZERO_T_POS_OFFSET;
+					
+					return MAX_SPEED_POS - remaining_pos;
+				}
+			}
+		};
+		
+		// if accelerating is false, returns time to decelerate to s from MAX_SPEED
+		let solve_t_given_s = |speed: f32, accelerating: bool| {
+			
+			if speed >= MAX_SPEED { 
+				if accelerating { return MAX_SPEED_TIME; }
+				else { return 0.0; } 
+			}
+			if speed <= 0.0 { 
+				if accelerating { return 0.0; }
+				else { return MAX_SPEED_TIME; } 
+			} 
+			
+			let (base, multiplier) = 
+				if accelerating { (0.0, 1.0) } 
+				else { (MAX_SPEED_TIME, -1.0) };
+			
+			// !!! binary search through possible times. For efficiency change into a lookup table
+			let mut low = 0.0;
+			let mut high = MAX_SPEED_TIME;
+			let mut mid = MAX_SPEED_TIME / 2.0;
+			loop {
+				let mid_speed = solve_s_given_t(mid);
+				if mid_speed - speed > 1.0 {
+					high = mid;
+					mid = (high + low) / 2.0;
+				} else if speed - mid_speed > 1.0 {
+					low = mid;
+					mid = (high + low) / 2.0;
+				} else {
+					return base + multiplier * mid;
+				}
+			}
+		};
+		
+		// returns 0 if p <= 0, logic error if trying to get the time to travel a negative pos (same as time to travel a positive pos)
+		let solve_t_given_p = |pos: f32| {
+			if pos <= 0.0 { return 0.0; } 
+			if pos > MAX_SPEED_POS { return MAX_SPEED_TIME + (pos - MAX_SPEED_POS) / MAX_SPEED; }
+			
+			// !!! binary search through possible times. For efficiency change into a lookup table
+			let mut low = 0.0;
+			let mut high = MAX_SPEED_TIME;
+			let mut mid = MAX_SPEED_TIME / 2.0;
+			loop {
+				let mid_pos = solve_p_given_t(mid, true);
+				if mid_pos - pos > 1.0 {
+					high = mid;
+					mid = (high + low) / 2.0;
+				} else if pos - mid_pos > 1.0 {
+					low = mid;
+					mid = (high + low) / 2.0;
+				} else {
+					return mid;
+				}
+			}
+			
+		};
+		
+		// get data on upcoming bricks, update self.upcoming_bricks_data
+		// !!! should not be calculated at runtime, should all be stored ahead of time
+		// TODO may be able to store more information/calculations in between ticks, but may cause varying tick calculation times
 		// this is the time threshold before which the player will go after a note
-		// !!! smarter buffer determination + dash/slash (hit_dir) that goes after a brick if it's still hittable
+			// !!! smarter buffer determination + dash/slash (hit_dir) that goes after a brick if it's still hittable
 		let time_with_buffer = time_running - 0.06; 
-		while let Some(brick) = bricks_iter.next() {
-			if brick.time() > time_with_buffer {
-				let bricks_time = brick.time();
-				let mut bricks_leftmost_x = brick.bounds().left_x;
-				let mut bricks_rightmost_x = brick.bounds().right_x;
-				while let Some(brick) = bricks_iter.next() {
-					if brick.time() - bricks_time > F32_ZERO {
+		if let Some(bricks_data) = self.upcoming_bricks_data.get(0) {
+			if bricks_data.time < time_with_buffer {
+				self.upcoming_bricks_data.pop_front();
+			}
+		}
+		if self.upcoming_bricks_data.len() < BRICK_DATA_BUFFER_SIZE {
+			let min_time = match self.upcoming_bricks_data.back() {
+				Some(bricks_data) => bricks_data.time,
+				None => time_with_buffer
+			};
+			while let Some(brick) = bricks_iter.next() {
+				
+				// if the brick comes after the last bricks with stored data, record them
+				if brick.time() > min_time {
+					let mut bricks_time = brick.time();
+					let mut leftmost_brick_pos = note_pos_from_x(brick.bounds().left_x);
+					let mut rightmost_brick_pos = leftmost_brick_pos;
+					let mut left_of_x = brick.bounds().left_x - PLAYER_WIDTH as f32;
+					let mut right_of_x = brick.bounds().right_x;
+					let mut group = false;
+					
+					while let Some(brick) = bricks_iter.next() {
+						if brick.time() - bricks_time > F32_ZERO {
+							self.upcoming_bricks_data.push_back( UpcomingBricksData {
+								time: bricks_time,
+								leftmost_brick_pos,
+								rightmost_brick_pos,
+								left_of_x,
+								right_of_x,
+								group
+							});
+							
+							if self.upcoming_bricks_data.len() < BRICK_DATA_BUFFER_SIZE {
+								bricks_time = brick.time();
+								leftmost_brick_pos = note_pos_from_x(brick.bounds().left_x);
+								rightmost_brick_pos = leftmost_brick_pos;
+								left_of_x = brick.bounds().left_x;
+								right_of_x = brick.bounds().right_x;
+								group = false;
+								continue;
+							}
+							break;
+						}
+						else {
+							let left_of = brick.bounds().left_x - PLAYER_WIDTH as f32;
+							let right_of = brick.bounds().right_x;
+							if left_of < left_of_x {
+								left_of_x = left_of;
+								leftmost_brick_pos = note_pos_from_x(brick.bounds().left_x);
+							}
+							else if right_of > right_of_x { 
+								right_of_x = right_of;
+								rightmost_brick_pos = note_pos_from_x(brick.bounds().left_x);
+							}
+						}
+						
+						// bug prevention measure each group of bricks has the time of the last brick added
+						bricks_time = brick.time(); 
+						group = true;
+					}
+						
+					self.upcoming_bricks_data.push_back(UpcomingBricksData{
+						time: bricks_time,
+						leftmost_brick_pos,
+						rightmost_brick_pos,
+						left_of_x: left_of_x,
+						right_of_x: right_of_x,
+						group
+					});
+					break;
+				}
+			}
+		}
+		
+		// get both targets and use them to update self.movement
+		if let None = self.movement { match self.upcoming_bricks_data.get(0) {
+			None => {}, // no movement
+			Some(bricks_data) => {
+				
+				const SEPARATION_SPACE: f32 = (BRICK_WIDTH - PLAYER_WIDTH) as f32 / 2.0; // so player is evenly between bricks
+				const MIN_SEPARATION_SPACE: f32 = SEPARATION_SPACE / 2.0;
+				const HIGH_SEPARATION_SPACE: f32 = SLASH_WIDTH as f32 / 2.0;
+				const MAX_SEPARATION_SPACE: f32 = SLASH_WIDTH as f32 / 1.5;
+				
+				// get target approach types, positions, and speed based on following brick data
+					// HIGH_SEPARATION_SPACE used when slashing a single brick in different direction of next bricks
+					// ever a time to go HIGH_SEPARATION_SPACE away on a group:
+						// can't make it to other side on time and have to turn after dashing?
+					// mistiming when approaching at a run may cause player to be slightly within brick at slash time
+				// calculating information for both targets rather than just the likely one is better 
+					// because there will be instances where both must be calculated, and consistent tick time is preferable
+				let left_target;
+				let right_target;
+				match self.upcoming_bricks_data.get(1) {
+					None => {
+						left_target = Target {
+							target: bricks_data.left_of_x - SEPARATION_SPACE,
+							left_bound: bricks_data.left_of_x - MAX_SEPARATION_SPACE,
+							right_bound: bricks_data.left_of_x - MIN_SEPARATION_SPACE,
+							target_v: 0.0,
+							priority: 1
+						};
+						right_target = Target {
+							target: bricks_data.right_of_x + SEPARATION_SPACE,
+							left_bound: bricks_data.right_of_x + MIN_SEPARATION_SPACE,
+							right_bound: bricks_data.right_of_x + MAX_SEPARATION_SPACE,
+							target_v: 0.0,
+							priority: 1
+						};
+					},
+					Some(bricks_data2) => {
+						let left_pos = bricks_data.leftmost_brick_pos - 1;
+						let right_pos = bricks_data.rightmost_brick_pos + 1;
+						let left_pos2 = bricks_data2.leftmost_brick_pos - 1;
+						let right_pos2 = bricks_data2.rightmost_brick_pos + 1;
+						let group = bricks_data.group; // determines whether the bricks will be dashed through
+						
+						// !!! 
+							// possible 3rd note lookahead if direction between first and second bricks is ambiguous but important
+							// check if it's a recognized brick group structure (store in brick data?)
+								// if left_target + 2 == right_target - 2
+							// don't necessarily need to be stopping when approaching a group
+						match group {
+							false => {
+								if left_pos - right_pos2 > 0 {
+									left_target = Target {
+										target: bricks_data.left_of_x - HIGH_SEPARATION_SPACE,
+										left_bound: bricks_data.left_of_x - MAX_SEPARATION_SPACE,
+										right_bound: bricks_data.left_of_x - MIN_SEPARATION_SPACE,
+										target_v: 0.0,
+										priority: 2
+									};
+									right_target = Target {
+										target: bricks_data.right_of_x + SEPARATION_SPACE,
+										left_bound: bricks_data.right_of_x + MIN_SEPARATION_SPACE,
+										right_bound: bricks_data.right_of_x + MAX_SEPARATION_SPACE,
+										target_v: -(bricks_data.right_of_x - bricks_data2.right_of_x)
+											/ (bricks_data2.time - bricks_data.time),
+										priority: 1
+									};
+								} else if left_pos2 - right_pos > 0 {
+									left_target = Target {
+										target: bricks_data.left_of_x - SEPARATION_SPACE,
+										left_bound: bricks_data.left_of_x - MAX_SEPARATION_SPACE,
+										right_bound: bricks_data.left_of_x - MIN_SEPARATION_SPACE,
+										target_v: (bricks_data2.left_of_x - bricks_data.left_of_x)
+											/ (bricks_data2.time - bricks_data.time),
+										priority: 1
+									};
+									right_target = Target {
+										target: bricks_data.right_of_x + HIGH_SEPARATION_SPACE,
+										left_bound: bricks_data.right_of_x + MIN_SEPARATION_SPACE,
+										right_bound: bricks_data.right_of_x + MAX_SEPARATION_SPACE,
+										target_v: 0.0,
+										priority: 2
+									};
+								} else {
+									// !!! ambiguous (or following pos may be the same as one of the target pos)
+									left_target = Target {
+										target: bricks_data.left_of_x - SEPARATION_SPACE,
+										left_bound: bricks_data.left_of_x - MAX_SEPARATION_SPACE,
+										right_bound: bricks_data.left_of_x - MIN_SEPARATION_SPACE,
+										target_v: 0.0,
+										priority: 1
+									};
+									right_target = Target {
+										target: bricks_data.right_of_x + SEPARATION_SPACE,
+										left_bound: bricks_data.right_of_x + MIN_SEPARATION_SPACE,
+										right_bound: bricks_data.right_of_x + MAX_SEPARATION_SPACE,
+										target_v: 0.0,
+										priority: 1
+									};
+								}
+							},
+							true => {
+								let end_dash_pos = left_pos + 2; // assume a dash
+								let left_priority;
+								let right_priority;
+								
+								// highly preferable to dash from opposite side of following bricks
+								if left_pos2 >= end_dash_pos {
+									left_priority = 3;
+									right_priority = 1;
+								} else if end_dash_pos >= right_pos2 {
+									left_priority = 1;
+									right_priority = 3;
+								} else {
+									// !!! ambiguous
+									left_priority = 1;
+									right_priority = 1;
+								}
+								
+								// !!! when approaching a group, the bound for how close you must be is tighter
+								left_target = Target {
+									target: bricks_data.left_of_x - SEPARATION_SPACE,
+									left_bound: bricks_data.left_of_x - SEPARATION_SPACE,
+									right_bound: bricks_data.left_of_x - MIN_SEPARATION_SPACE,
+									target_v: 0.0,
+									priority: left_priority
+								};
+								right_target = Target {
+									target: bricks_data.right_of_x + SEPARATION_SPACE,
+									left_bound: bricks_data.right_of_x + MIN_SEPARATION_SPACE,
+									right_bound: bricks_data.right_of_x + SEPARATION_SPACE,
+									target_v: 0.0,
+									priority: right_priority
+								};
+							}
+						}
+					}
+				}
+					
+				// Choose between the left and the right target
+				// !!! if it's possible to offload some work from calculation ticks to other ticks, that is preferable
+				// >:< include accelerated intervals, decelerated/stopping intervals
+					// ever boost/insta-stop for target speed? Or boost always after slash for next movement.
+					// shifting stops / tiny movements, avoid by being within bounds and otherwise going for target?
+					// given a desired speed, how to calculate how to reach bricks at that speed?
+					
+				let left_target = 
+					if left_target.target_v <= MAX_SPEED { // !!! invariant, should be positive or 0
+						left_target 
+					} else {
+						Target {
+							target_v: MAX_SPEED,
+							.. left_target
+						}
+					};
+				let right_target = 
+					if right_target.target_v >= -MAX_SPEED { // !!! invariant, should be negative or 0
+						right_target 
+					} else {
+						Target {
+							target_v: -MAX_SPEED,
+							.. right_target
+						}
+					};
+				let start_v = self.dx;
+				let start_x = self.bounds.left_x;
+				let start_t = time_running;
+				let brick_t = bricks_data.time;
+				
+				let time_left;
+				let time_right;
+				let mut movement_left = Movement {
+					intervals: Vec::new(),
+					current_interval: 0
+				};
+				let mut movement_right = Movement {
+					intervals: Vec::new(),
+					current_interval: 0
+				};
+				
+				let abs_start_v = if start_v >= 0.0 { start_v } else { -start_v };
+				// if both targets are right of player, else if both targets are left, else in between targets
+				if left_target.right_bound > start_x {
+					
+					// if heading right toward targets else heading left away
+					if start_v >= 0.0 {
+						let implicit_accel_time = solve_t_given_s(abs_start_v, true);
+						let effective_start_t = start_t - implicit_accel_time;
+						let effective_start_x = start_x - solve_p_given_t(implicit_accel_time, true);
+						
+						let interval0_left = MovementInterval {
+							movement_type: MovementType::Accelerating,
+							direction: Direction::Right,
+							effective_start_t,
+							effective_start_x,
+							end_t: solve_t_given_p(left_target.target - effective_start_x) + effective_start_t
+						};
+						
+						let interval0_right = MovementInterval {
+							movement_type: MovementType::Accelerating,
+							direction: Direction::Right,
+							effective_start_t,
+							effective_start_x,
+							end_t: solve_t_given_p(right_target.target - effective_start_x) + effective_start_t
+						};
+						
+						time_left = solve_t_given_p(left_target.left_bound - effective_start_x) + effective_start_t;
+						time_right = solve_t_given_p(right_target.left_bound - effective_start_x) + effective_start_t;
+						movement_left.intervals.push(interval0_left);
+						movement_right.intervals.push(interval0_right);
+					} else {
+						let implicit_decel_time = solve_t_given_s(abs_start_v, false);
+						let end_t0 = start_t + solve_t_given_s(abs_start_v, true);
+						let interval0 = MovementInterval {
+							movement_type: MovementType::Decelerating,
+							direction: Direction::Left,
+							effective_start_t: start_t - implicit_decel_time,
+							effective_start_x: start_x + solve_p_given_t(implicit_decel_time, false),
+							end_t: end_t0
+						};
+						
+						let turn_pos = interval0.effective_start_x - MAX_SPEED_POS;
+						let interval1_left = MovementInterval {
+							movement_type: MovementType::Accelerating,
+							direction: Direction::Right,
+							effective_start_t: end_t0,
+							effective_start_x: turn_pos,
+							end_t: solve_t_given_p(left_target.target - turn_pos) + end_t0
+						};
+						
+						let interval1_right = MovementInterval {
+							movement_type: MovementType::Accelerating,
+							direction: Direction::Right,
+							effective_start_t: end_t0,
+							effective_start_x: turn_pos,
+							end_t: solve_t_given_p(right_target.target - turn_pos) + end_t0
+						};
+						
+						time_left = solve_t_given_p(right_target.left_bound - turn_pos) + end_t0;
+						time_right = solve_t_given_p(right_target.left_bound - turn_pos) + end_t0;
+						movement_left.intervals.push(interval0.clone());
+						movement_left.intervals.push(interval1_left);
+						movement_right.intervals.push(interval0);
+						movement_right.intervals.push(interval1_right);
+					}
+				} else if right_target.left_bound < start_x {
+					
+					// if heading left toward targets else heading right away
+					if start_v <= 0.0 {
+						let implicit_accel_time = solve_t_given_s(abs_start_v, true);
+						let effective_start_t = start_t - implicit_accel_time;
+						let effective_start_x = start_x + solve_p_given_t(implicit_accel_time, true);
+						
+						let interval0_left = MovementInterval {
+							movement_type: MovementType::Accelerating,
+							direction: Direction::Left,
+							effective_start_t,
+							effective_start_x,
+							end_t: solve_t_given_p(effective_start_x - left_target.target) + effective_start_t
+						};
+						
+						let interval0_right = MovementInterval {
+							movement_type: MovementType::Accelerating,
+							direction: Direction::Left,
+							effective_start_t,
+							effective_start_x,
+							end_t: solve_t_given_p(effective_start_x - right_target.target) + effective_start_t
+						};
+						
+						time_left = solve_t_given_p(effective_start_x - left_target.right_bound) + effective_start_t;
+						time_right = solve_t_given_p(effective_start_x - right_target.right_bound) + effective_start_t;
+						movement_left.intervals.push(interval0_left);
+						movement_right.intervals.push(interval0_right);
+					} else {
+						let implicit_decel_time = solve_t_given_s(abs_start_v, false);
+						let end_t0 = start_t + solve_t_given_s(abs_start_v, true);
+						let interval0 = MovementInterval {
+							movement_type: MovementType::Decelerating,
+							direction: Direction::Right,
+							effective_start_t: start_t - implicit_decel_time,
+							effective_start_x: start_x - solve_p_given_t(implicit_decel_time, false),
+							end_t: end_t0
+						};
+						
+						let turn_pos = interval0.effective_start_x + MAX_SPEED_POS;
+						let interval1_left = MovementInterval {
+							movement_type: MovementType::Accelerating,
+							direction: Direction::Left,
+							effective_start_t: end_t0,
+							effective_start_x: turn_pos,
+							end_t: solve_t_given_p(turn_pos - left_target.target) + end_t0
+						};
+						
+						let interval1_right = MovementInterval {
+							movement_type: MovementType::Accelerating,
+							direction: Direction::Left,
+							effective_start_t: end_t0,
+							effective_start_x: turn_pos,
+							end_t: solve_t_given_p(turn_pos - right_target.target) + end_t0
+						};
+						
+						time_left = solve_t_given_p(turn_pos - right_target.right_bound) + end_t0;
+						time_right = solve_t_given_p(turn_pos - right_target.right_bound) + end_t0;
+						movement_left.intervals.push(interval0.clone());
+						movement_left.intervals.push(interval1_left);
+						movement_right.intervals.push(interval0);
+						movement_right.intervals.push(interval1_right);
+					}
+				} else {
+					// if heading right towards right target, else heading left towards left target
+					
+					if start_v >= 0.0 {
+					
+						let implicit_accel_time = solve_t_given_s(abs_start_v, true);
+						let implicit_decel_time = solve_t_given_s(abs_start_v, false);
+						
+						let effective_start_x_accel = start_x - solve_p_given_t(implicit_accel_time, true);
+						let effective_start_x_decel = start_x - solve_p_given_t(implicit_decel_time, false);
+						
+						let effective_start_t_right = start_t - implicit_accel_time;
+						let interval0_right = MovementInterval {
+							movement_type: MovementType::Accelerating,
+							direction: Direction::Right,
+							effective_start_t: effective_start_t_right,
+							effective_start_x: effective_start_x_accel,
+							end_t: solve_t_given_p(right_target.target - effective_start_x_accel) + effective_start_t_right
+						};
+						
+						let end_t0_left = start_t + implicit_accel_time;
+						let interval0_left = MovementInterval {
+							movement_type: MovementType::Decelerating,
+							direction: Direction::Right,
+							effective_start_t: start_t - implicit_decel_time,
+							effective_start_x: effective_start_x_decel,
+							end_t: end_t0_left
+						};
+						
+						let turn_pos = interval0_left.effective_start_x + MAX_SPEED_POS;
+						let interval1_left = MovementInterval {
+							movement_type: MovementType::Accelerating,
+							direction: Direction::Left,
+							effective_start_t: end_t0_left,
+							effective_start_x: turn_pos,
+							end_t: solve_t_given_p(turn_pos - left_target.target) + end_t0_left
+						};
+						
+						time_left = solve_t_given_p(turn_pos - left_target.right_bound) + end_t0_left;
+						time_right = solve_t_given_p(right_target.left_bound - effective_start_x_accel) + effective_start_t_right;
+						movement_left.intervals.push(interval0_left);
+						movement_left.intervals.push(interval1_left);
+						movement_right.intervals.push(interval0_right);
+					} else {
+						
+						let implicit_accel_time = solve_t_given_s(abs_start_v, true);
+						let implicit_decel_time = solve_t_given_s(abs_start_v, false);
+						
+						let effective_start_x_accel = start_x + solve_p_given_t(implicit_accel_time, true);
+						let effective_start_x_decel = start_x + solve_p_given_t(implicit_decel_time, false);
+						
+						let effective_start_t_left = start_t - implicit_accel_time;
+						let interval0_left = MovementInterval {
+							movement_type: MovementType::Accelerating,
+							direction: Direction::Left,
+							effective_start_t: effective_start_t_left,
+							effective_start_x: effective_start_x_accel,
+							end_t: solve_t_given_p(effective_start_x_accel - left_target.target) + effective_start_t_left
+						};
+						
+						let end_t0_right = start_t + implicit_accel_time;
+						let interval0_right = MovementInterval {
+							movement_type: MovementType::Decelerating,
+							direction: Direction::Left,
+							effective_start_t: start_t - implicit_decel_time,
+							effective_start_x: effective_start_x_decel,
+							end_t: end_t0_right
+						};
+						
+						let turn_pos = interval0_right.effective_start_x - MAX_SPEED_POS;
+						let interval1_right = MovementInterval {
+							movement_type: MovementType::Accelerating,
+							direction: Direction::Right,
+							effective_start_t: end_t0_right,
+							effective_start_x: turn_pos,
+							end_t: solve_t_given_p(right_target.target - turn_pos) + end_t0_right
+						};
+						
+						time_left = solve_t_given_p(effective_start_x_accel - left_target.right_bound) + effective_start_t_left;
+						time_right = solve_t_given_p(right_target.left_bound - turn_pos) + end_t0_right;
+						movement_left.intervals.push(interval0_left);
+						movement_right.intervals.push(interval0_right);
+						movement_right.intervals.push(interval1_right);
+					}
+				}
+				
+				// >:< 
+				// log information on targets and choice
+				{
+					log(&format!("Left Target: {} - {} - {}, target velocity: {}, priority: {}\n", 
+						left_target.left_bound, left_target.target, left_target.right_bound, 
+						left_target.target_v, left_target.priority));
+					log(&format!("Right Target: {} - {} - {}, target velocity: {}, priority: {}\n", 
+						right_target.left_bound, right_target.target, right_target.right_bound, 
+						right_target.target_v, right_target.priority));
+					log(&format!("Player: left x: {}, right x: {}", self.bounds.left_x, self.bounds.right_x));
+					
+					let mut interval_id = 0;
+					log(&format!("LEFT MOVEMENT:\n{}", movement_left));
+					while interval_id < movement_left.intervals.len() {	
+						let interval = &movement_left.intervals[interval_id];
+						let t = interval.end_t - interval.effective_start_t;
+						let change_multiplier = match interval.direction {
+							Direction::Left => -1.0,
+							Direction::Right => 1.0
+						};
+						let (change_x, end_speed) = match interval.movement_type {
+							MovementType::Constant(s) => (s * t, s),
+							MovementType::Accelerating => (solve_p_given_t(t, true), solve_s_given_t(t)),
+							MovementType::Decelerating => (solve_p_given_t(t, false), solve_s_given_t(MAX_SPEED_TIME - t))
+						};
+						
+						log(&format!("projected end x: {}\n projected end speed: {}\n\n", 
+							change_x * change_multiplier + interval.effective_start_x, end_speed * change_multiplier));
+						
+						interval_id += 1;
+					}
+					log(&format!("\n\n"));
+					
+					log(&format!("RIGHT MOVEMENT\n{}", movement_right));
+					interval_id = 0;
+					while interval_id < movement_right.intervals.len() {	
+						let interval = &movement_right.intervals[interval_id];
+						let t = interval.end_t - interval.effective_start_t;
+						let change_multiplier = match interval.direction {
+							Direction::Left => -1.0,
+							Direction::Right => 1.0
+						};
+						let (change_x, end_speed) = match interval.movement_type {
+							MovementType::Constant(s) => (s * t, s),
+							MovementType::Accelerating => (solve_p_given_t(t, true), solve_s_given_t(t)),
+							MovementType::Decelerating => (solve_p_given_t(t, false), solve_s_given_t(MAX_SPEED_TIME - t))
+						};
+						
+						log(&format!("projected end x: {}\n projected end speed: {}\n\n", 
+							change_x * change_multiplier + interval.effective_start_x, end_speed * change_multiplier));
+							
+						interval_id += 1;
+					}
+					log(&format!("\n\n"));
+				}
+					
+				// >:< Priority enum? LeftMuchHigher LeftHigher Same RightHigher RightMuchHigher
+				let priority_difference = left_target.priority as i8 - right_target.priority as i8;
+				let left_higher = priority_difference > 0;
+				let right_higher = priority_difference < 0;
+				// let left_much_higher = priority_difference > 1;
+				// let right_much_higher = priority_difference < -1;
+				let in_time_left = time_left <= brick_t;
+				let in_time_right = time_right <= brick_t;
+				match (in_time_left, in_time_right) {
+					(true, false) => {
+						self.movement = Some(movement_left);
+					},
+					(false, true) => {
+						self.movement = Some(movement_right);
+					},
+					_ => {
+						self.movement = 
+							if left_higher {
+								Some(movement_left)
+							} else if right_higher {
+								Some(movement_right)
+							} else if time_left < time_right {
+								Some(movement_left)
+							} else {
+								Some(movement_right)
+							};
+					}
+				}
+			}
+		} }
+		
+		// move player
+		if let Some(movement) = &mut self.movement {
+			
+			loop {
+				if movement.current_interval < movement.intervals.len() {
+					let this_interval = &movement.intervals[movement.current_interval];
+					if this_interval.end_t >= time_running {
+						
+						let time_difference = time_running - this_interval.effective_start_t;
+						let (pos_difference, speed) = match (this_interval.movement_type) {
+							MovementType::Constant(s) => (s * time_difference, s),
+							MovementType::Accelerating => (solve_p_given_t(time_difference, true), solve_s_given_t(time_difference)),
+							MovementType::Decelerating => 
+								(MAX_SPEED_POS - solve_p_given_t(MAX_SPEED_TIME - time_difference, true), 
+								solve_s_given_t(MAX_SPEED_TIME - time_difference))
+						};
+						let difference_multiplier = match this_interval.direction {
+							Direction::Left => -1.0,
+							Direction::Right => 1.0
+						};
+						
+						self.dx = speed * difference_multiplier;
+						self.bounds.left_x = this_interval.effective_start_x + pos_difference * difference_multiplier;
+						self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+						self.face_dir = this_interval.direction;
+						
 						break;
-					}
-					else if brick.bounds().left_x < bricks_leftmost_x {
-						bricks_leftmost_x = brick.bounds().left_x;
-					}
-					else if brick.bounds().right_x > bricks_rightmost_x { 
-						bricks_rightmost_x = brick.bounds().right_x;
+					} else {
+						movement.current_interval += 1;
+						
+						continue;
 					}
 				}
 				
-				upcoming_bricks_data = Some( (bricks_time, bricks_leftmost_x, bricks_rightmost_x) );
-				break;
-			}
-		}
-		
-		let movement: MovementType;
-		let target_direction: Direction;
-		let current_speed: f32; // absolute value of current dx
-		let mut current_direction: Option<Direction>;
-		let upcoming_bricks_time_until: Option<f32>;
-		
-		// get current speed and direction
-		if self.dx < -F32_ZERO { 
-			current_speed = -self.dx;
-			current_direction = Some(Direction::Left);
-		} else if self.dx > F32_ZERO { 
-			current_speed = self.dx;
-			current_direction = Some(Direction::Right);
-		} else {
-			current_speed = 0.0;
-			current_direction = None;
-		}
-		
-		// get movement type, target direction
-		match upcoming_bricks_data {
-			None => {
-				movement = MovementType::Stopping(0.0);
-				target_direction = match current_direction {
-					Some(direction) => direction,
-					None => self.face_dir
+				if movement.intervals.len() == 0 {
+					self.movement = None;
+					break;
+				}
+				
+				// the last movement has ended end the final movement before decelerating to 0
+				// >:< always decelerating to 0? What if continuing as soon as acquiring next target?
+					// mix logic? of moving / ending movements and target acquisition?
+				let last_movement = &movement.intervals[movement.intervals.len() - 1];
+				let last_direction = last_movement.direction;
+				let last_time = last_movement.end_t - last_movement.effective_start_t;
+				
+				let (start_x, start_v) = match (&last_movement.movement_type, last_direction) {
+					(MovementType::Constant(s), Direction::Right) => (last_movement.effective_start_x + s * last_time, *s),
+					(MovementType::Constant(s), Direction::Left) => (last_movement.effective_start_x - s * last_time, -*s),
+					(MovementType::Accelerating, Direction::Left) => 
+						(last_movement.effective_start_x - solve_p_given_t(last_time, true), solve_s_given_t(last_time)),
+					(MovementType::Accelerating, Direction::Right) => 
+						(last_movement.effective_start_x + solve_p_given_t(last_time, true), solve_s_given_t(last_time)),
+					(MovementType::Decelerating, Direction::Left) => 
+						(last_movement.effective_start_x - solve_p_given_t(last_time, false), 
+							solve_s_given_t(MAX_SPEED_TIME - last_time)),
+					(MovementType::Decelerating, Direction::Right) => 
+						(last_movement.effective_start_x + solve_p_given_t(last_time, false), 
+							solve_s_given_t(MAX_SPEED_TIME - last_time))
 				};
-				upcoming_bricks_time_until = None;
-			}
-			Some(brick_data) => {
-				upcoming_bricks_time_until = Some(brick_data.0 - time_running);
-				let upcoming_bricks_time_until = upcoming_bricks_time_until.unwrap();
-				let upcoming_bricks_leftmost_x = brick_data.1;
-				let upcoming_bricks_rightmost_x = brick_data.2;
 				
-				let mut distance_left = self.bounds.left_x - upcoming_bricks_rightmost_x;
-				let mut distance_right = upcoming_bricks_leftmost_x - self.bounds.right_x;
-				let mut distance_away;
-				const separation_space: f32 = 8.0;
+				self.dx = start_v;
+				self.bounds.left_x = start_x;
+				self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+				self.face_dir = last_direction;
 				
-				// get target direction and distance away
-				// if left or right of all bricks
-				if distance_left > 0.0 {
-					target_direction = Direction::Left;
-					distance_away = 
-						if distance_left < separation_space { 
-							0.0 
-						} else { 
-							distance_left - separation_space 
-						};
-					self.hit_dir = Direction::Left;
-				} else if distance_right > 0.0 {
-					target_direction = Direction::Right;
-					distance_away = 
-						if distance_right < separation_space { 
-							0.0 
-						} else { 
-							distance_right - separation_space 
-						};
-					self.hit_dir = Direction::Right;
+				if start_v < 1.0 && start_v > -1.0 {
+					self.movement = None;
+					break;
 				} 
-				// else if in between a group of bricks
-				else if distance_left > distance_right {
-					target_direction = Direction::Right;
-					distance_away = -distance_left + separation_space;
-					// for this and for other setting of hit_dir when within a group of bricks,
-						// dash away from destination if sufficiently inside the last brick (< DASH_WIDTH from destination)
-						// only works because there is a minimum separation space, so destination goes past strict end of brick
-					if distance_away < BRICK_WIDTH as f32 {
-						self.hit_dir = Direction::Left;
-					} else {
-						self.hit_dir = Direction::Right;
-					}
-				} else {
-					target_direction = Direction::Left;
-					distance_away = -distance_right + separation_space;
-					if distance_away < BRICK_WIDTH as f32 {
-						self.hit_dir = Direction::Right;
-					} else {
-						self.hit_dir = Direction::Left;
-					}
-				}
 				
-				let same_direction = match current_direction {
-					Some(direction) => direction == target_direction,
-					None => true
+				let (implicit_decel_time, effective_start_x) = match last_direction {
+					Direction::Left => {
+						let t = solve_t_given_s(-start_v, false);
+						(t, start_x + solve_p_given_t(t, false))
+					},
+					Direction::Right => {
+						let t = solve_t_given_s(start_v, false);
+						(t, start_x - solve_p_given_t(t, false))
+					}
 				};
 				
-				// determine the movement type
-				if !same_direction {
-					movement = MovementType::Turning;
-				} else if distance_away < SLASH_WIDTH as f32 {
-					if upcoming_bricks_time_until < MAX_TIME_BETWEEN_TICKS 
-					|| current_speed * upcoming_bricks_time_until > distance_away {
-						movement = MovementType::Stopping(distance_away); 
-					} else {
-						movement = MovementType::Running(distance_away / upcoming_bricks_time_until);
-					}
-				} else {
-					// overshoot the distance, so that player will go faster than strictly necessary to reach brick, 
-						// and then slow down once approaching the brick
-					let mut target_speed = distance_away * 1.2 / upcoming_bricks_time_until;
-					target_speed = 
-						if target_speed > MAX_PLAYER_SPEED { 
-							MAX_PLAYER_SPEED
-						} else if target_speed < MIN_PLAYER_SPEED {
-							MIN_PLAYER_SPEED
-						} else {
-							target_speed
-						};
-					movement = MovementType::Running(target_speed);
-				}
+				*movement = Movement {
+					intervals: Vec::new(),
+					current_interval: 0
+				};
+				
+				movement.intervals.push( MovementInterval {
+					movement_type: MovementType::Decelerating,
+					direction: last_direction,
+					effective_start_t: time_running - implicit_decel_time,
+					effective_start_x,
+					end_t: time_running + MAX_SPEED_TIME - implicit_decel_time
+				} );
+				
+				continue;
 			}
 		}
-		
-		// accelerate/decelerate at a rate depending on how fast the player is currently moving
-		let mut new_speed;
-		let mut speed_for_tick;
-		// >:< invert conditions
-		if current_speed <= MIN_PLAYER_SPEED {
-			match movement {
-				MovementType::Stopping(distance_away) => {
-					let time_to_stop = distance_away * 2.0 / current_speed;
-					let target_acceleration = -current_speed / time_to_stop;
-					if distance_away > F32_ZERO {
-						if target_acceleration < -3000.0 {
-							// decelerate as quickly as possible
-							new_speed = current_speed -(3000.0 * seconds_passed);
-							if new_speed < F32_ZERO { new_speed = 0.0 };
-							speed_for_tick = (new_speed + current_speed) / 2.0;
-						} else if target_acceleration < -1600.0 {
-							// decelerate
-							if time_to_stop < seconds_passed {
-								new_speed = 0.0;
-								speed_for_tick = distance_away / seconds_passed;
-							} else {
-								new_speed = current_speed -(target_acceleration * seconds_passed);
-								speed_for_tick = (new_speed + current_speed) / 2.0;
-							}
-						} else {
-							// either going too slowly to reach distance_away in a reasonable time
-								// OR distance_away is too far away to stop just yet
-							if time_to_stop > MAX_TIME_BETWEEN_TICKS * 2.0 {
-								new_speed = current_speed + (500.0 * seconds_passed);
-								speed_for_tick = (new_speed + current_speed) / 2.0;
-							} else {
-								new_speed = distance_away * 2.0 / (MAX_TIME_BETWEEN_TICKS * 2.0);
-								speed_for_tick = (new_speed + current_speed) / 2.0;;
-							}
-						}
-					} else {
-						new_speed = current_speed -(3000.0 * seconds_passed);
-						if new_speed < F32_ZERO { new_speed = 0.0 };
-						speed_for_tick = (new_speed + current_speed) / 2.0;
-					}
-				}
-				MovementType::Turning => {
-					new_speed = current_speed - (3000.0 * seconds_passed);
-					new_speed = if new_speed < 0.0 { new_speed / 2.0 } else { new_speed };
-					speed_for_tick = (new_speed + current_speed) / 2.0;
-					if new_speed < 0.0 {
-						match current_direction.unwrap() {
-							Direction::Left => current_direction = Some(Direction::Right),
-							Direction::Right => current_direction = Some(Direction::Left)
-						}
-						new_speed = - new_speed;
-						speed_for_tick = -speed_for_tick;
-					}
-				}
-				MovementType::Running(target_speed) => {
-					let speed_difference = target_speed - current_speed;
-					let mut acceleration = speed_difference * 3.0 / upcoming_bricks_time_until.unwrap();
-					if acceleration > 1800.0 {
-						acceleration = 1800.0;
-					}
-					new_speed = current_speed + (acceleration * seconds_passed);
-					speed_for_tick = (new_speed + current_speed) / 2.0;
-					
-					// if accelerating/decelerating beyond the target_speed
-					if (speed_for_tick - current_speed) / speed_difference > 1.0 {
-						speed_for_tick = target_speed;
-						new_speed = target_speed;
-					}
-				}
-			}
-		} else if current_speed < MID_PLAYER_SPEED {
-			match movement {
-				MovementType::Stopping(_) | MovementType::Turning => {
-					new_speed = current_speed - (2200.0 * seconds_passed);
-					speed_for_tick = (new_speed + current_speed) / 2.0;
-				}
-				MovementType::Running(target_speed) => {
-					let speed_difference = target_speed - current_speed;
-					let mut acceleration = speed_difference * 3.0 / upcoming_bricks_time_until.unwrap();
-					if acceleration > 1300.0 {
-						acceleration = 1300.0;
-					}
-					new_speed = current_speed + (acceleration * seconds_passed);
-					speed_for_tick = (new_speed + current_speed) / 2.0;
-					
-					// if accelerating/decelerating beyond the target_speed
-					if (speed_for_tick - current_speed) / speed_difference > 1.0 {
-						speed_for_tick = target_speed;
-						new_speed = target_speed;
-					}
-				}
-			}
-		} else {
-			match movement {
-				MovementType::Stopping(_) | MovementType::Turning => {
-					new_speed = current_speed - (2200.0 * seconds_passed);
-					speed_for_tick = (new_speed + current_speed) / 2.0;
-				}
-				MovementType::Running(target_speed) => {
-					let speed_difference = target_speed - current_speed;
-					let mut acceleration = speed_difference * 3.0 / upcoming_bricks_time_until.unwrap();
-					if acceleration > 800.0 {
-						acceleration = 800.0;
-					}
-					new_speed = current_speed + (acceleration * seconds_passed);
-					speed_for_tick = (new_speed + current_speed) / 2.0;
-					
-					// if accelerating/decelerating beyond the target_speed
-					if (speed_for_tick - current_speed) / speed_difference > 1.0 {
-						speed_for_tick = target_speed;
-						new_speed = target_speed;
-					}
-				}
-			}
-		}
-		
-		// move and set dx to the new speed in the correct direction
-		match current_direction { 
-			Some(direction) => { match direction {
-				Direction::Left => {
-					self.dx = -new_speed;
-					self.bounds.left_x -= speed_for_tick * seconds_passed;
-					self.bounds.right_x -= speed_for_tick * seconds_passed;
-					self.face_dir = Direction::Left;
-				}
-				Direction::Right => {
-					self.dx = new_speed;
-					self.bounds.left_x += speed_for_tick * seconds_passed;
-					self.bounds.right_x += speed_for_tick * seconds_passed;
-					self.face_dir = Direction::Right;
-				}
-			}},
-			None => { match target_direction {
-				Direction::Left => {
-					self.dx = -new_speed;
-					self.bounds.left_x -= speed_for_tick * seconds_passed;
-					self.bounds.right_x -= speed_for_tick * seconds_passed;
-					self.face_dir = Direction::Left;
-				}
-				Direction::Right => {
-					self.dx = new_speed;
-					self.bounds.left_x += speed_for_tick * seconds_passed;
-					self.bounds.right_x += speed_for_tick * seconds_passed;
-					self.face_dir = Direction::Right;
-				}
-			}}
-		} 
 		
 		// check to not go past any boundaries
 		if self.bounds.left_x < LEFT_BOUNDARY {
@@ -560,9 +1125,11 @@ impl Player {
 		}
 		
 		// update the graphic
+		// >:< how to do a turning graphic?
 		if self.dx > F32_ZERO || self.dx < -F32_ZERO {
 			self.movement_frame_t += seconds_passed; 
-			// >:< common shortest fps (16.7? or less?) variable for graphics, and have all images stored with assumption of the fps
+			// >:< common shortest frame time (16.7? or less to avoid accidentally long frames?) variable for graphics
+				// have all images stored with assumption of the fps
 			while self.movement_frame_t > 0.0167 { 
 				self.movement_frame_t -= 0.0167;
 				self.movement_frame = (self.movement_frame + 1) % NUM_MOVEMENT_FRAMES;
@@ -576,7 +1143,12 @@ impl Player {
 			Direction::Right => 0,
 			Direction::Left => GraphicFlags::HorizontalFlip as u8
 		};
-		let sub_id = if current_speed < MID_PLAYER_SPEED { self.movement_frame } else { self.movement_frame + NUM_MOVEMENT_FRAMES };
+		
+		// !!! more robust way of indexing graphics?
+		let sub_id = if self.dx < RUN_GRAPHIC_THRESHOLD && self.dx > -RUN_GRAPHIC_THRESHOLD { 
+			self.movement_frame } else { 
+			self.movement_frame + NUM_MOVEMENT_FRAMES };
+			
 		self.graphic = Graphic { g: GraphicGroup::Player, sub_id, flags };
 	}
 	

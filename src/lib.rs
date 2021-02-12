@@ -15,11 +15,14 @@
 // expand on read-MIDI functionality, and add options to control generated output such as only use certain program numbers (instruments)
 	// or channels to generate notes, criteria for excluding notes if there are too many, etc.
 // stick with sqlite/sqljs?
+// Log objects going beyond boundaries
+// Valid to create/delete menu if it means better performance
 
 // TESTS
 // test that objects have correct dimensions
 
-// !!! logging
+// !!! Way to trigger GC? Prevent GC? Prime cache before playing?
+// !!! logging - panics to logs
 // !!! size offset, x offset, y offset for graphics that are sized differently than their objects
 // !!! cleanup cargo.toml, include features that are best for game.
 // !!! fix and extend midi-reader / song converter
@@ -58,24 +61,6 @@ mod game {
 	use objects::Player;
 	use objects::TempObjectState;
 	use objects::Direction;
-	
-	fn note_pos_to_x(pos: u8) -> f32 {
-		let pos = match pos >= objects::MAX_NOTES_PER_SCREEN_WIDTH {
-			true => objects::MAX_NOTES_PER_SCREEN_WIDTH - 1,
-			false => pos
-		};
-		
-		return (objects::BRICK_WIDTH * pos as u32) as f32;
-	}
-	fn note_pos_from_x(x: f32) -> u8 {
-		let pos = x as u8 / objects::BRICK_WIDTH as u8;
-		let pos = match pos >= objects::MAX_NOTES_PER_SCREEN_WIDTH {
-			true => objects::MAX_NOTES_PER_SCREEN_WIDTH - 1,
-			false => pos
-		};
-		
-		return pos;
-	}
 	
 	#[derive(Clone, Copy)]
 	pub struct UpcomingNote {
@@ -162,6 +147,7 @@ mod game {
 	#[wasm_bindgen]
 	impl Game {
 		pub fn new(bpm: u32, brick_speed: f32, duration: f32) -> Game {
+			
 			return Game {
 				time_running: 0.0,
 				player: Player::new((GAME_WIDTH / 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0),
@@ -657,6 +643,25 @@ pub enum Input {
 pub fn ground_pos() -> f32 {
 	return GROUND_POS as f32;
 }
+
+fn note_pos_to_x(pos: u8) -> f32 {
+		let pos = match pos >= objects::MAX_NOTES_PER_SCREEN_WIDTH {
+			true => objects::MAX_NOTES_PER_SCREEN_WIDTH - 1,
+			false => pos
+		};
+		
+		return (objects::BRICK_WIDTH * pos as u32) as f32;
+	}
+	
+fn note_pos_from_x(x: f32) -> u8 {
+	let pos = (x / objects::BRICK_WIDTH as f32) as u8;
+	let pos = match pos >= objects::MAX_NOTES_PER_SCREEN_WIDTH {
+		true => objects::MAX_NOTES_PER_SCREEN_WIDTH - 1,
+		false => pos
+	};
+	
+	return pos;
+}
 		
 #[wasm_bindgen]
 pub fn num_graphic_groups() -> usize {
@@ -668,8 +673,9 @@ pub fn num_possible_inputs() -> usize {
 	return Input::num_variants();
 }
 
+// >:< logging
 #[wasm_bindgen]
 extern {
     #[wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
+    pub fn log(s: &str);
 }

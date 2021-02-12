@@ -14,19 +14,15 @@ export function Game () {
 	this.screenDiv;
 	this.lastTick;
 	this.gameData;
-	this.graphics; // !!! can be either canvases or webGL. Asdd way to choose between them.
+	this.graphics; // !!! can be either canvases or webGL. Add way to choose between them.
 	this.database;
-	this.song;
+	this.songID;
 	this.isLoaded = false;
 	
 	this.audioContext = new AudioContext();
 	this.audioSource;
 	this.audioBuffer;
 	this.audioTimeSafetyBuffer = 0.15;
-	
-	this.brickBreakAudioContext = new AudioContext();
-	this.brickBreakAudioSource;
-	this.brickBreakAudioBuffer;
 	
 	//initialize screen div
 	this.screenDiv = document.createElement("div");
@@ -46,30 +42,18 @@ Game.prototype.load = async function () {
 	
 	// TODO add error handling
 	await loader.init()
-		.then( () => loader.loadGraphics("canvases", this.screenDiv)) //canvases or webGL
+		.then( () => loader.loadGraphics("webGL", this.screenDiv)) //canvases or webGL
 		.then( res => this.graphics = res );
 		
 	// !!! can happen same time as graphics are loading
 	this.database = await loader.loadDatabase();
 	
-	// !!! associate with Songs table in database and load as needed using loader
+	// !!! don't load song (mp3 and notes from database) on initialization
 	// TODO add error handling
 	await fetch("song.mp3")
 		.then(res => res.arrayBuffer())
 		.then(res => this.audioContext.decodeAudioData(res))
 		.then(res => { this.audioBuffer = res; }
-	);
-	
-	// !!! make part of loader
-	await fetch("pop.wav")
-		.then(res => res.arrayBuffer())
-		.then(res => this.brickBreakAudioContext.decodeAudioData(res))
-		.then(res => { 
-			this.brickBreakAudioBuffer = res; 
-			this.brickBreakAudioSource = this.brickBreakAudioContext.createBufferSource(); 
-			this.brickBreakAudioSource.buffer = this.brickBreakAudioBuffer;
-			this.brickBreakAudioSource.connect(this.brickBreakAudioContext.destination);
-		}
 	);
 	
 	this.gameData = wasm.Game.new();
@@ -80,20 +64,9 @@ Game.prototype.load = async function () {
 	this.xFactor = 1;
 	this.yFactor = 1;
 	
-	this.loadSong(6);
+	this.loadSong(6); // !!! loading arbitrary song... instead should query and load first song, or allow no song to be loaded
 	
 	this.isLoaded = true;
-}
-
-Game.prototype.toEditor = async function(){
-	if(!(this instanceof Editor)){
-		// !!! make broken notes reappear
-		Object.setPrototypeOf(this, Editor.prototype);
-		Editor.call(this);
-	}
-	
-	await this.load();
-	return this;
 }
 
 Game.prototype.resize = function(){
@@ -145,13 +118,6 @@ Game.prototype.tick = function(){
 	this.gameData.tick(timePassed); 
 	this.lastTick = now;
 	this.renderGame();
-	if( this.gameData.bricks_broken() > 0 ){
-		// play sound then create a new audio source in preparation for subsequent bricks breaking
-		this.brickBreakAudioSource.start();
-		this.brickBreakAudioSource = this.brickBreakAudioContext.createBufferSource(); 
-		this.brickBreakAudioSource.buffer = this.brickBreakAudioBuffer;
-		this.brickBreakAudioSource.connect(this.brickBreakAudioContext.destination);
-	}
 }
 
 Game.prototype.startControl = function(cntrl){
@@ -175,10 +141,13 @@ Game.prototype.score = function(){
 }
 
 Game.prototype.songData = function(){
-	this.song.beatInterval = this.gameData.beat_interval();
-	this.song.songTime = this.gameData.song_time();
-	this.song.score = this.gameData.score()
-	return this.song;
+	return {
+		beatInterval: this.gameData.beat_interval(),
+		brickSpeed: this.gameData.brick_speed(),
+		songTime: this.gameData.song_time(),
+		songDuration: this.gameData.song_duration(),
+		score: this.gameData.score()
+	}
 }
 
 Game.prototype.songs = function(){
@@ -187,70 +156,40 @@ Game.prototype.songs = function(){
 	return songs;
 }
 
-Game.prototype.newSong = function(bpm, brickSpeed, duration){
+Game.prototype.loadSong = function(songID){
 	// !!! check if current song has been saved (modified flag?) 
 		// No need to show a check for regular game usage where songs aren't edited
 	// !!! creating a new game to load a new song? Or create a load_song method? wasm garbage collected?
-	let createSong = true;
-	if(createSong){
-		this.gameData = wasm.Game.new(bpm, brickSpeed, duration);
-		this.song = {};
-		this.song.bpm = bpm;
-		this.song.brickSpeed = brickSpeed;
-		this.song.duration = duration;
-	}
-	
-	return createSong;
-}
-
-Game.prototype.loadSong = function(songID){
-	
+	this.songID = songID;
 	let {notes, song} = this.database.loadSong(songID);
-	let songValues = {};
 	
+	let bpm, brickSpeed, duration;
 	song[0]["columns"].forEach( (columnName, idx) => {
-		if(columnName.toUpperCase() === "SONGID"){
-			songValues.songID = song[0]["values"][0][idx];
-		}
-		else if(columnName.toUpperCase() === "NAME"){
-			songValues.name = song[0]["values"][0][idx];
-		}
-		else if(columnName.toUpperCase() === "ARTIST"){
-			songValues.artist = song[0]["values"][0][idx];
-		}
-		else if(columnName.toUpperCase() === "DIFFICULTY"){
-			songValues.difficulty = song[0]["values"][0][idx];
-		}
-		else if(columnName.toUpperCase() === "BPM"){
-			songValues.bpm = song[0]["values"][0][idx];
+		if(columnName.toUpperCase() === "BPM"){
+			bpm = song[0]["values"][0][idx];
 		}
 		else if(columnName.toUpperCase() === "BRICKSPEED"){
-			songValues.brickSpeed = song[0]["values"][0][idx];
+			brickSpeed = song[0]["values"][0][idx];
 		}
 		else if(columnName.toUpperCase() === "DURATION"){
-			songValues.duration = song[0]["values"][0][idx];
-		}
-		else if(columnName.toUpperCase() === "TIMECREATED"){
-			songValues.timeCreated = song[0]["values"][0][idx];
+			duration = song[0]["values"][0][idx];
 		}
 	});
 	
-	if(this.newSong(songValues.bpm, songValues.brickSpeed, songValues.duration) == true){
-		// TODO flimsy way of indexing into notes to retrieve correct values
-		notes[0]["values"].forEach( note => {
-			this.gameData.toggle_brick(note[2], note[3], note[4]); 
-		});
-	}
+	this.gameData = wasm.Game.new(bpm, brickSpeed, duration);
 	
-	this.song = songValues;
-	// TODO doesn't show song immediately after load, and seek isn't a member of Game so can't seek to show
+	// TODO flimsy way of indexing into notes to retrieve correct values
+	notes[0]["values"].forEach( note => {
+		this.gameData.toggle_brick(note[2], note[3], note[4]); 
+	});
+	
 	this.renderGame();
 }
 
 Game.prototype.saveSong = function(songData, overwrite){
 	let notes = JSON.parse(this.gameData.song_notes_json());
 	if(overwrite === true){
-		songData.songID = this.song.songID;
+		songData.songID = this.songID;
 		this.database.overwriteSong(songData, notes);
 	}
 	else{
@@ -258,97 +197,31 @@ Game.prototype.saveSong = function(songData, overwrite){
 	}
 }
 
-export function Editor () {
-	this.editorLoaded;
-	this.notes;
-	this.notesIdx;
-	
-	this.playTickingSound = false;
-	this.tickAudioContext;
-	this.tickAudioBuffer;
-	this.tickAudioSource;
-	
-	if(!(this instanceof Game)){
-		Game.call(this);
+Game.prototype.toEditor = function(){
+	if(this.isLoaded == false) {
+		throw Error("game object has not been loaded");
+	}
+	if(this instanceof Editor){
+		return this;
 	}
 	
-	this.editorLoaded = false;
-	this.tickAudioContext = new AudioContext();
+	// !!! make broken notes reappear
+	Object.setPrototypeOf(this, Editor.prototype);
+	
+	return this;
+}
+
+export function Editor () {
+	Game.call(this);
+	
+	this.onScreenClick;
 }
 
 Object.setPrototypeOf(Editor.prototype, Game.prototype);
 
-Editor.prototype.load = async function(){
-	if(!this.isLoaded){
-		await Game.prototype.load.call(this);
-	}
-	if(this.editorLoaded){
-		return;
-	}
-	
-	let json = JSON.parse(this.gameData.song_notes_json());
-	this.notes = [];
-	this.notesIdx = 0;
-	json.forEach( note => {
-		this.notes.push(note.time);
-	});
-	
-	await fetch("tick.wav")
-		.then(res => res.arrayBuffer())
-		.then(res => this.tickAudioContext.decodeAudioData(res))
-		.then(res => { 
-			this.tickAudioBuffer = res; 
-			this.tickAudioSource = this.tickAudioContext.createBufferSource(); 
-			this.tickAudioSource.buffer = this.tickAudioBuffer;
-			this.tickAudioSource.connect(this.tickAudioContext.destination);
-		}
-	);
-	
-	this.editorLoaded = true;
-}
-
-Editor.prototype.tick = function(){
-	Game.prototype.tick.call(this);
-	
-	
-	let notePassed = false;
-	while(this.notes[this.notesIdx] < this.gameData.song_time()){
-		++this.notesIdx;
-		notePassed = true;
-	}
-	if(this.playTickingSound === true && notePassed){
-		this.tickAudioSource.start();
-		this.tickAudioSource = this.tickAudioContext.createBufferSource(); 
-		this.tickAudioSource.buffer = this.tickAudioBuffer;
-		this.tickAudioSource.connect(this.tickAudioContext.destination);
-	}
-}
-
-Editor.prototype.toggleTickingSound = function(){
-	if(this.playTickingSound === true){
-		this.playTickingSound = false;
-	}
-	else{
-		this.playTickingSound = true;
-	}
-}
-
 Editor.prototype.seek = function(time){
-	if(time < 0){
-		return;
-	}
 	this.gameData.seek(time);
 	this.renderGame();
-	
-	this.notesIdx = 0;
-	for(let i = 0; i < this.notes.length; ++i){
-		if(time > this.notes[i]){
-			this.notesIdx = i + 1;
-		}
-		else{
-			break;
-		}
-	}
 }
 
 Editor.prototype.createNote = function(x, y){
@@ -368,18 +241,6 @@ Editor.prototype.createNote = function(x, y){
 	// to have the game add the note. 
 	// TODO, more robust way would be to add the note to on screen notes in toggle_brick, then just rerender with renderGame()
 	this.seek(t); 
-	
-	// TODO only add/remove new/removed notes, don't reload whole song
-	let json = JSON.parse(this.gameData.song_notes_json());
-	let songTime = this.gameData.song_time();
-	this.notes = [];
-	this.notesIdx = 0;
-	json.forEach( note => {
-		this.notes.push(note.time);
-		if(songTime > note.time){
-			++this.notesIdx;
-		}
-	});
 }
 
 Editor.prototype.toGame = function(){
@@ -387,6 +248,8 @@ Editor.prototype.toGame = function(){
 		throw Error("game object has not been loaded");
 	}
 	
+	this.screenDiv.removeEventListener("click", this.onScreenClick);
+	this.onScreenClick = undefined;
 	// !!! rethink the relationship between editor and game. Seems flimsy to switch to game while retaining all game data.
 		// Clear hack right now, switch to editor and back to rewind song
 	Object.setPrototypeOf(this, Game.prototype);
