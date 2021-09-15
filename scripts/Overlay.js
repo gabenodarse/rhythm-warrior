@@ -1,5 +1,5 @@
 
-import * as wasm from "./pkg/music_mercenary.js";
+import * as wasm from "../pkg/music_mercenary.js";
 
 // !!! finish map
 let g_keyCodeNames = [];

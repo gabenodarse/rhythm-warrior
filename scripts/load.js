@@ -1,6 +1,6 @@
 import * as MIDIReader from "./read-MIDI.js";
-import * as sqljs from "./sql-wasm.js";
-import * as wasm from "./pkg/music_mercenary.js";
+import * as sqljs from "../sql-wasm.js";
+import * as wasm from "../pkg/music_mercenary.js";
 import {WebGLGraphics, CanvasGraphics} from "./graphics.js";
 
 export function MMDatabase(database){

@@ -1,6 +1,6 @@
 "use strict";
 
-import * as wasm from "./pkg/music_mercenary.js";
+import * as wasm from "../pkg/music_mercenary.js";
 import * as load from "./load.js";
 
 //TODO searching through game to its prototype to find the tick function every tick is technically suboptimal?
