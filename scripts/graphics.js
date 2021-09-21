@@ -51,7 +51,6 @@ export function CanvasGraphics(images, screenDiv){
 
 CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
 	// clear old canvases
-	// !!! only clear if they are unused in this iteration this section is taking as long as the value updates themselves
 	this.canvases.forEach( graphicGroup => {
 		graphicGroup.forEach( canvasGroup => {
 			if(canvasGroup.nextCanvasIdx != 0){
@@ -74,10 +73,12 @@ CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
 		let y = i32buf[i];
 		++i;
 		let graphicIdx = u8buf[i*4];
-		let graphicSubID = u8buf[i*4 + 1];
+		let graphicFrame = u8buf[i*4 + 1];
 		let graphicFlags = u8buf[i*4 + 2];
 		++i;
 		
+		let numFrames = this.canvases[graphicIdx].length; // >:< 
+		let graphicSubID = graphicFrame % numFrames;
 		let canvasGroup = this.canvases[graphicIdx][graphicSubID];
 		let idx = canvasGroup.nextCanvasIdx;
 		
@@ -97,7 +98,6 @@ CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
 		}
 		
 		canvasGroup.canvases[idx].style.visibility = "visible";
-		
 		++canvasGroup.nextCanvasIdx;
 	}
 }
@@ -228,7 +228,7 @@ WebGLGraphics.prototype.render = function(instructions, xFactor, yFactor){
 	gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 	let positions = new Float32Array(12);
 	
-	// move and make canvases visible
+	// move and make textures visible
 	let end = instructions.num_graphics * 3;
 	let i32buf = new Int32Array(wasmMemory().buffer, instructions.graphics_ptr, end);
 	let u8buf = new Uint8Array(wasmMemory().buffer, instructions.graphics_ptr, end*4);
@@ -239,10 +239,12 @@ WebGLGraphics.prototype.render = function(instructions, xFactor, yFactor){
 		let y = i32buf[i];
 		++i;
 		let graphicIdx = u8buf[i*4];
-		let graphicSubID = u8buf[i*4 + 1];
+		let graphicFrame = u8buf[i*4 + 1];
 		let graphicFlags = u8buf[i*4 + 2];
 		++i;
 		
+		let numFrames = textures[graphicIdx].length;
+		let graphicSubID = graphicFrame % numFrames;
 		let sizedTexture = textures[graphicIdx][graphicSubID];
 		
 		gl.bindTexture(gl.TEXTURE_2D, sizedTexture.texture);

@@ -172,7 +172,7 @@ impl Player {
 	
 	pub fn new(x: f32) -> Player {
 		Player {
-			graphic: Graphic { g: GraphicGroup::Player, sub_id: 0, flags: 0 },
+			graphic: Graphic { g: GraphicGroup::Player, frame: 0, flags: 0 },
 			bounds: ObjectBounds {
 				left_x: x,
 				top_y: GROUND_POS as f32 - PLAYER_HEIGHT as f32,
@@ -340,6 +340,9 @@ impl Player {
 			self.bounds.left_x = ti.left_brick - PLAYER_WIDTH as f32;
 			self.face_dir = Direction::Right;
 		}
+		
+		// log(&format!("{} => {} => {}", time_running, time_running / 0.01667, (time_running / 0.01667) % 256.0));
+		self.graphic = Graphic { g: GraphicGroup::Player, frame: ((time_running / 0.01667) % 256.0) as u8, flags: 0 };
 	}
 	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
@@ -382,12 +385,12 @@ impl Object for Brick {
 
 impl Brick {
 	pub fn new (brick_type: BrickType, x: f32, y: f32, t: f32) -> Brick {
-		let sub_id = 0;
+		let frame = 0;
 		let flags = 0;
 		let graphic = match brick_type {
-			BrickType::Type1 => Graphic{ g: GraphicGroup::Brick, sub_id, flags },
-			BrickType::Type2 => Graphic{ g: GraphicGroup::Brick2, sub_id, flags },
-			BrickType::Type3 => Graphic{ g: GraphicGroup::Brick3, sub_id, flags }
+			BrickType::Type1 => Graphic{ g: GraphicGroup::Brick, frame, flags },
+			BrickType::Type2 => Graphic{ g: GraphicGroup::Brick2, frame, flags },
+			BrickType::Type3 => Graphic{ g: GraphicGroup::Brick3, frame, flags }
 		};
 		
 		return Brick {
@@ -436,7 +439,7 @@ impl Slash {
 	pub fn new(x: f32, y: f32, brick_type: BrickType, t_since_tick: f32, dir: Direction) -> Slash {
 		
 		let graphic_group;
-		let sub_id = 0;
+		let frame = 0;
 		let flags = 0;
 		
 		let left_x;
@@ -468,7 +471,7 @@ impl Slash {
 		return Slash {
 			brick_type,
 			state: TempObjectState::New(t_since_tick),
-			graphic: Graphic{ g: graphic_group, sub_id, flags },
+			graphic: Graphic{ g: graphic_group, frame, flags },
 			bounds: ObjectBounds {
 				left_x,
 				top_y: y,
@@ -552,8 +555,8 @@ impl Object for Dash {
 impl Dash {
 	pub fn new(x: f32, y: f32, t_since_tick: f32, dir: Direction) -> Dash {
 		let flags = 0;
-		let sub_id = 0;
-		let graphic = Graphic{ g: GraphicGroup::Dash0, sub_id, flags };
+		let frame = 0;
+		let graphic = Graphic{ g: GraphicGroup::Dash0, frame, flags };
 		
 		if let Direction::Right = dir {
 			Dash {

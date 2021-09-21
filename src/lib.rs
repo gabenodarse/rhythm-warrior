@@ -284,7 +284,7 @@ mod game {
 			
 			graphics.push(
 				PositionedGraphic {
-					g: Graphic{ g: GraphicGroup::Background, sub_id: 0, flags: 0 },
+					g: Graphic{ g: GraphicGroup::Background, frame: 0, flags: 0 },
 					x: 0,
 					y: 0
 				},
@@ -549,9 +549,10 @@ pub enum GraphicGroup {
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
 // fits within 32 bits
+// >:< might mean that graphics must come in 8s / 16s factors of 256
 pub struct Graphic {
 	pub g: GraphicGroup,
-	pub sub_id: u8,
+	pub frame: u8, // each frame adds 1 to frame mod 256. From timer javascript code chooses animation frame.
 	pub flags: u8
 }
 
