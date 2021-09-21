@@ -530,7 +530,8 @@ mod game {
 #[derive(Clone, Copy, Debug, EnumVariantCount)]
 pub enum GraphicGroup {
 	Background,
-	Player,
+	Walking,
+	Running,
 	Brick,
 	Brick2,
 	Brick3,
@@ -589,7 +590,11 @@ pub fn graphic_size(g: GraphicGroup) -> Position {
 			x: GAME_WIDTH as i32,
 			y: GAME_HEIGHT as i32,
 		}},
-		GraphicGroup::Player => { Position {
+		GraphicGroup::Walking => { Position {
+			x: objects::PLAYER_WIDTH as i32,
+			y: objects::PLAYER_HEIGHT as i32,
+		}},
+		GraphicGroup::Running => { Position {
 			x: objects::PLAYER_WIDTH as i32,
 			y: objects::PLAYER_HEIGHT as i32,
 		}},
@@ -611,11 +616,13 @@ pub fn graphic_size(g: GraphicGroup) -> Position {
 	};
 }
 
+// the maximum amount of the graphic that can appear on screen
 #[wasm_bindgen]
 pub fn max_graphics(g: GraphicGroup) -> u32 {
 	match g {
 		GraphicGroup::Background => 1,
-		GraphicGroup::Player => 1,
+		GraphicGroup::Walking => 1,
+		GraphicGroup::Running => 1,
 		GraphicGroup::Brick | GraphicGroup::Brick2 | GraphicGroup::Brick3 => 32,
 		GraphicGroup::SlashRight | GraphicGroup::SlashRight2 | GraphicGroup::SlashRight3
 		| GraphicGroup::SlashLeft | GraphicGroup::SlashLeft2 | GraphicGroup::SlashLeft3 => 1,

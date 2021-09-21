@@ -172,7 +172,7 @@ impl Player {
 	
 	pub fn new(x: f32) -> Player {
 		Player {
-			graphic: Graphic { g: GraphicGroup::Player, frame: 0, flags: 0 },
+			graphic: Graphic { g: GraphicGroup::Walking, frame: 0, flags: 0 },
 			bounds: ObjectBounds {
 				left_x: x,
 				top_y: GROUND_POS as f32 - PLAYER_HEIGHT as f32,
@@ -342,7 +342,7 @@ impl Player {
 		}
 		
 		// log(&format!("{} => {} => {}", time_running, time_running / 0.01667, (time_running / 0.01667) % 256.0));
-		self.graphic = Graphic { g: GraphicGroup::Player, frame: ((time_running / 0.01667) % 256.0) as u8, flags: 0 };
+		self.graphic = Graphic { g: GraphicGroup::Running, frame: ((time_running / 0.01667) % 256.0) as u8, flags: 0 };
 	}
 	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
