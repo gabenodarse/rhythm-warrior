@@ -30,16 +30,16 @@ pub struct Player {
 	bounds: ObjectBounds,
 	dx: f32, // in pixels per second
 	
+	target: Option<TargetInfo>,
 	slash: Option<Slash>,
 	dash: Option<Dash>,
-	hit_dir: Direction, // !!! necessary?
-	face_dir: Direction
+	face_dir: Direction,
+	hit_dir: Direction
 }
 
 struct TargetInfo {
 	time: f32,
-	left_brick: f32, // x position of leftmost brick
-	right_brick: f32 // x position of rightmost brick
+	pos: f32
 }
 
 impl Object for Player {
@@ -64,8 +64,9 @@ impl Player {
 			dx: 0.0,
 			slash: None,
 			dash: None,
-			hit_dir: Direction::Right,
 			face_dir: Direction::Right,
+			hit_dir: Direction::Right,
+			target: None,
 			movement_frame: 0,
 			movement_frame_t: 0.0
 		}
@@ -149,7 +150,9 @@ impl Player {
 					else {
 						dash.tick(seconds_passed);
 					}
-					self.regular_move(seconds_passed, bricks_iter, time_running);
+					
+					self.get_target_info(bricks_iter, time_running);
+					self.regular_move(seconds_passed, time_running);
 				},
 				_ => {
 					dash.tick(seconds_passed);
@@ -166,120 +169,119 @@ impl Player {
 			}
 		}
 		else {
-			self.regular_move(seconds_passed, bricks_iter, time_running);
+			self.get_target_info(bricks_iter, time_running);
+			self.regular_move(seconds_passed, time_running);
 		}
 	}
 	
-	fn regular_move(&mut self, seconds_passed: f32, mut bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
+	fn regular_move(&mut self, seconds_passed: f32, time_running: f32) {
 		// get nearest brick
 		// run to it
-		// make deterministic based on time of initial calculation
+		// if it's too far, boost
 		// !!! do calculations before game starts
 		
-		const RUN_SPEED: f32 = 400.0; // in pixels per second
-		let ti = self.target_info(bricks_iter, time_running);
-		 
-		if let Some(ti) = ti {
-			let left_target = ti.left_brick - PLAYER_WIDTH as f32;
-			let right_target = ti.right_brick + BRICK_WIDTH as f32;
-			let left_x;
-			let face_dir;
-			let running: bool;
-			let flags;
-			
-			// if left of target, right of target, in between targets
-			if left_target - self.bounds.left_x >= 0.0 {
-				let end_pos = self.bounds.left_x + seconds_passed * RUN_SPEED;
-				if end_pos > left_target {
-					left_x = left_target;
-					running = false;
-				} else {
-					left_x = end_pos;
-					running = true;
+		const RUN_SPEED: f32 = 480.0; // in pixels per second
+		
+		match &self.target {
+			None => {
+				
+			},
+			Some(ti) => {
+				
+				match self.face_dir {
+					Direction::Left => {
+						let end_pos = self.bounds.left_x - seconds_passed * RUN_SPEED;
+						if end_pos < ti.pos {
+							self.bounds.left_x = ti.pos;
+							self.graphic = Graphic { g: GraphicGroup::Walking, frame: 0, 
+								flags: GraphicFlags::HorizontalFlip as u8 }
+						} else {
+							self.bounds.left_x = end_pos;
+							self.graphic = Graphic { g: GraphicGroup::Running, frame: ((time_running / 0.01667) % 256.0) as u8, 
+								flags: GraphicFlags::HorizontalFlip as u8 }
+						}
+					},
+					Direction::Right => {
+						let end_pos = self.bounds.left_x + seconds_passed * RUN_SPEED;
+						if end_pos > ti.pos {
+							self.bounds.left_x = ti.pos;
+							self.graphic = Graphic { g: GraphicGroup::Walking, frame: 0, flags: 0 }
+						} else {
+							self.bounds.left_x = end_pos;
+							self.graphic = Graphic { g: GraphicGroup::Running, frame: ((time_running / 0.01667) % 256.0) as u8, flags: 0 }
+						}
+					}
 				}
-				face_dir = Direction::Right;
-				flags = 0;
-			} else if self.bounds.left_x - right_target >= 0.0 {
-				let end_pos = self.bounds.left_x - seconds_passed * RUN_SPEED;
-				if end_pos < right_target {
-					left_x = right_target;
-					running = false;
-				} else {
-					left_x = end_pos;
-					running = true;
-				}
-				face_dir = Direction::Left;
-				flags = GraphicFlags::HorizontalFlip as u8;
-			} else if left_target - self.bounds.left_x > self.bounds.left_x - right_target {
-				let end_pos = self.bounds.left_x - seconds_passed * RUN_SPEED;
-				if end_pos < left_target {
-					left_x = left_target;
-					running = false;
-				} else {
-					left_x = end_pos;
-					running = true;
-				}
-				face_dir = Direction::Left;
-				flags = GraphicFlags::HorizontalFlip as u8;
-			} else {
-				let end_pos = self.bounds.left_x + seconds_passed * RUN_SPEED;
-				if end_pos > right_target {
-					left_x = right_target;
-					running = false;
-				} else {
-					left_x = end_pos;
-					running = true;
-				}
-				face_dir = Direction::Right;
-				flags = 0;
-			}
-			
-			self.bounds.left_x = left_x;
-			self.bounds.right_x = left_x + PLAYER_WIDTH as f32;
-			self.face_dir = face_dir;
-			self.hit_dir = face_dir;
-			self.graphic = if running {
-				Graphic { g: GraphicGroup::Running, frame: ((time_running / 0.01667) % 256.0) as u8, flags }
-			} else {
-				Graphic { g: GraphicGroup::Running, frame: 0, flags }
+				
+				self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
 			}
 		}
-		
 	}
 	
-	fn target_info(&mut self, mut bricks_iter: vec_deque::Iter<Brick>, time_running: f32) -> Option<TargetInfo> {
+	fn get_target_info(&mut self, mut bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
 		
 		const TIME_BUFFER: f32 = 0.025; // maximum time difference between bricks appearing at same time (difference should be 0.0)
-		let mut target_info = None;
+		let mut bricks_info = None;
+		
+		struct UpcomingBricks {
+			time: f32,
+			left_brick: f32,
+			right_brick: f32
+		}
 		
 		for brick in bricks_iter {
 			if brick.time < time_running {
 				continue;
 			} 
 			
-			match &mut target_info {
+			match &mut bricks_info {
 				None => {
-					target_info = Some( TargetInfo {
+					bricks_info = Some( UpcomingBricks {
 						time: brick.time,
 						left_brick: brick.bounds.left_x,
 						right_brick: brick.bounds.left_x
 					});
 				},
-				Some(ti) => {
-					if ti.time + TIME_BUFFER < brick.time {
+				Some(bi) => {
+					if bi.time + TIME_BUFFER < brick.time {
 						break; // >:< always chases the highest brick after time running
 					}
 					
-					if brick.bounds.left_x < ti.left_brick {
-						ti.left_brick = brick.bounds.left_x;
-					} else if brick.bounds.left_x > ti.right_brick {
-						ti.right_brick = brick.bounds.left_x;
+					if brick.bounds.left_x < bi.left_brick {
+						bi.left_brick = brick.bounds.left_x;
+					} else if brick.bounds.left_x > bi.right_brick {
+						bi.right_brick = brick.bounds.left_x;
 					}
 				}
 			}
 		}
 		
-		return target_info;
+		match bricks_info {
+			None => {
+				self.target = None;
+			}
+			Some(bi) => {
+				let left_target = bi.left_brick - PLAYER_WIDTH as f32;
+				let right_target = bi.right_brick + BRICK_WIDTH as f32;
+				
+				// if left of target, right of target, in between targets
+				if left_target - self.bounds.left_x >= 0.0 {
+					self.face_dir = Direction::Right;
+					self.target = Some( TargetInfo { time: bi.time, pos: left_target} )
+				} else if self.bounds.left_x - right_target >= 0.0 {
+					self.face_dir = Direction::Left;
+					self.target = Some( TargetInfo { time: bi.time, pos: right_target} )
+				} else if left_target - self.bounds.left_x > self.bounds.left_x - right_target {
+					self.face_dir = Direction::Left;
+					self.target = Some ( TargetInfo { time: bi.time, pos: left_target} )
+				} else {
+					self.face_dir = Direction::Right;
+					self.target = Some ( TargetInfo { time: bi.time, pos: right_target} )
+				}
+				
+				self.hit_dir = self.face_dir; // >:< 
+			}
+		}
 	}
 	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {

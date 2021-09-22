@@ -5,7 +5,7 @@ import {wasmMemory} from "./index.js";
 // !!!
 	// implement webGPU when it becomes an option
 	// implement OffscreenCanvas when it becomes an option, or there a way to share contexts between canvases?
-// >:< BG does not need to be refreshed. Separate, static canvas
+	// BG does not need to be refreshed. Separate, static canvas
 
 function SizedTexture(texture, width, height){
 	this.texture = texture;
@@ -132,7 +132,7 @@ export function WebGLGraphics(images, screenDiv){
 	canvas.style.position = "absolute";
 	screenDiv.appendChild(canvas);
 	
-	if(!gl){ // >:< move error and checking to when a choice between canvases and webGL is made
+	if(!gl){ // !!! move error and checking to when a choice between canvases and webGL is made
 		alert("Unable to initialize WebGL. Your browser or machine may not support it.");
 		throw Error("Unable to initialize WebGL. Your browser or machine may not support it.");
 	}
@@ -254,7 +254,7 @@ WebGLGraphics.prototype.render = function(instructions, xFactor, yFactor){
 		let endY = startY - sizedTexture.height * yFactor / this.canvas.height * 2.0;
 		
 		if(graphicFlags != 0){
-			// >:< have to use a different shader to flip?
+			// !!! have to use a different shader to flip?
 			if(graphicFlags & wasm.GraphicFlags.HorizontalFlip){
 				
 			}
