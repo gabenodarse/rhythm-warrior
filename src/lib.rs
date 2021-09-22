@@ -29,14 +29,16 @@
 // !!! are as casts what I want / are they idiomatic Rust? Also, types seem to be arbitrary...
 	// (define floats and integer forms of constants so casting isn't needed?)
 
-
-
 mod objects;
 mod resources;
+mod player;
+mod brick;
+mod slash;
+mod dash;
 
 use std::collections::btree_set::BTreeSet; 
 use std::cmp::Ordering;
-use macros;
+use macros; // >:< 
 
 use wasm_bindgen::prelude::*;
 use js_sys::Array;
@@ -59,10 +61,10 @@ mod game {
 	use crate::*;
 	use std::collections::VecDeque;
 	use std::collections::vec_deque;
-	use objects::Object; // needed to use member's methods that are implemented as a part of trait Object
-	use objects::Brick;
+	use player::Player;
+	use brick::Brick;
+	use objects::Object;
 	use objects::BrickType;
-	use objects::Player;
 	use objects::TempObjectState;
 	use objects::Direction;
 	

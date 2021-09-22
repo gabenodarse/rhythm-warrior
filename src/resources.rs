@@ -3,6 +3,7 @@ use wasm_bindgen::prelude::*;
 
 use macros::EnumVariantCount;
 
+use crate::player;
 use crate::objects;
 use crate::Position;
 use crate::GAME_WIDTH;
