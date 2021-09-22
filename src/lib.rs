@@ -545,6 +545,7 @@ pub struct Graphic {
 pub enum GraphicFlags {
 	HorizontalFlip = 1,
 	VerticalFlip = 2,
+	Foo = 4
 }
 
 #[wasm_bindgen]

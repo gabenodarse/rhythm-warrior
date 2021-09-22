@@ -5,6 +5,7 @@ use std::collections::vec_deque;
 use crate::PositionedGraphic;
 use crate::resources::GraphicGroup;
 use crate::Graphic;
+use crate::GraphicFlags;
 
 use crate::objects::Object;
 use crate::objects::Direction;
@@ -19,6 +20,7 @@ use crate::brick::Brick;
 use crate::GROUND_POS;
 use crate::objects::PLAYER_WIDTH;
 use crate::objects::PLAYER_HEIGHT;
+use crate::objects::BRICK_WIDTH;
 
 pub struct Player {
 	graphic: Graphic, // !!! all objects store Graphic
@@ -30,8 +32,14 @@ pub struct Player {
 	
 	slash: Option<Slash>,
 	dash: Option<Dash>,
-	hit_dir: Direction,
+	hit_dir: Direction, // !!! necessary?
 	face_dir: Direction
+}
+
+struct TargetInfo {
+	time: f32,
+	left_brick: f32, // x position of leftmost brick
+	right_brick: f32 // x position of rightmost brick
 }
 
 impl Object for Player {
@@ -168,15 +176,81 @@ impl Player {
 		// make deterministic based on time of initial calculation
 		// !!! do calculations before game starts
 		
-		struct TargetInfo {
-			time: f32,
-			left_brick: f32, // x position of leftmost brick
-			right_brick: f32 // x position of rightmost brick
+		const RUN_SPEED: f32 = 400.0; // in pixels per second
+		let ti = self.target_info(bricks_iter, time_running);
+		 
+		if let Some(ti) = ti {
+			let left_target = ti.left_brick - PLAYER_WIDTH as f32;
+			let right_target = ti.right_brick + BRICK_WIDTH as f32;
+			let left_x;
+			let face_dir;
+			let running: bool;
+			let flags;
+			
+			// if left of target, right of target, in between targets
+			if left_target - self.bounds.left_x >= 0.0 {
+				let end_pos = self.bounds.left_x + seconds_passed * RUN_SPEED;
+				if end_pos > left_target {
+					left_x = left_target;
+					running = false;
+				} else {
+					left_x = end_pos;
+					running = true;
+				}
+				face_dir = Direction::Right;
+				flags = 0;
+			} else if self.bounds.left_x - right_target >= 0.0 {
+				let end_pos = self.bounds.left_x - seconds_passed * RUN_SPEED;
+				if end_pos < right_target {
+					left_x = right_target;
+					running = false;
+				} else {
+					left_x = end_pos;
+					running = true;
+				}
+				face_dir = Direction::Left;
+				flags = GraphicFlags::HorizontalFlip as u8;
+			} else if left_target - self.bounds.left_x > self.bounds.left_x - right_target {
+				let end_pos = self.bounds.left_x - seconds_passed * RUN_SPEED;
+				if end_pos < left_target {
+					left_x = left_target;
+					running = false;
+				} else {
+					left_x = end_pos;
+					running = true;
+				}
+				face_dir = Direction::Left;
+				flags = GraphicFlags::HorizontalFlip as u8;
+			} else {
+				let end_pos = self.bounds.left_x + seconds_passed * RUN_SPEED;
+				if end_pos > right_target {
+					left_x = right_target;
+					running = false;
+				} else {
+					left_x = end_pos;
+					running = true;
+				}
+				face_dir = Direction::Right;
+				flags = 0;
+			}
+			
+			self.bounds.left_x = left_x;
+			self.bounds.right_x = left_x + PLAYER_WIDTH as f32;
+			self.face_dir = face_dir;
+			self.hit_dir = face_dir;
+			self.graphic = if running {
+				Graphic { g: GraphicGroup::Running, frame: ((time_running / 0.01667) % 256.0) as u8, flags }
+			} else {
+				Graphic { g: GraphicGroup::Running, frame: 0, flags }
+			}
 		}
 		
-		const TIME_BUFFER: f32 = 0.025;
-		let mut target_info = None;
+	}
+	
+	fn target_info(&mut self, mut bricks_iter: vec_deque::Iter<Brick>, time_running: f32) -> Option<TargetInfo> {
 		
+		const TIME_BUFFER: f32 = 0.025; // maximum time difference between bricks appearing at same time (difference should be 0.0)
+		let mut target_info = None;
 		
 		for brick in bricks_iter {
 			if brick.time < time_running {
@@ -203,18 +277,9 @@ impl Player {
 					}
 				}
 			}
-			
 		}
 		
-		// >:< 
-		if let Some(ti) = target_info {
-			self.bounds.right_x = ti.left_brick;
-			self.bounds.left_x = ti.left_brick - PLAYER_WIDTH as f32;
-			self.face_dir = Direction::Right;
-		}
-		
-		// log(&format!("{} => {} => {}", time_running, time_running / 0.01667, (time_running / 0.01667) % 256.0));
-		self.graphic = Graphic { g: GraphicGroup::Running, frame: ((time_running / 0.01667) % 256.0) as u8, flags: 0 };
+		return target_info;
 	}
 	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
