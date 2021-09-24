@@ -587,27 +587,6 @@ fn note_pos_from_x(x: f32) -> u8 {
 	return pos;
 }
 
-impl PartialOrd for LingeringGraphic {
-	fn partial_cmp(&self, other: &LingeringGraphic) -> Option<Ordering> {
-		Some(self.cmp(other))
-	}
-}
-
-impl Ord for LingeringGraphic {
-	fn cmp(&self, other: &LingeringGraphic) -> Ordering {
-		if self.end_t < other.end_t { Ordering::Less }
-		else if self.end_t == other.end_t { Ordering::Equal }
-		else { Ordering::Greater }
-	}
-}
-
-impl PartialEq for LingeringGraphic {
-	fn eq(&self, other: &LingeringGraphic) -> bool {
-		self.end_t == other.end_t
-	}
-}
-impl Eq for LingeringGraphic {}
-
 #[wasm_bindgen]
 pub fn num_possible_inputs() -> usize {
 	return Input::num_variants();

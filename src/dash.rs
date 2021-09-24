@@ -56,10 +56,6 @@ impl Dash {
 		}
 	}
 	
-	pub fn direction (&self) -> Direction {
-		self.direction	
-	}
-	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
 		let g;
 			match self.brick_type {

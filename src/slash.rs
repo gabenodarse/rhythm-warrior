@@ -41,10 +41,6 @@ impl Slash {
 		};
 	}
 	
-	pub fn brick_type(&self) -> BrickType {
-		return self.brick_type;
-	}
-	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
 		let graphic_group;
 		let frame = 0;

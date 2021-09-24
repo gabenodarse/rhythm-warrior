@@ -3,6 +3,8 @@ use std::collections::VecDeque;
 use std::collections::vec_deque;
 use std::collections::btree_set::BTreeSet;
 
+use crate::log;
+
 use crate::PositionedGraphic;
 use crate::resources::GraphicGroup;
 use crate::Graphic;
@@ -44,7 +46,7 @@ pub struct Player {
 	dash: Option<Dash>,
 	hit_type: Option<BrickType>,
 	
-	lingering_graphics: BTreeSet<LingeringGraphic>
+	lingering_graphics: Vec<LingeringGraphic>
 }
 
 enum PlayerState {
@@ -89,7 +91,7 @@ impl Player {
 			slash: None,
 			dash: None,
 			hit_type: None,
-			lingering_graphics: BTreeSet::new()
+			lingering_graphics: Vec::new()
 		}
 	}
 	
@@ -106,6 +108,7 @@ impl Player {
 			}
 		}
 	}
+	
 	pub fn input_dash (&mut self, time_running: f32) {
 		match self.state {
 			PlayerState::Dashing(_) => (),
@@ -116,10 +119,6 @@ impl Player {
 				self.state = PlayerState::Dashing(time_running);
 			}
 		}
-	}
-	
-	pub fn face_direction(&self) -> &Direction {
-		&self.face_dir
 	}
 	
 	pub fn slash_hitbox(&self) -> Option<HitBox> {
@@ -197,10 +196,8 @@ impl Player {
 		self.graphic = Graphic { g, frame, flags };
 		
 		// TODO would prefer if cloning the lingering graphics before removing them was unnecessary
-		let removal_set: Vec<LingeringGraphic> = self.lingering_graphics.iter().filter(|lg| lg.end_t < time_running).cloned().collect();
-		for lg in &removal_set {
-			self.lingering_graphics.remove(lg);
-		}
+		let new_set: Vec<LingeringGraphic> = self.lingering_graphics.iter().filter(|lg| lg.end_t > time_running).cloned().collect();
+		self.lingering_graphics = new_set;
 	}
 	
 	fn update_state(&mut self, time_running: f32) {
@@ -258,7 +255,6 @@ impl Player {
 					self.dash(Some(brick_type), time_running);
 					self.slash(brick_type, time_running);
 					
-					
 					self.state = PlayerState::Walking;
 				}
 			}
@@ -276,7 +272,7 @@ impl Player {
 				}
 			};
 			
-			self.lingering_graphics.insert( LingeringGraphic {
+			self.lingering_graphics.push( LingeringGraphic {
 				positioned_graphic: slash.rendering_instruction(),
 				start_t: time_running,
 				end_t: time_running + GRAPHIC_LINGER_TIME
@@ -307,7 +303,7 @@ impl Player {
 				}
 			}
 			
-			self.lingering_graphics.insert( LingeringGraphic {
+			self.lingering_graphics.push( LingeringGraphic {
 				positioned_graphic: dash.rendering_instruction(),
 				start_t: time_running,
 				end_t: time_running + GRAPHIC_LINGER_TIME
