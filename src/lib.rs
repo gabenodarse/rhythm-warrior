@@ -65,7 +65,6 @@ mod game {
 	use brick::Brick;
 	use objects::Object;
 	use objects::BrickType;
-	use objects::TempObjectState;
 	use objects::Direction;
 	
 	#[derive(Clone, Copy)]
@@ -206,33 +205,21 @@ mod game {
 			}
 			
 			// get the destruction bounds for slashing or dashing
+			// TODO assumes that the brick type for slashing and dashing are the same
 			let destruction_type;
 			let destruction_bounds = [
-				match self.player.slashing() {
-					Some(slash) => {
-						match slash.state() {
-							TempObjectState::Active(_) => {
-								destruction_type = Some(slash.brick_type());
-								Some(slash.bounds())
-							},
-							_ => {
-								destruction_type = None;
-								None
-							}
-						}
+				match self.player.slash_hitbox() {
+					Some(hb) => {
+						destruction_type = Some(hb.brick_type);
+						Some(hb.bounds)
 					},
 					None => {
 						destruction_type = None;
 						None
 					}
 				},
-				match self.player.dashing() {
-					Some(dash) => {
-						match dash.state() {
-							TempObjectState::Active(_) => Some(dash.bounds()),
-							_ => None
-						}
-					},
+				match self.player.dash_hitbox() {
+					Some(hb) => Some(hb.bounds),
 					None => None
 				}
 			];
@@ -302,19 +289,7 @@ mod game {
 				graphics.push(brick.rendering_instruction());
 			}
 			
-			if let Some(slash) = self.player.slashing() {
-				let ri = slash.rendering_instruction();
-				if let Some(ri) = ri {
-					graphics.push(ri);
-				}
-			};
-			
-			if let Some(dash) = self.player.dashing() {
-				let ri = dash.rendering_instruction();
-				if let Some(ri) = ri {
-					graphics.push(ri);
-				}
-			}
+			graphics.append(&mut self.player.lg_rendering_instructions());
 			
 			return RenderingInstructions {
 				num_graphics: graphics.len(),
@@ -377,18 +352,18 @@ mod game {
 		pub fn input_command (&mut self, input: Input, t_since_tick: f32) {
 			match input {
 				Input::Dash => {
-					self.player.dash(t_since_tick);
+					self.player.input_dash(self.time_running);
 				}
 				Input::Left => (),
 				Input::Right => (),
 				Input::Ability1 => {
-					self.player.slash(BrickType::Type1, t_since_tick);
+					self.player.input_slash(BrickType::Type1, self.time_running);
 				}
 				Input::Ability2 => {
-					self.player.slash(BrickType::Type2, t_since_tick);
+					self.player.input_slash(BrickType::Type2, self.time_running);
 				}
 				Input::Ability3 => {
-					self.player.slash(BrickType::Type3, t_since_tick);
+					self.player.input_slash(BrickType::Type3, self.time_running);
 				}
 				Input::Ability4	=> {}
 			}
@@ -555,6 +530,7 @@ pub struct RenderingInstructions {
 }
 
 #[wasm_bindgen]
+#[derive(Clone)]
 pub struct PositionedGraphic {
 	pub g: Graphic,
 	pub x: i32,
@@ -565,6 +541,13 @@ pub struct PositionedGraphic {
 pub struct Position {
 	pub x: i32,
 	pub y: i32
+}
+
+#[derive(Clone)]
+pub struct LingeringGraphic {
+	positioned_graphic: PositionedGraphic,
+	start_t: f32,
+	end_t: f32
 }
 
 #[wasm_bindgen]
@@ -603,6 +586,27 @@ fn note_pos_from_x(x: f32) -> u8 {
 	
 	return pos;
 }
+
+impl PartialOrd for LingeringGraphic {
+	fn partial_cmp(&self, other: &LingeringGraphic) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for LingeringGraphic {
+	fn cmp(&self, other: &LingeringGraphic) -> Ordering {
+		if self.end_t < other.end_t { Ordering::Less }
+		else if self.end_t == other.end_t { Ordering::Equal }
+		else { Ordering::Greater }
+	}
+}
+
+impl PartialEq for LingeringGraphic {
+	fn eq(&self, other: &LingeringGraphic) -> bool {
+		self.end_t == other.end_t
+	}
+}
+impl Eq for LingeringGraphic {}
 
 #[wasm_bindgen]
 pub fn num_possible_inputs() -> usize {

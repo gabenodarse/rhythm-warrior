@@ -1,17 +1,19 @@
 
 use std::collections::VecDeque;
 use std::collections::vec_deque;
+use std::collections::btree_set::BTreeSet;
 
 use crate::PositionedGraphic;
 use crate::resources::GraphicGroup;
 use crate::Graphic;
 use crate::GraphicFlags;
+use crate::LingeringGraphic;
 
 use crate::objects::Object;
 use crate::objects::Direction;
 use crate::objects::ObjectBounds;
 use crate::objects::BrickType;
-use crate::objects::TempObjectState;
+use crate::objects::HitBox;
 
 use crate::slash::Slash;
 use crate::dash::Dash;
@@ -21,20 +23,36 @@ use crate::GROUND_POS;
 use crate::objects::PLAYER_WIDTH;
 use crate::objects::PLAYER_HEIGHT;
 use crate::objects::BRICK_WIDTH;
+use crate::objects::DASH_WIDTH;
+use crate::objects::SLASH_WIDTH;
+
+const SLASH_TIME: f32 = 0.028; // delay dash/slash by a tiny amount so they can be pressed at the same time
+const GRAPHIC_LINGER_TIME: f32 = 0.05;
 
 pub struct Player {
 	graphic: Graphic, // !!! all objects store Graphic
-	movement_frame: u8,
-	movement_frame_t: f32,
+	state: PlayerState,
 	
 	bounds: ObjectBounds,
 	dx: f32, // in pixels per second
 	
 	target: Option<TargetInfo>,
+	face_dir: Direction,
+	hit_dir: Direction,
+	
 	slash: Option<Slash>,
 	dash: Option<Dash>,
-	face_dir: Direction,
-	hit_dir: Direction
+	hit_type: Option<BrickType>,
+	
+	lingering_graphics: BTreeSet<LingeringGraphic>
+}
+
+enum PlayerState {
+	Running,
+	Walking,
+	Slashing(f32), // init time of slash/dash, to insert very short delay before becoming active
+	Dashing(f32),
+	SlashDashing(f32)
 }
 
 struct TargetInfo {
@@ -54,6 +72,8 @@ impl Player {
 	pub fn new(x: f32) -> Player {
 		Player {
 			graphic: Graphic { g: GraphicGroup::Walking, frame: 0, flags: 0 },
+			state: PlayerState::Walking,
+			
 			bounds: ObjectBounds {
 				left_x: x,
 				top_y: GROUND_POS as f32 - PLAYER_HEIGHT as f32,
@@ -62,123 +82,242 @@ impl Player {
 			},
 			
 			dx: 0.0,
-			slash: None,
-			dash: None,
 			face_dir: Direction::Right,
 			hit_dir: Direction::Right,
 			target: None,
-			movement_frame: 0,
-			movement_frame_t: 0.0
+			
+			slash: None,
+			dash: None,
+			hit_type: None,
+			lingering_graphics: BTreeSet::new()
 		}
 	}
 	
-	pub fn slash (&mut self, brick_type: BrickType, t_since_tick: f32) {
-		self.slash = Some(
-			match self.hit_dir {
-				Direction::Right => {
-					Slash::new( self.bounds.right_x, self.bounds.top_y, brick_type, t_since_tick, Direction::Right)
-				}
-				Direction::Left => {
-					Slash::new( self.bounds.left_x, self.bounds.top_y, brick_type, t_since_tick, Direction::Left)
-				}
+	pub fn input_slash (&mut self, brick_type: BrickType, time_running: f32) {
+		match self.state {
+			PlayerState::Slashing(_) => (),
+			PlayerState::Dashing(t) => {
+				self.state = PlayerState::SlashDashing(t);
+				self.hit_type = Some(brick_type);
+			},
+			_ => {
+				self.state = PlayerState::Slashing(time_running);
+				self.hit_type = Some(brick_type);
 			}
-		);
+		}
 	}
-	pub fn dash (&mut self, t_since_tick: f32) {
-		if let None = self.dash {
-			if let Direction::Right = self.hit_dir {
-				self.dash = Some(Dash::new( self.bounds.right_x, self.bounds.top_y, t_since_tick, self.hit_dir)); }
-			else {
-				self.dash = Some(Dash::new( self.bounds.left_x, self.bounds.top_y, t_since_tick, self.hit_dir)); }}
+	pub fn input_dash (&mut self, time_running: f32) {
+		match self.state {
+			PlayerState::Dashing(_) => (),
+			PlayerState::Slashing(t) => {
+				self.state = PlayerState::SlashDashing(t);
+			}
+			_ => {
+				self.state = PlayerState::Dashing(time_running);
+			}
+		}
 	}
 	
 	pub fn face_direction(&self) -> &Direction {
 		&self.face_dir
 	}
 	
-	pub fn slashing(&self) -> &Option<Slash> {
-		&self.slash
+	pub fn slash_hitbox(&self) -> Option<HitBox> {
+		match &self.slash {
+			None => return None,
+			Some(slash) => {
+				return Some( HitBox {
+					brick_type: slash.brick_type,
+					bounds: slash.bounds
+				});
+			}
+		}
 	}
 	
-	pub fn dashing(&self) -> &Option<Dash> {
-		&self.dash
+	pub fn dash_hitbox(&self) -> Option<HitBox> {
+		match &self.dash {
+			None => return None,
+			Some(dash) => {
+				match dash.brick_type {
+					None => return None,
+					Some(bt) => {
+						return Some( HitBox {
+							brick_type: bt,
+							bounds: dash.bounds
+						});
+					}
+				}
+			}
+		}
 	}
 	
-	// tick the players state, taking into account input commands
+	// tick the players state
 	pub fn tick(&mut self, seconds_passed: f32, bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
 		
-		// TODO move a new slash unconditionally to player's position, so its position is set when it actually appears?
-		// Tick slash. If it's new check if the dash is also new, in which case they link
+		if let Some(slash) = &self.slash {
+			self.slash = None;
+		}
+		if let Some(dash) = &self.dash {
+			self.dash = None;
+		}
 		
-		// link the dash and slash if they are both new
-		let dash = &mut self.dash;
-		let slash = &mut self.slash;
-		match (slash, dash) {
-			(Some(slash), Some(dash)) => {
-				match (slash.state(), dash.state()) {
-					(TempObjectState::New(slash_t), TempObjectState::New(dash_t)) => {
-						// in case a movement input was immediately after 1 or both inputs
-						let direction = self.hit_dir;
-						
-						// position slash to the end of the dash
-						slash.link_dash_slash(dash.bounds.left_x, direction, *dash_t);
-						
-						dash.direction = direction;
-						dash.brick_type = Some(slash.brick_type);
-					},
-					_ => ()
+		self.get_target_info(bricks_iter, time_running);
+		self.regular_move(seconds_passed, time_running);
+		self.update_state(time_running);
+		self.update_graphics(time_running);
+	}
+	
+	pub fn lg_rendering_instructions(&self) -> Vec<PositionedGraphic> {
+		let mut positioned_graphics = Vec::new();
+		for lg in &self.lingering_graphics {
+			positioned_graphics.push(lg.positioned_graphic.clone());
+		}
+		return positioned_graphics;
+	}
+	
+	fn update_graphics(&mut self, time_running: f32) {
+		let g;
+		let frame;
+		let flags;
+		match self.state {
+			PlayerState::Running => {
+				g = GraphicGroup::Running;
+				frame = ((time_running / 0.01667) % 256.0) as u8;
+			}
+			_ => {
+				g = GraphicGroup::Walking;
+				frame = 0;
+			}
+		}
+		flags = match self.face_dir {
+			Direction::Right => 0,
+			Direction::Left => GraphicFlags::HorizontalFlip as u8
+		};
+		
+		self.graphic = Graphic { g, frame, flags };
+		
+		// TODO would prefer if cloning the lingering graphics before removing them was unnecessary
+		let removal_set: Vec<LingeringGraphic> = self.lingering_graphics.iter().filter(|lg| lg.end_t < time_running).cloned().collect();
+		for lg in &removal_set {
+			self.lingering_graphics.remove(lg);
+		}
+	}
+	
+	fn update_state(&mut self, time_running: f32) {
+		match self.state {
+			PlayerState::Running => {
+				match &self.target {
+					None => self.state = PlayerState::Walking,
+					Some(ti) => {
+						if ti.pos == self.bounds.left_x { // >:< comparison against F32_ZERO is more robust
+							self.state = PlayerState::Walking;
+						} else {
+							self.state = PlayerState::Running;
+						}
+					}
 				}
 			},
-			_ => ()
-		}
-		
-		// tick slash
-		if let Some(slash) = &mut self.slash {
-			match slash.state() {
-				TempObjectState::Lingering(t) if *t < 0.0 => self.slash = None,
-				_ => slash.tick(seconds_passed)
-			}
-		}
-		
-		// tick dash and/or move
-		if let Some(dash) = &mut self.dash {
-			match dash.state() {
-				TempObjectState::Lingering(t) => {
-					if *t < 0.0 {
-						self.dash = None;
+			PlayerState::Walking => {
+				match &self.target {
+					None => self.state = PlayerState::Walking,
+					Some(ti) => {
+						if ti.pos == self.bounds.left_x { // >:< comparison against F32_ZERO is more robust
+							self.state = PlayerState::Walking;
+						} else {
+							self.state = PlayerState::Running;
+						}
 					}
-					else {
-						dash.tick(seconds_passed);
-					}
+				}
+			},
+			PlayerState::Slashing(t) => {
+				if time_running - t > SLASH_TIME {
+					let brick_type;
+					if let Some(bt) = self.hit_type {
+						brick_type = bt;
+					} else { panic!(); }
+					self.hit_type = None;
 					
-					self.get_target_info(bricks_iter, time_running);
-					self.regular_move(seconds_passed, time_running);
-				},
-				_ => {
-					dash.tick(seconds_passed);
-					if let Direction::Right = dash.direction() {
-						self.bounds.left_x = dash.bounds.right_x;
-						self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
-					}
-					else {
-						self.bounds.right_x = dash.bounds.left_x;
-						self.bounds.left_x = self.bounds.right_x - PLAYER_WIDTH as f32;
-					}
-					self.dx = 0.0;
+					self.slash(brick_type, time_running);
+					self.state = PlayerState::Walking;
+				}
+			},
+			PlayerState::Dashing(t) => {
+				if time_running - t > SLASH_TIME {
+					self.dash(None, time_running);
+					self.state = PlayerState::Walking;
+				}
+			},
+			PlayerState::SlashDashing(t) => {
+				if time_running - t > SLASH_TIME {
+					let brick_type;
+					if let Some(bt) = self.hit_type {
+						brick_type = bt;
+					} else { panic!(); }
+					self.hit_type = None;
+					
+					self.dash(Some(brick_type), time_running);
+					self.slash(brick_type, time_running);
+					
+					
+					self.state = PlayerState::Walking;
 				}
 			}
 		}
-		else {
-			self.get_target_info(bricks_iter, time_running);
-			self.regular_move(seconds_passed, time_running);
+	}
+	
+	fn slash(&mut self, brick_type: BrickType, time_running: f32) {
+		if let None = self.slash { 
+			let slash = match self.hit_dir {
+				Direction::Right => {
+					Slash::new( self.bounds.right_x, self.bounds.top_y, brick_type, Direction::Right)
+				},
+				Direction::Left => {
+					Slash::new( self.bounds.left_x - SLASH_WIDTH as f32, self.bounds.top_y, brick_type, Direction::Left)
+				}
+			};
+			
+			self.lingering_graphics.insert( LingeringGraphic {
+				positioned_graphic: slash.rendering_instruction(),
+				start_t: time_running,
+				end_t: time_running + GRAPHIC_LINGER_TIME
+			});
+			self.slash = Some(slash);
 		}
+	}
+	
+	fn dash(&mut self, brick_type: Option<BrickType>, time_running: f32) {
+		if let None = self.dash {
+			let dash = match self.hit_dir {
+				Direction::Right => {
+					Dash::new( self.bounds.right_x, self.bounds.top_y, brick_type, self.hit_dir) // >:< this constructor
+				},
+				Direction::Left => {
+					Dash::new( self.bounds.left_x - DASH_WIDTH as f32, self.bounds.top_y, brick_type, self.hit_dir)
+				}
+			};
+			
+			match self.hit_dir {
+				Direction::Right => {
+					self.bounds.left_x = dash.bounds.right_x;
+					self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+				},
+				Direction::Left => {
+					self.bounds.right_x = dash.bounds.left_x;
+					self.bounds.left_x = self.bounds.right_x - PLAYER_WIDTH as f32;
+				}
+			}
+			
+			self.lingering_graphics.insert( LingeringGraphic {
+				positioned_graphic: dash.rendering_instruction(),
+				start_t: time_running,
+				end_t: time_running + GRAPHIC_LINGER_TIME
+			});
+			self.dash = Some(dash);
+		}		
 	}
 	
 	fn regular_move(&mut self, seconds_passed: f32, time_running: f32) {
-		// get nearest brick
-		// run to it
-		// if it's too far, boost
-		// !!! do calculations before game starts
+		// get nearest brick, run to it
 		
 		const RUN_SPEED: f32 = 480.0; // in pixels per second
 		
@@ -187,28 +326,22 @@ impl Player {
 				
 			},
 			Some(ti) => {
-				
+				// >:< can shorten
 				match self.face_dir {
 					Direction::Left => {
 						let end_pos = self.bounds.left_x - seconds_passed * RUN_SPEED;
 						if end_pos < ti.pos {
 							self.bounds.left_x = ti.pos;
-							self.graphic = Graphic { g: GraphicGroup::Walking, frame: 0, 
-								flags: GraphicFlags::HorizontalFlip as u8 }
 						} else {
 							self.bounds.left_x = end_pos;
-							self.graphic = Graphic { g: GraphicGroup::Running, frame: ((time_running / 0.01667) % 256.0) as u8, 
-								flags: GraphicFlags::HorizontalFlip as u8 }
 						}
 					},
 					Direction::Right => {
 						let end_pos = self.bounds.left_x + seconds_passed * RUN_SPEED;
 						if end_pos > ti.pos {
 							self.bounds.left_x = ti.pos;
-							self.graphic = Graphic { g: GraphicGroup::Walking, frame: 0, flags: 0 }
 						} else {
 							self.bounds.left_x = end_pos;
-							self.graphic = Graphic { g: GraphicGroup::Running, frame: ((time_running / 0.01667) % 256.0) as u8, flags: 0 }
 						}
 					}
 				}

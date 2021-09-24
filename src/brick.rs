@@ -8,7 +8,6 @@ use crate::Graphic;
 use crate::objects::Object;
 use crate::objects::ObjectBounds;
 use crate::objects::BrickType;
-use crate::objects::TempObjectState;
 
 use crate::objects::BRICK_HEIGHT;
 use crate::objects::BRICK_WIDTH;
@@ -55,7 +54,7 @@ impl Brick {
 		let frame = 0;
 		let flags = 0;
 		let graphic = match brick_type {
-			BrickType::Type1 => Graphic{ g: GraphicGroup::Brick, frame, flags },
+			BrickType::Type1 => Graphic{ g: GraphicGroup::Brick1, frame, flags },
 			BrickType::Type2 => Graphic{ g: GraphicGroup::Brick2, frame, flags },
 			BrickType::Type3 => Graphic{ g: GraphicGroup::Brick3, frame, flags }
 		};

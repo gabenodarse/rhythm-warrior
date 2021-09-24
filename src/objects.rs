@@ -24,9 +24,9 @@ pub const PLAYER_HEIGHT: u32 = 100;
 pub const BRICK_WIDTH: u32 = (RIGHT_BOUNDARY - LEFT_BOUNDARY) as u32 / MAX_NOTES_PER_SCREEN_WIDTH as u32;
 pub const BRICK_HEIGHT: u32 = 100;
 pub const SLASH_WIDTH: u32 = 60;
-pub const SLASH_HEIGHT: u32 = 90;
+pub const SLASH_HEIGHT: u32 = PLAYER_HEIGHT * 9 / 10;
 pub const DASH_WIDTH: u32 = BRICK_WIDTH; // !!! remove as constant
-pub const DASH_HEIGHT: u32 = PLAYER_HEIGHT * 9 / 10;
+pub const DASH_HEIGHT: u32 = SLASH_HEIGHT;
 pub const DASH_CD: f32 = 0.12;
 pub const NUM_MOVEMENT_FRAMES: u8 = 23;
 pub const BRICK_DATA_BUFFER_SIZE: usize = 4;
@@ -45,6 +45,11 @@ pub struct ObjectBounds {
 	pub bottom_y: f32
 }
 
+pub struct HitBox {
+	pub bounds: ObjectBounds,
+	pub brick_type: BrickType
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Direction {
 	Left,
@@ -60,12 +65,6 @@ pub enum BrickType {
 	Type3
 }
 
-pub enum TempObjectState {
-	New(f32), // Stores how long into the tick the object was created, since inputs happen asynchronously with ticks
-	Active(f32), // Stores how much longer the objct is active. May be negative, meaning it will become inactive on next check
-	Lingering(f32) // Stores how much longer the object is lingering. If negative, object should be deleted
-}
-
 pub fn intersect(obj1: &ObjectBounds, obj2: &ObjectBounds) -> bool {
 	if obj1.top_y > obj2.bottom_y
 	|| obj1.right_x < obj2.left_x
@@ -75,3 +74,4 @@ pub fn intersect(obj1: &ObjectBounds, obj2: &ObjectBounds) -> bool {
 	}
 	return true;
 }
+
