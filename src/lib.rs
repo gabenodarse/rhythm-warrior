@@ -29,6 +29,8 @@
 // !!! are as casts what I want / are they idiomatic Rust? Also, types seem to be arbitrary...
 	// (define floats and integer forms of constants so casting isn't needed?)
 
+#[allow(dead_code)]
+
 mod objects;
 mod resources;
 mod player;
@@ -41,7 +43,6 @@ use std::cmp::Ordering;
 use macros; // >:< 
 
 use wasm_bindgen::prelude::*;
-use js_sys::Array;
 use macros::EnumVariantCount;
 
 use resources::GraphicGroup;
@@ -60,12 +61,10 @@ const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -
 mod game {
 	use crate::*;
 	use std::collections::VecDeque;
-	use std::collections::vec_deque;
 	use player::Player;
 	use brick::Brick;
 	use objects::Object;
 	use objects::BrickType;
-	use objects::Direction;
 	
 	#[derive(Clone, Copy)]
 	pub struct UpcomingNote {
@@ -171,19 +170,20 @@ mod game {
 			};
 		}
 				
+		// tick the game state by the given amount of time
 		pub fn tick(&mut self, mut seconds_passed: f32) {
 			
 			// prevent disproportionally long ticks
 			if seconds_passed > MAX_TIME_BETWEEN_TICKS {
-				self.tick(seconds_passed - 0.02);
-				seconds_passed = 0.02;
+				self.tick(seconds_passed - MAX_TIME_BETWEEN_TICKS);
+				seconds_passed = MAX_TIME_BETWEEN_TICKS;
 			}
 			
 			self.time_running += seconds_passed;
 			
 			// retrieve necessary data from the next bricks to hit: 
 				// the time of the upcoming bricks, the leftmost x of those bricks and the rightmost x
-			let mut bricks_iter = self.bricks.iter();
+			let bricks_iter = self.bricks.iter();
 			self.player.tick(seconds_passed, bricks_iter, self.time_running);
 			
 			// tick bricks while discarding any bricks off screen 
@@ -268,8 +268,7 @@ mod game {
 			self.add_upcoming_notes();
 		}
 		
-		// !!! let javascript keep a pointer to the rendering instructions inside wasm, and only update them with this function
-			// so there are no races?
+		// updates the displayed graphics and returns rendering instructions in the form of a pointer
 		pub fn rendering_instructions(&mut self) -> RenderingInstructions {
 			let graphics = &mut self.graphics;
 			
@@ -301,12 +300,14 @@ mod game {
 			return self.score;
 		}
 		
+		// returns the number of bricks broken since the last check
 		pub fn bricks_broken(&mut self) -> u8 {
-			let ret = self.bricks_broken;
+			let bb = self.bricks_broken;
 			self.bricks_broken = 0;
-			return ret;
+			return bb;
 		}
 		
+		// returns the maximum possible score for the song
 		pub fn max_score(&self) -> i32 {
 			let mut max = 0;
 			for _ in self.song.notes.iter() {
@@ -315,6 +316,7 @@ mod game {
 			return max;
 		}
 		
+		// returns the time in seconds of 1 beat
 		pub fn beat_interval(&self) -> f32 {
 			let secs_per_beat = 60.0 / self.song.bpm as f32;
 			return secs_per_beat;
@@ -333,6 +335,7 @@ mod game {
 		}
 		
 		// >:< THIS NEEDS TO BE RELIABLE, OR ELSE USER CREATED SONG DATA MAY BE LOST
+		// returns the song in json format
 		pub fn song_notes_json(&self) -> String {
 			let mut res = String::new();
 			
@@ -349,7 +352,8 @@ mod game {
 			return res;
 		}
 		
-		pub fn input_command (&mut self, input: Input, t_since_tick: f32) {
+		// takes an input command and passes it forward to be handled
+		pub fn input_command (&mut self, input: Input) {
 			match input {
 				Input::Dash => {
 					self.player.input_dash(self.time_running);
@@ -369,14 +373,12 @@ mod game {
 			}
 		}
 		
-		// TODO precision on press but not on release? (no t param)
+		// takes key release command and passes it forward to be handled
 		pub fn stop_command (&mut self, key: Input) {
 			match key {
-				Input::Dash => {
-					return;
-				}
-				Input::Left => (),
-				Input::Right => (),
+				Input::Dash => {}
+				Input::Left => {},
+				Input::Right => {},
 				Input::Ability1 => {}
 				Input::Ability2 => {}
 				Input::Ability3 => {}
@@ -386,6 +388,7 @@ mod game {
 		
 		// TODO create a method load_song (but can't pass normal arrays/vec, moved or borrowed, through wasm_bindgen)
 		// TODO separate toggling/rotating through brick types and strictly adding bricks
+		// toggles a brick at the position and time specified. If a brick is already there it will toggle the note of the brick
 		pub fn toggle_brick (&mut self, bt: BrickType, time: f32, pos: u8) {
 			if time > self.song.duration {
 				return;
@@ -466,6 +469,8 @@ mod game {
 			}
 		}
 		
+		// seeks (changes the song time) to the time specified. resets song
+			// !!! resetting song uses duplicate code from add_upcoming_notes
 		pub fn seek(&mut self, time: f32) {
 			self.time_running = time;
 			self.bricks = VecDeque::new();
@@ -568,6 +573,7 @@ pub fn ground_pos() -> f32 {
 	return GROUND_POS as f32;
 }
 
+// converts a note pos (discrete integer) to an x valued float
 fn note_pos_to_x(pos: u8) -> f32 {
 		let pos = match pos >= objects::MAX_NOTES_PER_SCREEN_WIDTH {
 			true => objects::MAX_NOTES_PER_SCREEN_WIDTH - 1,
@@ -577,6 +583,7 @@ fn note_pos_to_x(pos: u8) -> f32 {
 		return (objects::BRICK_WIDTH * pos as u32) as f32;
 	}
 	
+// converts a note x to a note pos (discrete integer)
 fn note_pos_from_x(x: f32) -> u8 {
 	let pos = (x / objects::BRICK_WIDTH as f32) as u8;
 	let pos = match pos >= objects::MAX_NOTES_PER_SCREEN_WIDTH {

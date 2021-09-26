@@ -8,7 +8,6 @@ use crate::objects::ObjectBounds;
 use crate::objects::BrickType;
 use crate::objects::Direction;
 
-use crate::objects::DASH_CD;
 use crate::objects::DASH_WIDTH;
 use crate::objects::DASH_HEIGHT;
 
@@ -27,8 +26,6 @@ impl Object for Dash {
 
 impl Dash {
 	pub fn new(x: f32, y: f32, brick_type: Option<BrickType>, dir: Direction) -> Dash {
-		let flags = 0;
-		let frame = 0;
 		
 		if let Direction::Right = dir {
 			Dash {
@@ -58,13 +55,15 @@ impl Dash {
 	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
 		let g;
+		let flags = 0;
+		let frame = 0;
 			match self.brick_type {
 				None => g = Graphic{ g: GraphicGroup::Dash0, frame: 0, flags: 0 },
 				Some(bt) => {
 					match bt {
-						BrickType::Type1 => g = Graphic{ g: GraphicGroup::Dash1, frame: 0, flags: 0 },
-						BrickType::Type2 => g = Graphic{ g: GraphicGroup::Dash2, frame: 0, flags: 0 },
-						BrickType::Type3 => g = Graphic{ g: GraphicGroup::Dash3, frame: 0, flags: 0 }
+						BrickType::Type1 => g = Graphic{ g: GraphicGroup::Dash1, frame, flags },
+						BrickType::Type2 => g = Graphic{ g: GraphicGroup::Dash2, frame, flags },
+						BrickType::Type3 => g = Graphic{ g: GraphicGroup::Dash3, frame, flags }
 					}
 				}
 			}

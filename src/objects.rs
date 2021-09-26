@@ -65,6 +65,7 @@ pub enum BrickType {
 	Type3
 }
 
+// checks if two object bounds intersect
 pub fn intersect(obj1: &ObjectBounds, obj2: &ObjectBounds) -> bool {
 	if obj1.top_y > obj2.bottom_y
 	|| obj1.right_x < obj2.left_x

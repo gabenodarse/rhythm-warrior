@@ -36,7 +36,6 @@ pub struct Player {
 	state: PlayerState,
 	
 	bounds: ObjectBounds,
-	dx: f32, // in pixels per second
 	
 	target: Option<TargetInfo>,
 	face_dir: Direction,
@@ -83,7 +82,6 @@ impl Player {
 				bottom_y: GROUND_POS as f32
 			},
 			
-			dx: 0.0,
 			face_dir: Direction::Right,
 			hit_dir: Direction::Right,
 			target: None,
@@ -91,10 +89,27 @@ impl Player {
 			slash: None,
 			dash: None,
 			hit_type: None,
-			lingering_graphics: Vec::new()
+			lingering_graphics: Vec::new() // graphics for objects no longer present but still showing, e.g. slashes/dashes that have executed
 		}
 	}
 	
+	// tick the player's state
+	pub fn tick(&mut self, seconds_passed: f32, bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
+		
+		if let Some(slash) = &self.slash {
+			self.slash = None;
+		}
+		if let Some(dash) = &self.dash {
+			self.dash = None;
+		}
+		
+		self.update_target_info(bricks_iter, time_running);
+		self.regular_move(seconds_passed, time_running);
+		self.update_state(time_running);
+		self.update_graphics(time_running);
+	}
+	
+	// inputs a slash command, updating player state
 	pub fn input_slash (&mut self, brick_type: BrickType, time_running: f32) {
 		match self.state {
 			PlayerState::Slashing(_) => (),
@@ -109,6 +124,7 @@ impl Player {
 		}
 	}
 	
+	// inputs a dash command, updating player state
 	pub fn input_dash (&mut self, time_running: f32) {
 		match self.state {
 			PlayerState::Dashing(_) => (),
@@ -121,6 +137,7 @@ impl Player {
 		}
 	}
 	
+	// returns the hitbox of the slash, if any
 	pub fn slash_hitbox(&self) -> Option<HitBox> {
 		match &self.slash {
 			None => return None,
@@ -133,6 +150,7 @@ impl Player {
 		}
 	}
 	
+	// returns the hitbox of the dash, if any
 	pub fn dash_hitbox(&self) -> Option<HitBox> {
 		match &self.dash {
 			None => return None,
@@ -150,117 +168,7 @@ impl Player {
 		}
 	}
 	
-	// tick the players state
-	pub fn tick(&mut self, seconds_passed: f32, bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
-		
-		if let Some(slash) = &self.slash {
-			self.slash = None;
-		}
-		if let Some(dash) = &self.dash {
-			self.dash = None;
-		}
-		
-		self.get_target_info(bricks_iter, time_running);
-		self.regular_move(seconds_passed, time_running);
-		self.update_state(time_running);
-		self.update_graphics(time_running);
-	}
-	
-	pub fn lg_rendering_instructions(&self) -> Vec<PositionedGraphic> {
-		let mut positioned_graphics = Vec::new();
-		for lg in &self.lingering_graphics {
-			positioned_graphics.push(lg.positioned_graphic.clone());
-		}
-		return positioned_graphics;
-	}
-	
-	fn update_graphics(&mut self, time_running: f32) {
-		let g;
-		let frame;
-		let flags;
-		match self.state {
-			PlayerState::Running => {
-				g = GraphicGroup::Running;
-				frame = ((time_running / 0.01667) % 256.0) as u8;
-			}
-			_ => {
-				g = GraphicGroup::Walking;
-				frame = 0;
-			}
-		}
-		flags = match self.face_dir {
-			Direction::Right => 0,
-			Direction::Left => GraphicFlags::HorizontalFlip as u8
-		};
-		
-		self.graphic = Graphic { g, frame, flags };
-		
-		// TODO would prefer if cloning the lingering graphics before removing them was unnecessary
-		let new_set: Vec<LingeringGraphic> = self.lingering_graphics.iter().filter(|lg| lg.end_t > time_running).cloned().collect();
-		self.lingering_graphics = new_set;
-	}
-	
-	fn update_state(&mut self, time_running: f32) {
-		match self.state {
-			PlayerState::Running => {
-				match &self.target {
-					None => self.state = PlayerState::Walking,
-					Some(ti) => {
-						if ti.pos == self.bounds.left_x { // >:< comparison against F32_ZERO is more robust
-							self.state = PlayerState::Walking;
-						} else {
-							self.state = PlayerState::Running;
-						}
-					}
-				}
-			},
-			PlayerState::Walking => {
-				match &self.target {
-					None => self.state = PlayerState::Walking,
-					Some(ti) => {
-						if ti.pos == self.bounds.left_x { // >:< comparison against F32_ZERO is more robust
-							self.state = PlayerState::Walking;
-						} else {
-							self.state = PlayerState::Running;
-						}
-					}
-				}
-			},
-			PlayerState::Slashing(t) => {
-				if time_running - t > SLASH_TIME {
-					let brick_type;
-					if let Some(bt) = self.hit_type {
-						brick_type = bt;
-					} else { panic!(); }
-					self.hit_type = None;
-					
-					self.slash(brick_type, time_running);
-					self.state = PlayerState::Walking;
-				}
-			},
-			PlayerState::Dashing(t) => {
-				if time_running - t > SLASH_TIME {
-					self.dash(None, time_running);
-					self.state = PlayerState::Walking;
-				}
-			},
-			PlayerState::SlashDashing(t) => {
-				if time_running - t > SLASH_TIME {
-					let brick_type;
-					if let Some(bt) = self.hit_type {
-						brick_type = bt;
-					} else { panic!(); }
-					self.hit_type = None;
-					
-					self.dash(Some(brick_type), time_running);
-					self.slash(brick_type, time_running);
-					
-					self.state = PlayerState::Walking;
-				}
-			}
-		}
-	}
-	
+	// creates a new slash if one is not present
 	fn slash(&mut self, brick_type: BrickType, time_running: f32) {
 		if let None = self.slash { 
 			let slash = match self.hit_dir {
@@ -281,11 +189,12 @@ impl Player {
 		}
 	}
 	
+	// creates a new dash if one is not present, updates player pos
 	fn dash(&mut self, brick_type: Option<BrickType>, time_running: f32) {
 		if let None = self.dash {
 			let dash = match self.hit_dir {
 				Direction::Right => {
-					Dash::new( self.bounds.right_x, self.bounds.top_y, brick_type, self.hit_dir) // >:< this constructor
+					Dash::new( self.bounds.right_x, self.bounds.top_y, brick_type, self.hit_dir)
 				},
 				Direction::Left => {
 					Dash::new( self.bounds.left_x - DASH_WIDTH as f32, self.bounds.top_y, brick_type, self.hit_dir)
@@ -312,42 +221,8 @@ impl Player {
 		}		
 	}
 	
-	fn regular_move(&mut self, seconds_passed: f32, time_running: f32) {
-		// get nearest brick, run to it
-		
-		const RUN_SPEED: f32 = 480.0; // in pixels per second
-		
-		match &self.target {
-			None => {
-				
-			},
-			Some(ti) => {
-				// >:< can shorten
-				match self.face_dir {
-					Direction::Left => {
-						let end_pos = self.bounds.left_x - seconds_passed * RUN_SPEED;
-						if end_pos < ti.pos {
-							self.bounds.left_x = ti.pos;
-						} else {
-							self.bounds.left_x = end_pos;
-						}
-					},
-					Direction::Right => {
-						let end_pos = self.bounds.left_x + seconds_passed * RUN_SPEED;
-						if end_pos > ti.pos {
-							self.bounds.left_x = ti.pos;
-						} else {
-							self.bounds.left_x = end_pos;
-						}
-					}
-				}
-				
-				self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
-			}
-		}
-	}
-	
-	fn get_target_info(&mut self, mut bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
+	// updates target, face_dir, and hit_dir
+	fn update_target_info(&mut self, bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
 		
 		const TIME_BUFFER: f32 = 0.025; // maximum time difference between bricks appearing at same time (difference should be 0.0)
 		let mut bricks_info = None;
@@ -413,11 +288,144 @@ impl Player {
 		}
 	}
 	
+	// runs to the target, no dashing/boosting
+	fn regular_move(&mut self, seconds_passed: f32, time_running: f32) {
+		const RUN_SPEED: f32 = 480.0; // in pixels per second
+		
+		match &self.target {
+			None => {
+				
+			},
+			Some(ti) => {
+				// >:< can shorten
+				match self.face_dir {
+					Direction::Left => {
+						let end_pos = self.bounds.left_x - seconds_passed * RUN_SPEED;
+						if end_pos < ti.pos {
+							self.bounds.left_x = ti.pos;
+						} else {
+							self.bounds.left_x = end_pos;
+						}
+					},
+					Direction::Right => {
+						let end_pos = self.bounds.left_x + seconds_passed * RUN_SPEED;
+						if end_pos > ti.pos {
+							self.bounds.left_x = ti.pos;
+						} else {
+							self.bounds.left_x = end_pos;
+						}
+					}
+				}
+				
+				self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+			}
+		}
+	}
+	
+	// updates the state and performs any other consequent updates
+	fn update_state(&mut self, time_running: f32) {
+		match self.state {
+			PlayerState::Running => {
+				match &self.target {
+					None => self.state = PlayerState::Walking,
+					Some(ti) => {
+						if ti.pos == self.bounds.left_x { // >:< comparison against F32_ZERO is more robust
+							self.state = PlayerState::Walking;
+						} else {
+							self.state = PlayerState::Running;
+						}
+					}
+				}
+			},
+			PlayerState::Walking => {
+				match &self.target {
+					None => self.state = PlayerState::Walking,
+					Some(ti) => {
+						if ti.pos == self.bounds.left_x { // >:< comparison against F32_ZERO is more robust
+							self.state = PlayerState::Walking;
+						} else {
+							self.state = PlayerState::Running;
+						}
+					}
+				}
+			},
+			PlayerState::Slashing(t) => {
+				if time_running - t > SLASH_TIME {
+					let brick_type;
+					if let Some(bt) = self.hit_type {
+						brick_type = bt;
+					} else { panic!(); }
+					self.hit_type = None;
+					
+					self.slash(brick_type, time_running);
+					self.state = PlayerState::Walking;
+				}
+			},
+			PlayerState::Dashing(t) => {
+				if time_running - t > SLASH_TIME {
+					self.dash(None, time_running);
+					self.state = PlayerState::Walking;
+				}
+			},
+			PlayerState::SlashDashing(t) => {
+				if time_running - t > SLASH_TIME {
+					let brick_type;
+					if let Some(bt) = self.hit_type {
+						brick_type = bt;
+					} else { panic!(); }
+					self.hit_type = None;
+					
+					self.dash(Some(brick_type), time_running);
+					self.slash(brick_type, time_running);
+					
+					self.state = PlayerState::Walking;
+				}
+			}
+		}
+	}
+	
+	// updates the player graphic and gets rid of old lingering graphics
+	fn update_graphics(&mut self, time_running: f32) {
+		let g;
+		let frame;
+		let flags;
+		match self.state {
+			PlayerState::Running => {
+				g = GraphicGroup::Running;
+				frame = ((time_running / 0.01667) % 256.0) as u8;
+			}
+			_ => {
+				g = GraphicGroup::Walking;
+				frame = 0;
+			}
+		}
+		flags = match self.face_dir {
+			Direction::Right => 0,
+			Direction::Left => GraphicFlags::HorizontalFlip as u8
+		};
+		
+		self.graphic = Graphic { g, frame, flags };
+		
+		// TODO would prefer if cloning the lingering graphics before removing them was unnecessary
+		let new_set: Vec<LingeringGraphic> = self.lingering_graphics.iter().filter(|lg| lg.end_t > time_running).cloned().collect();
+		self.lingering_graphics = new_set;
+	}
+	
+	// rendering instruction for the player
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
 		PositionedGraphic {
 			g: self.graphic,
 			x: self.bounds.left_x as i32,
 			y: self.bounds.top_y as i32,
 		}
+	}
+	
+	// rendering instruction for any lingering graphics
+	pub fn lg_rendering_instructions(&self) -> Vec<PositionedGraphic> {
+		let mut positioned_graphics = Vec::new();
+		for lg in &self.lingering_graphics {
+			positioned_graphics.push(lg.positioned_graphic.clone());
+		}
+		return positioned_graphics;
 	}
 }

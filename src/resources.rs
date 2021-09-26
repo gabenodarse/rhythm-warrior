@@ -45,6 +45,7 @@ pub fn max_graphics(g: GraphicGroup) -> u32 {
 	}
 }
 
+// returns the intended size of different graphics
 #[wasm_bindgen]
 pub fn graphic_size(g: GraphicGroup) -> Position {
 	return match g {
