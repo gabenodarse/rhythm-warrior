@@ -1,22 +1,8 @@
 
-use std::cmp::Ordering;
 use wasm_bindgen::prelude::*;
-use std::collections::VecDeque;
-use std::collections::vec_deque;
 
-use crate::note_pos_from_x; // !!! calculates note pos back from x when it would be better to store note pos in each brick
-use crate::GraphicGroup;
-use crate::Graphic;
-use crate::GraphicFlags;
-use crate::PositionedGraphic;
-use crate::log;
-
-use crate::GROUND_POS;
 use crate::LEFT_BOUNDARY;
 use crate::RIGHT_BOUNDARY;
-use crate::TOP_BOUNDARY;
-use crate::F32_ZERO;
-use crate::MAX_TIME_BETWEEN_TICKS;
 
 pub const MAX_NOTES_PER_SCREEN_WIDTH: u8 = 32;
 pub const PLAYER_WIDTH: u32 = 50;

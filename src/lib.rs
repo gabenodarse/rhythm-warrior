@@ -46,6 +46,7 @@ use wasm_bindgen::prelude::*;
 use macros::EnumVariantCount;
 
 use resources::GraphicGroup;
+use objects::BrickType;
 
 const GAME_WIDTH: u32 = 1920;
 const GAME_HEIGHT: u32 = 1080;
@@ -57,7 +58,74 @@ const MAX_TIME_BETWEEN_TICKS: f32 = 0.025;
 
 const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -F32_ZERO and +F32_ZERO is essentially 0
 
+struct Song {
+	notes: BTreeSet<UpcomingNote>,
+	bpm: u32,
+	// !!! better location for brick speed? (inside brick struct so it isn't passed for every single brick? limitations?)
+	brick_speed: f32,
+	duration: f32,
+	thresholds: TimingThresholds
+}
 
+#[derive(Clone, Copy)]
+pub struct UpcomingNote {
+	note_type: BrickType,
+	x: f32,
+	time: f32, // time the note is meant to be played
+}
+
+// within this many ms of when the note is meant to be played
+struct TimingThresholds { 
+	perfect: f32,
+	good: f32,
+	ok: f32,
+}
+
+impl TimingThresholds {
+	fn from_brick_speed(brick_speed: f32) -> TimingThresholds {
+		let perfect = if 6.0 / brick_speed > 0.014 { // how many seconds it takes to travel 6 pixels
+			4.0 / brick_speed
+		} else {
+			0.014
+		};
+		
+		TimingThresholds {
+			perfect,
+			good: perfect * 2.0,
+			ok: perfect * 4.0,
+		}
+	}
+}
+
+impl PartialEq for UpcomingNote {
+	fn eq(&self, other: &UpcomingNote) -> bool {
+		self.note_type == other.note_type
+		&& self.x == other.x
+		&& self.time - other.time < F32_ZERO
+		&& other.time - self.time < F32_ZERO
+	}
+}
+impl Eq for UpcomingNote {}
+
+impl PartialOrd for UpcomingNote {
+	fn partial_cmp(&self, other: &UpcomingNote) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for UpcomingNote {
+	fn cmp(&self, other: &UpcomingNote) -> Ordering {
+		if other.time - self.time > F32_ZERO      { Ordering::Less }
+		else if self.time - other.time > F32_ZERO { Ordering::Greater }
+		// arbitrary comparisons so that notes of the same time can exist within the same set
+		else if (self.note_type as u8) < (other.note_type as u8) { Ordering::Less }
+		else if (self.note_type as u8) > (other.note_type as u8) { Ordering::Greater }
+		else if self.x < other.x { Ordering::Less }
+		else if self.x > other.x { Ordering::Greater }
+		else { Ordering::Equal }
+	}
+}
+	
 mod game {
 	use crate::*;
 	use std::collections::VecDeque;
@@ -65,74 +133,6 @@ mod game {
 	use brick::Brick;
 	use objects::Object;
 	use objects::BrickType;
-	
-	#[derive(Clone, Copy)]
-	pub struct UpcomingNote {
-		note_type: BrickType,
-		x: f32,
-		time: f32, // time the note is meant to be played
-	}
-	
-	struct Song {
-		notes: BTreeSet<UpcomingNote>,
-		bpm: u32,
-		// !!! better location for brick speed? (inside brick struct so it isn't passed for every single brick? limitations?)
-		brick_speed: f32,
-		duration: f32,
-		thresholds: TimingThresholds
-	}
-	
-	// within this many ms of when the note is meant to be played
-	struct TimingThresholds { 
-		perfect: f32,
-		good: f32,
-		ok: f32,
-	}
-	
-	impl TimingThresholds {
-		fn from_brick_speed(brick_speed: f32) -> TimingThresholds {
-			let perfect = if 6.0 / brick_speed > 0.014 { // how many seconds it takes to travel 6 pixels
-				4.0 / brick_speed
-			} else {
-				0.014
-			};
-			
-			TimingThresholds {
-				perfect,
-				good: perfect * 2.0,
-				ok: perfect * 4.0,
-			}
-		}
-	}
-
-	impl PartialEq for UpcomingNote {
-		fn eq(&self, other: &UpcomingNote) -> bool {
-			self.note_type == other.note_type
-			&& self.x == other.x
-			&& self.time - other.time < F32_ZERO
-			&& other.time - self.time < F32_ZERO
-		}
-	}
-	impl Eq for UpcomingNote {}
-
-	impl PartialOrd for UpcomingNote {
-		fn partial_cmp(&self, other: &UpcomingNote) -> Option<Ordering> {
-			Some(self.cmp(other))
-		}
-	}
-
-	impl Ord for UpcomingNote {
-		fn cmp(&self, other: &UpcomingNote) -> Ordering {
-			if other.time - self.time > F32_ZERO      { Ordering::Less }
-			else if self.time - other.time > F32_ZERO { Ordering::Greater }
-			// arbitrary comparisons so that notes of the same time can exist within the same set
-			else if (self.note_type as u8) < (other.note_type as u8) { Ordering::Less }
-			else if (self.note_type as u8) > (other.note_type as u8) { Ordering::Greater }
-			else if self.x < other.x { Ordering::Less }
-			else if self.x > other.x { Ordering::Greater }
-			else { Ordering::Equal }
-		}
-	}
 	
 	#[wasm_bindgen]
 	pub struct Game {
@@ -184,7 +184,7 @@ mod game {
 			// retrieve necessary data from the next bricks to hit: 
 				// the time of the upcoming bricks, the leftmost x of those bricks and the rightmost x
 			let bricks_iter = self.bricks.iter();
-			self.player.tick(seconds_passed, bricks_iter, self.time_running);
+			self.player.tick(seconds_passed, bricks_iter, self.time_running, &self.song);
 			
 			// tick bricks while discarding any bricks off screen 
 			// TODO might not need to check on screen for all notes

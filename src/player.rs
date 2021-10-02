@@ -22,6 +22,7 @@ use crate::dash::Dash;
 use crate::brick::Brick;
 
 use crate::GROUND_POS;
+use crate::Song;
 use crate::objects::PLAYER_WIDTH;
 use crate::objects::PLAYER_HEIGHT;
 use crate::objects::BRICK_WIDTH;
@@ -94,7 +95,7 @@ impl Player {
 	}
 	
 	// tick the player's state
-	pub fn tick(&mut self, seconds_passed: f32, bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
+	pub fn tick(&mut self, seconds_passed: f32, bricks_iter: vec_deque::Iter<Brick>, time_running: f32, song: &Song) {
 		
 		if let Some(slash) = &self.slash {
 			self.slash = None;
@@ -103,7 +104,7 @@ impl Player {
 			self.dash = None;
 		}
 		
-		self.update_target_info(bricks_iter, time_running);
+		self.update_target_info(bricks_iter, time_running, song.brick_speed);
 		self.regular_move(seconds_passed, time_running);
 		self.update_state(time_running);
 		self.update_graphics(time_running);
@@ -222,9 +223,13 @@ impl Player {
 	}
 	
 	// updates target, face_dir, and hit_dir
-	fn update_target_info(&mut self, bricks_iter: vec_deque::Iter<Brick>, time_running: f32) {
+	fn update_target_info(&mut self, bricks_iter: vec_deque::Iter<Brick>, time_running: f32, brick_speed: f32) {
 		
-		const TIME_BUFFER: f32 = 0.025; // maximum time difference between bricks appearing at same time (difference should be 0.0)
+		const SAME_GROUP_TIME_BUFFER: f32 = 0.025; // maximum time difference between bricks in the same group
+		// maximum time player will wait before chasing next bricks
+			// !!! should be variable based on how fast bricks are travelling
+		let next_bricks_time_buffer:  f32 = PLAYER_HEIGHT as f32 / brick_speed;
+		
 		let mut bricks_info = None;
 		
 		struct UpcomingBricks {
@@ -234,10 +239,12 @@ impl Player {
 		}
 		
 		for brick in bricks_iter {
-			if brick.time < time_running {
+			// iterate over the bricks that are already passed
+			if brick.time + next_bricks_time_buffer < time_running {
 				continue;
 			} 
 			
+			// get the group of UpcomingBricks
 			match &mut bricks_info {
 				None => {
 					bricks_info = Some( UpcomingBricks {
@@ -247,8 +254,8 @@ impl Player {
 					});
 				},
 				Some(bi) => {
-					if bi.time + TIME_BUFFER < brick.time {
-						break; // >:< always chases the highest brick after time running
+					if bi.time + SAME_GROUP_TIME_BUFFER < brick.time {
+						break; 
 					}
 					
 					if brick.bounds.left_x < bi.left_brick {
