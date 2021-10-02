@@ -219,6 +219,7 @@ WebGLGraphics.prototype.resize = function(xFactor, yFactor){
 	this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 }
 
+// >:< duplicate code this and other render function
 WebGLGraphics.prototype.render = function(instructions, xFactor, yFactor){
 	const gl = this.gl;
 	const positionBuffer = this.positionBuffer;
@@ -256,7 +257,7 @@ WebGLGraphics.prototype.render = function(instructions, xFactor, yFactor){
 		if(graphicFlags != 0){
 			// !!! have to use a different shader to flip?
 			if(graphicFlags & wasm.GraphicFlags.HorizontalFlip){
-				
+			
 			}
 			if(graphicFlags & wasm.GraphicFlags.VerticalFlip){
 				
