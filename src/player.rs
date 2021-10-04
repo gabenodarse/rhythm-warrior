@@ -53,9 +53,9 @@ pub struct Player {
 enum PlayerState {
 	Running,
 	Walking,
-	Slashing(f32), // init time of slash/dash, to insert very short delay before becoming active
-	Dashing(f32),
-	SlashDashing(f32)
+	PreSlash(f32), // init time of slash/dash, to insert very short delay before becoming active
+	PreDash(f32),
+	PreSlashDash(f32)
 }
 
 struct TargetInfo {
@@ -114,13 +114,13 @@ impl Player {
 	// inputs a slash command, updating player state
 	pub fn input_slash (&mut self, brick_type: BrickType, time_running: f32) {
 		match self.state {
-			PlayerState::Slashing(_) => (),
-			PlayerState::Dashing(t) => {
-				self.state = PlayerState::SlashDashing(t);
+			PlayerState::PreSlash(_) => (),
+			PlayerState::PreDash(t) => {
+				self.state = PlayerState::PreSlashDash(t);
 				self.hit_type = Some(brick_type);
 			},
 			_ => {
-				self.state = PlayerState::Slashing(time_running);
+				self.state = PlayerState::PreSlash(time_running);
 				self.hit_type = Some(brick_type);
 			}
 		}
@@ -129,12 +129,12 @@ impl Player {
 	// inputs a dash command, updating player state
 	pub fn input_dash (&mut self, time_running: f32) {
 		match self.state {
-			PlayerState::Dashing(_) => (),
-			PlayerState::Slashing(t) => {
-				self.state = PlayerState::SlashDashing(t);
+			PlayerState::PreDash(_) => (),
+			PlayerState::PreSlash(t) => {
+				self.state = PlayerState::PreSlashDash(t);
 			}
 			_ => {
-				self.state = PlayerState::Dashing(time_running);
+				self.state = PlayerState::PreDash(time_running);
 			}
 		}
 	}
@@ -357,7 +357,7 @@ impl Player {
 					}
 				}
 			},
-			PlayerState::Slashing(t) => {
+			PlayerState::PreSlash(t) => {
 				if time_running - t > SLASH_TIME {
 					let brick_type;
 					if let Some(bt) = self.hit_type {
@@ -369,13 +369,13 @@ impl Player {
 					self.state = PlayerState::Walking;
 				}
 			},
-			PlayerState::Dashing(t) => {
+			PlayerState::PreDash(t) => {
 				if time_running - t > SLASH_TIME {
 					self.dash(None, time_running);
 					self.state = PlayerState::Walking;
 				}
 			},
-			PlayerState::SlashDashing(t) => {
+			PlayerState::PreSlashDash(t) => {
 				if time_running - t > SLASH_TIME {
 					let brick_type;
 					if let Some(bt) = self.hit_type {
