@@ -45,6 +45,7 @@ impl Slash {
 		let graphic_group;
 		let frame = 0;
 		let flags;
+		let arg = 0;
 		match self.direction {
 			Direction::Left => {
 				match self.brick_type {
@@ -65,7 +66,7 @@ impl Slash {
 		}
 		
 		return PositionedGraphic {
-			g: Graphic{ g: graphic_group, frame, flags },
+			g: Graphic{ g: graphic_group, frame, flags, arg },
 			x: self.bounds.left_x as i32,
 			y: self.bounds.top_y as i32,
 		};

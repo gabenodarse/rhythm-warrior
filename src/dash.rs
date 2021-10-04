@@ -57,13 +57,14 @@ impl Dash {
 		let g;
 		let flags = 0;
 		let frame = 0;
+		let arg = 0;
 			match self.brick_type {
-				None => g = Graphic{ g: GraphicGroup::Dash0, frame: 0, flags: 0 },
+				None => g = Graphic{ g: GraphicGroup::Dash0, frame, flags, arg },
 				Some(bt) => {
 					match bt {
-						BrickType::Type1 => g = Graphic{ g: GraphicGroup::Dash1, frame, flags },
-						BrickType::Type2 => g = Graphic{ g: GraphicGroup::Dash2, frame, flags },
-						BrickType::Type3 => g = Graphic{ g: GraphicGroup::Dash3, frame, flags }
+						BrickType::Type1 => g = Graphic{ g: GraphicGroup::Dash1, frame, flags, arg },
+						BrickType::Type2 => g = Graphic{ g: GraphicGroup::Dash2, frame, flags, arg },
+						BrickType::Type3 => g = Graphic{ g: GraphicGroup::Dash3, frame, flags, arg }
 					}
 				}
 			}

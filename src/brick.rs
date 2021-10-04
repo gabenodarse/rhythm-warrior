@@ -53,10 +53,11 @@ impl Brick {
 	pub fn new (brick_type: BrickType, x: f32, y: f32, t: f32) -> Brick {
 		let frame = 0;
 		let flags = 0;
+		let arg = 0;
 		let graphic = match brick_type {
-			BrickType::Type1 => Graphic{ g: GraphicGroup::Brick1, frame, flags },
-			BrickType::Type2 => Graphic{ g: GraphicGroup::Brick2, frame, flags },
-			BrickType::Type3 => Graphic{ g: GraphicGroup::Brick3, frame, flags }
+			BrickType::Type1 => Graphic{ g: GraphicGroup::Brick1, frame, flags, arg },
+			BrickType::Type2 => Graphic{ g: GraphicGroup::Brick2, frame, flags, arg },
+			BrickType::Type3 => Graphic{ g: GraphicGroup::Brick3, frame, flags, arg }
 		};
 		
 		return Brick {

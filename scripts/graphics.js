@@ -75,12 +75,19 @@ CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
 		let graphicIdx = u8buf[i*4];
 		let graphicFrame = u8buf[i*4 + 1];
 		let graphicFlags = u8buf[i*4 + 2];
+		let graphicArg = u8buf[i*4 + 3];
 		++i;
 		
 		let numFrames = this.canvases[graphicIdx].length; // >:< 
 		let graphicSubID = graphicFrame % numFrames;
 		let canvasGroup = this.canvases[graphicIdx][graphicSubID];
 		let idx = canvasGroup.nextCanvasIdx;
+		
+		// check if the canvas exists
+		if(canvasGroup.canvases[idx] == undefined) {
+			console.log("not enough canvases for graphicGroup indexed by: " + graphicIdx);
+			return;
+		}
 		
 		canvasGroup.canvases[idx].style.left = x * xFactor + "px";
 		canvasGroup.canvases[idx].style.top = y * yFactor + "px";
@@ -91,6 +98,9 @@ CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
 			}
 			if(graphicFlags & wasm.GraphicFlags.VerticalFlip){
 				canvasGroup.canvases[idx].style.transform += "scaleY(-1) ";
+			}
+			if(graphicFlags & wasm.GraphicFlags.Opacity){
+				canvasGroup.canvases[idx].style.opacity = graphicArg / 255;
 			}
 		}
 		else {

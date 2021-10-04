@@ -30,7 +30,8 @@ use crate::objects::DASH_WIDTH;
 use crate::objects::SLASH_WIDTH;
 
 const SLASH_TIME: f32 = 0.028; // delay dash/slash by a tiny amount so they can be pressed at the same time
-const GRAPHIC_LINGER_TIME: f32 = 0.05;
+const SLASH_LINGER_TIME: f32 = 0.1; // how long the slash graphic lingers
+const DASH_LINGER_TIME: f32 = 0.3; // how long the dash graphic lingers
 
 pub struct Player {
 	graphic: Graphic, // !!! all objects store Graphic
@@ -73,7 +74,7 @@ impl Player {
 	
 	pub fn new(x: f32) -> Player {
 		Player {
-			graphic: Graphic { g: GraphicGroup::Walking, frame: 0, flags: 0 },
+			graphic: Graphic { g: GraphicGroup::Walking, frame: 0, flags: 0, arg: 0 },
 			state: PlayerState::Walking,
 			
 			bounds: ObjectBounds {
@@ -184,7 +185,7 @@ impl Player {
 			self.lingering_graphics.push( LingeringGraphic {
 				positioned_graphic: slash.rendering_instruction(),
 				start_t: time_running,
-				end_t: time_running + GRAPHIC_LINGER_TIME
+				end_t: time_running + SLASH_LINGER_TIME
 			});
 			self.slash = Some(slash);
 		}
@@ -216,7 +217,7 @@ impl Player {
 			self.lingering_graphics.push( LingeringGraphic {
 				positioned_graphic: dash.rendering_instruction(),
 				start_t: time_running,
-				end_t: time_running + GRAPHIC_LINGER_TIME
+				end_t: time_running + DASH_LINGER_TIME
 			});
 			self.dash = Some(dash);
 		}		
@@ -396,6 +397,7 @@ impl Player {
 		let g;
 		let frame;
 		let flags;
+		let arg = 0;
 		match self.state {
 			PlayerState::Running => {
 				g = GraphicGroup::Running;
@@ -411,7 +413,7 @@ impl Player {
 			Direction::Left => GraphicFlags::HorizontalFlip as u8
 		};
 		
-		self.graphic = Graphic { g, frame, flags };
+		self.graphic = Graphic { g, frame, flags, arg };
 		
 		// TODO would prefer if cloning the lingering graphics before removing them was unnecessary
 		let new_set: Vec<LingeringGraphic> = self.lingering_graphics.iter().filter(|lg| lg.end_t > time_running).cloned().collect();
@@ -428,10 +430,21 @@ impl Player {
 	}
 	
 	// rendering instruction for any lingering graphics
-	pub fn lg_rendering_instructions(&self) -> Vec<PositionedGraphic> {
+	pub fn lg_rendering_instructions(&self, time_running: f32) -> Vec<PositionedGraphic> {
 		let mut positioned_graphics = Vec::new();
 		for lg in &self.lingering_graphics {
-			positioned_graphics.push(lg.positioned_graphic.clone());
+			
+			let mut pg = lg.positioned_graphic.clone();
+			let proportion_time_passed = (time_running - lg.start_t) / (lg.end_t - lg.start_t);
+			
+			pg.g.flags |= GraphicFlags::Opacity as u8;
+			pg.g.arg = 255 - (proportion_time_passed * 255.0) as u8;
+			
+			if lg.end_t < time_running {
+				pg.g.arg = 0;
+			}
+			
+			positioned_graphics.push(pg);
 		}
 		return positioned_graphics;
 	}

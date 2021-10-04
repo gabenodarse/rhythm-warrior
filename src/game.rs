@@ -148,7 +148,7 @@ impl Game {
 		
 		graphics.push(
 			PositionedGraphic {
-				g: Graphic{ g: GraphicGroup::Background, frame: 0, flags: 0 },
+				g: Graphic{ g: GraphicGroup::Background, frame: 0, flags: 0, arg: 0},
 				x: 0,
 				y: 0
 			},
@@ -160,7 +160,7 @@ impl Game {
 			graphics.push(brick.rendering_instruction());
 		}
 		
-		graphics.append(&mut self.player.lg_rendering_instructions());
+		graphics.append(&mut self.player.lg_rendering_instructions(self.time_running));
 		
 		return RenderingInstructions {
 			num_graphics: graphics.len(),

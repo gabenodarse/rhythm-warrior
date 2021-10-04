@@ -134,14 +134,15 @@ impl Ord for UpcomingNote {
 pub struct Graphic {
 	pub g: GraphicGroup,
 	pub frame: u8, // each frame adds 1 to frame mod 256. From timer javascript code chooses animation frame.
-	pub flags: u8
+	pub flags: u8,
+	pub arg: u8 // argument for if one of the flag requires it (opacity flag)
 }
 
 #[wasm_bindgen]
 pub enum GraphicFlags {
 	HorizontalFlip = 1,
 	VerticalFlip = 2,
-	Foo = 4
+	Opacity = 4
 }
 
 #[wasm_bindgen]
