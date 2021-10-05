@@ -65,7 +65,6 @@ struct Song {
 	// !!! better location for brick speed? (inside brick struct so it isn't passed for every single brick? limitations?)
 	brick_speed: f32,
 	duration: f32,
-	thresholds: TimingThresholds
 }
 
 #[derive(Clone, Copy)]
@@ -73,29 +72,6 @@ pub struct UpcomingNote {
 	note_type: BrickType,
 	x: f32,
 	time: f32, // time the note is meant to be played
-}
-
-// within this many ms of when the note is meant to be played
-struct TimingThresholds { 
-	perfect: f32,
-	good: f32,
-	ok: f32,
-}
-
-impl TimingThresholds {
-	fn from_brick_speed(brick_speed: f32) -> TimingThresholds {
-		let perfect = if 6.0 / brick_speed > 0.014 { // how many seconds it takes to travel 6 pixels
-			4.0 / brick_speed
-		} else {
-			0.014
-		};
-		
-		TimingThresholds {
-			perfect,
-			good: perfect * 2.0,
-			ok: perfect * 4.0,
-		}
-	}
 }
 
 impl PartialEq for UpcomingNote {

@@ -34,7 +34,6 @@ impl Game {
 				bpm,
 				brick_speed,
 				duration,
-				thresholds: TimingThresholds::from_brick_speed(brick_speed)
 			},
 			upcoming_note: None,
 			graphics: Vec::with_capacity(512), // TODO what should the upper limit be? Make it a hard limit
@@ -103,7 +102,6 @@ impl Game {
 		let score = &mut self.score;
 		let bricks = &mut self.bricks;
 		let bricks_broken = &mut self.bricks_broken;
-		let thresholds = &self.song.thresholds;
 		if let Some(destruction_type) = destruction_type {
 			for bounds in destruction_bounds.iter() {
 				if let Some(bounds) = bounds {
@@ -111,20 +109,7 @@ impl Game {
 						if destruction_type == brick.brick_type() {
 							let intersect = objects::intersect(&bounds, &brick.bounds());
 							if intersect {
-								let time_difference = if t > brick.time() { t - brick.time() } else { brick.time() - t };
-								*score += 
-									if time_difference < thresholds.perfect {
-										100
-									} 
-									else if time_difference < thresholds.good {
-										90
-									}
-									else if time_difference < thresholds.ok {
-										80
-									}
-									else {
-										70
-									};
+								*score += 100;
 								*bricks_broken += 1;
 								return false;
 							}

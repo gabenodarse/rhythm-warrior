@@ -10,7 +10,7 @@ export async function run(){
 	let overlay;
 	let controls = [];
 	
-	await game.load();
+	await game.init();
 	
 	if(Object.keys(controls).length == 0){
 		controls[32] = wasm.Input.Dash; // space

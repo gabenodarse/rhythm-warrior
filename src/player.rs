@@ -32,7 +32,7 @@ use crate::objects::SLASH_WIDTH;
 const SLASH_TIME: f32 = 0.04; // delay dash/slash by a tiny amount so they can be pressed at the same time
 const SLASH_LINGER_TIME: f32 = 0.1; // how long the slash graphic lingers
 const DASH_LINGER_TIME: f32 = 0.3; // how long the dash graphic lingers
-const BOOST_LINGER_TIME: f32 = 0.1;
+const BOOST_LINGER_TIME: f32 = 0.14;
 const BOOST_PRELINGER_TIME: f32 = 0.04;
 
 pub struct Player {

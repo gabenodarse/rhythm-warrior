@@ -35,7 +35,7 @@ export function Game () {
 	document.body.appendChild(this.screenDiv);
 }
 
-Game.prototype.load = async function () {
+Game.prototype.init = async function () {
 	if(this.isLoaded){ return; }
 	
 	let loader = new load.Loader();
@@ -48,14 +48,6 @@ Game.prototype.load = async function () {
 	// !!! can happen same time as graphics are loading
 	this.database = await loader.loadDatabase();
 	
-	// !!! don't load song (mp3 and notes from database) on initialization
-	// TODO add error handling
-	await fetch("song.mp3")
-		.then(res => res.arrayBuffer())
-		.then(res => this.audioContext.decodeAudioData(res))
-		.then(res => { this.audioBuffer = res; }
-	);
-	
 	this.gameData = wasm.Game.new();
 	
 	let gameDim = wasm.game_dimensions();
@@ -64,7 +56,9 @@ Game.prototype.load = async function () {
 	this.xFactor = 1;
 	this.yFactor = 1;
 	
-	this.loadSong(6); // !!! loading arbitrary song... instead should query and load first song, or allow no song to be loaded
+	// !!! don't load song (mp3 and notes from database) on initialization
+	// !!! loading arbitrary song... instead should query and load first song, or allow no song to be loaded
+	await this.loadSong(6); 
 	
 	this.isLoaded = true;
 }
@@ -156,14 +150,14 @@ Game.prototype.songs = function(){
 	return songs;
 }
 
-Game.prototype.loadSong = function(songID){
+Game.prototype.loadSong = async function(songID){
 	// !!! check if current song has been saved (modified flag?) 
 		// No need to show a check for regular game usage where songs aren't edited
 	// !!! creating a new game to load a new song? Or create a load_song method? wasm garbage collected?
 	this.songID = songID;
 	let {notes, song} = this.database.loadSong(songID);
 	
-	let bpm, brickSpeed, duration;
+	let bpm, brickSpeed, duration, filename;
 	song[0]["columns"].forEach( (columnName, idx) => {
 		if(columnName.toUpperCase() === "BPM"){
 			bpm = song[0]["values"][0][idx];
@@ -174,7 +168,17 @@ Game.prototype.loadSong = function(songID){
 		else if(columnName.toUpperCase() === "DURATION"){
 			duration = song[0]["values"][0][idx];
 		}
+		else if(columnName.toUpperCase() === "FILENAME"){
+			filename = song[0]["values"][0][idx];
+		}
 	});
+	
+	// TODO add error handling
+	await fetch(filename)
+		.then(res => res.arrayBuffer())
+		.then(res => this.audioContext.decodeAudioData(res))
+		.then(res => { this.audioBuffer = res; }
+	);
 	
 	this.gameData = wasm.Game.new(bpm, brickSpeed, duration);
 	
