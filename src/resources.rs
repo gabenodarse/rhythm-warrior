@@ -33,8 +33,8 @@ pub enum GraphicGroup {
 pub fn max_graphics(g: GraphicGroup) -> u32 {
 	match g {
 		GraphicGroup::Background => 1,
-		GraphicGroup::Walking => 1,
-		GraphicGroup::Running => 1,
+		GraphicGroup::Walking => 5,
+		GraphicGroup::Running => 5,
 		GraphicGroup::Brick1 | GraphicGroup::Brick2 | GraphicGroup::Brick3 => 32,
 		GraphicGroup::Slash1 | GraphicGroup::Slash2 | GraphicGroup::Slash3 => 1,
 		GraphicGroup::Dash0 => 1,

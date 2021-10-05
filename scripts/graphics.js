@@ -56,6 +56,7 @@ CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
 			if(canvasGroup.nextCanvasIdx != 0){
 				for(let i = canvasGroup.nextCanvasIdx - 1; i >= 0; --i){
 					canvasGroup.canvases[i].style.visibility = "hidden";
+					canvasGroup.canvases[i].style.opacity = 1.0;
 				}
 				canvasGroup.nextCanvasIdx = 0;
 			}

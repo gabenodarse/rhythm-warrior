@@ -29,9 +29,11 @@ use crate::objects::BRICK_WIDTH;
 use crate::objects::DASH_WIDTH;
 use crate::objects::SLASH_WIDTH;
 
-const SLASH_TIME: f32 = 0.028; // delay dash/slash by a tiny amount so they can be pressed at the same time
+const SLASH_TIME: f32 = 0.04; // delay dash/slash by a tiny amount so they can be pressed at the same time
 const SLASH_LINGER_TIME: f32 = 0.1; // how long the slash graphic lingers
 const DASH_LINGER_TIME: f32 = 0.3; // how long the dash graphic lingers
+const BOOST_LINGER_TIME: f32 = 0.1;
+const BOOST_PRELINGER_TIME: f32 = 0.04;
 
 pub struct Player {
 	graphic: Graphic, // !!! all objects store Graphic
@@ -167,6 +169,30 @@ impl Player {
 					}
 				}
 			}
+		}
+	}
+	
+	fn boost(&mut self, time_running: f32) {
+		let target = if let Some(t) = &self.target { t } else { return; };
+		
+		let pos_difference = target.pos - self.bounds.left_x;
+		// if within range where boost is reasonable, then boost
+		if pos_difference > 0.5 * PLAYER_WIDTH as f32 && pos_difference < 4.0 * PLAYER_WIDTH as f32 {
+			self.lingering_graphics.push( LingeringGraphic {
+				positioned_graphic: self.rendering_instruction(),
+				start_t: time_running - BOOST_PRELINGER_TIME,
+				end_t: time_running + BOOST_LINGER_TIME
+			});
+			self.bounds.left_x = target.pos;
+			self.bounds.right_x = target.pos + PLAYER_WIDTH as f32;
+		} else if pos_difference < -0.5 * PLAYER_WIDTH as f32 && pos_difference > -4.0 * PLAYER_WIDTH as f32 { // >:<
+			self.lingering_graphics.push( LingeringGraphic {
+				positioned_graphic: self.rendering_instruction(),
+				start_t: time_running - BOOST_PRELINGER_TIME,
+				end_t: time_running + BOOST_LINGER_TIME
+			});
+			self.bounds.left_x = target.pos;
+			self.bounds.right_x = target.pos + PLAYER_WIDTH as f32;
 		}
 	}
 	
@@ -365,12 +391,14 @@ impl Player {
 					} else { panic!(); }
 					self.hit_type = None;
 					
+					self.boost(time_running);
 					self.slash(brick_type, time_running);
 					self.state = PlayerState::Walking;
 				}
 			},
 			PlayerState::PreDash(t) => {
 				if time_running - t > SLASH_TIME {
+					self.boost(time_running);
 					self.dash(None, time_running);
 					self.state = PlayerState::Walking;
 				}
@@ -383,6 +411,7 @@ impl Player {
 					} else { panic!(); }
 					self.hit_type = None;
 					
+					self.boost(time_running);
 					self.dash(Some(brick_type), time_running);
 					self.slash(brick_type, time_running);
 					
