@@ -26,13 +26,14 @@ MMDatabase.prototype.saveSong = function(songData, notes){
 	let {name, artist, difficulty, bpm, brickSpeed, duration, filename} = songData;
 	let now = new Date().getTime();
 			
-	let sql = "INSERT INTO SONGS (Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, TimeCreated, Filename) VALUES (\"" 
+	let sql = "INSERT INTO SONGS (Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, TimeCreated, TimeModified, Filename) VALUES (\"" 
 		+ name + "\", \""
 		+ artist + "\", \""
 		+ difficulty + "\", "
 		+ bpm + ", "
 		+ brickSpeed + ", "
 		+ duration + ", "
+		+ now + ", "
 		+ now + ", \""
 		+ filename + "\"" 
 		+ ");"
@@ -62,16 +63,17 @@ MMDatabase.prototype.saveSong = function(songData, notes){
 
 MMDatabase.prototype.overwriteSong = function(songData, notes){
 	// TODO if write doesn't work, data isn't saved while old data in database is lost. Problem?
-	let {songID, name, artist, difficulty, bpm, brickSpeed, duration} = songData;
+	let {songID, name, artist, difficulty, bpm, brickSpeed, duration, timeCreated, filename} = songData;
 	let now = new Date().getTime();
 			
-	let sql = "INSERT INTO SONGS (Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, TimeCreated, Filename) VALUES (\"" 
+	let sql = "INSERT INTO SONGS (Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, TimeCreated, TimeModified, Filename) VALUES (\"" 
 		+ name + "\", \""
 		+ artist + "\", \""
 		+ difficulty + "\", "
 		+ bpm + ", "
 		+ brickSpeed + ", "
 		+ duration + ", "
+		+ timeCreated + ", "
 		+ now + ", \""
 		+ filename + "\"" 
 		+ ");"

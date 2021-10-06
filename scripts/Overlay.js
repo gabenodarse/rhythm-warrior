@@ -690,19 +690,19 @@ function saveSongDialog(eventPropagator){
 	});
 	
 	nameField.type = "text";
-	nameField.value = songData.name;
+	nameField.defaultValue = songData.name;
 	artistField.type = "text";
-	artistField.value = songData.artist;
+	artistField.defaultValue = songData.artist;
 	difficultyField.type = "text";
-	difficultyField.value = songData.difficulty;
+	difficultyField.defaultValue = songData.difficulty;
 	bpmField.type = "text";
-	bpmField.value = songData.bpm;
+	bpmField.defaultValue = songData.bpm;
 	brickSpeedField.type = "text";
-	brickSpeedField.value = songData.brickSpeed;
+	brickSpeedField.defaultValue = songData.brickSpeed;
 	durationField.type = "text";
-	durationField.value = songData.duration;
+	durationField.defaultValue = songData.duration;
 	filenameField.type = "text";
-	filenameField.value = songData.filename;
+	filenameField.defaultValue = songData.filename;
 	
 	saveButton.innerHTML = "Save";
 	overwriteButton.innerHTML = "Overwrite";
@@ -740,15 +740,13 @@ function saveSongDialog(eventPropagator){
 		
 		let overwrite = (evt.target == overwriteButton) ? true : false;
 		
-		let songData = {
-			name: nameField.value,
-			artist: artistField.value,
-			difficulty: difficultyField.value,
-			bpm: bpmField.value,
-			brickSpeed: brickSpeedField.value,
-			duration: durationField.value,
-			filename: filenameField.value
-		}
+		songData.name = nameField.value,
+		songData.artist = artistField.value,
+		songData.difficulty = difficultyField.value,
+		songData.bpm = bpmField.value,
+		songData.brickSpeed = brickSpeedField.value,
+		songData.duration = durationField.value,
+		songData.filename = filenameField.value
 		
 		let fn = game => {
 			game.saveSong(songData, overwrite);
@@ -798,6 +796,7 @@ function loadSongDialog(eventPropagator){
 	let difficultyIDX;
 	let durationIDX;
 	let timeCreatedIDX;
+	let timeModifiedIDX;
 	
 	if(songs.length != 0){
 		songs[0]["columns"].forEach( (columnName, idx) => {
@@ -819,12 +818,16 @@ function loadSongDialog(eventPropagator){
 			else if(columnName.toUpperCase() === "TIMECREATED"){
 				timeCreatedIDX = idx;
 			}
+			else if(columnName.toUpperCase() === "TIMEMODIFIED"){
+				timeModifiedIDX = idx;
+			}
 		});
 		songs[0]["values"].forEach( (song, idx) => {
 			let newOption = document.createElement("option");
 			let timeCreated = new Date(song[timeCreatedIDX]).toString();
+			let timeModified = new Date(song[timeModifiedIDX]).toString();
 			newOption.value = song[idIDX];
-			newOption.innerHTML = `Name: ${song[nameIDX]}, Artist: ${song[artistIDX]}, Difficulty: ${song[difficultyIDX]}, Duration: ${song[durationIDX]}, Time Created: ${timeCreated}`;
+			newOption.innerHTML = `Name: ${song[nameIDX]}, Artist: ${song[artistIDX]}, Difficulty: ${song[difficultyIDX]}, Duration: ${song[durationIDX]}, Time Created: ${timeCreated}, Time Modified: ${timeModified}`;
 			
 			options.push(newOption);
 		});

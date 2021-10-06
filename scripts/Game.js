@@ -137,7 +137,7 @@ Game.prototype.score = function(){
 Game.prototype.songData = function(){
 	let {notes, song} = this.database.loadSong(this.songID);
 	
-	let name, artist, filename, difficulty;
+	let name, artist, filename, difficulty, timeCreated, timeModified;
 	song[0]["columns"].forEach( (columnName, idx) => {
 		if(columnName.toUpperCase() === "NAME"){
 			name = song[0]["values"][0][idx];
@@ -148,22 +148,31 @@ Game.prototype.songData = function(){
 		else if(columnName.toUpperCase() === "DIFFICULTY"){
 			difficulty = song[0]["values"][0][idx];
 		}
+		else if(columnName.toUpperCase() === "TIMECREATED"){
+			timeCreated = song[0]["values"][0][idx];
+		}
+		else if(columnName.toUpperCase() === "TIMEMODIFIED"){
+			timeModified = song[0]["values"][0][idx];
+		}
 		else if(columnName.toUpperCase() === "FILENAME"){
 			filename = song[0]["values"][0][idx];
 		}
 	});
 	
 	return {
+		songID: this.songID,
 		name: name,
 		artist: artist,
 		difficulty: difficulty,
 		bpm: this.gameData.bpm(),
-		beatInterval: this.gameData.beat_interval(),
 		brickSpeed: this.gameData.brick_speed(),
-		songTime: this.gameData.song_time(),
 		duration: this.gameData.song_duration(),
+		timeCreated: timeCreated,
+		timeModified: timeModified,
+		filename: filename,
+		beatInterval: this.gameData.beat_interval(),
+		songTime: this.gameData.song_time(),
 		score: this.gameData.score(),
-		filename: filename
 	}
 }
 
@@ -216,7 +225,6 @@ Game.prototype.loadSong = async function(songID){
 Game.prototype.saveSong = function(songData, overwrite){
 	let notes = JSON.parse(this.gameData.song_notes_json());
 	if(overwrite === true){
-		songData.songID = this.songID;
 		this.database.overwriteSong(songData, notes);
 	}
 	else{
@@ -256,14 +264,17 @@ Editor.prototype.createNote = function(x, y){
 	let sixteenthNoteTime = this.gameData.beat_interval() / 4;
 	let t = this.gameData.song_time();
 	
+	// set brickT to the time of the song plus an offset accounting for the y position
 	y -= wasm.ground_pos() * this.yFactor;
 	let brickT = t + y / (this.gameData.brick_speed() * this.yFactor);
-	brickT += sixteenthNoteTime - (brickT % sixteenthNoteTime + sixteenthNoteTime) % sixteenthNoteTime; //subtract positive modulus
-	let brickWidth = wasm.graphic_size(wasm.GraphicGroup.Brick).x * this.xFactor
+	// round to a sixteenth note 
+		// (by adding the difference to the next sixteenthNoteTime, i.e. adding sixteenthNoteTime - positive modulus)
+	brickT += sixteenthNoteTime - (brickT % sixteenthNoteTime + sixteenthNoteTime) % sixteenthNoteTime; 
 	
-	x = Math.floor(x / brickWidth); // !!! do calculation in game.rs to ensure consistency
+	let brickWidth = wasm.graphic_size(wasm.GraphicGroup.Brick1).x * this.xFactor
+	let pos = Math.floor(x / brickWidth);
 	
-	this.gameData.toggle_brick(0, brickT, x);
+	this.gameData.toggle_brick(0, brickT, pos);
 	
 	// to have the game add the note. 
 	// TODO, more robust way would be to add the note to on screen notes in toggle_brick, then just rerender with renderGame()
