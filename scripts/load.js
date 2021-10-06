@@ -23,17 +23,18 @@ MMDatabase.prototype.loadSong = function(songID){
 
 // >:< error handling on save and overwrite. Don't want to lose data
 MMDatabase.prototype.saveSong = function(songData, notes){
-	let {name, artist, difficulty, bpm, brickSpeed, duration} = songData;
+	let {name, artist, difficulty, bpm, brickSpeed, duration, filename} = songData;
 	let now = new Date().getTime();
 			
-	let sql = "INSERT INTO SONGS (Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, TimeCreated) VALUES (\"" 
+	let sql = "INSERT INTO SONGS (Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, TimeCreated, Filename) VALUES (\"" 
 		+ name + "\", \""
 		+ artist + "\", \""
 		+ difficulty + "\", "
 		+ bpm + ", "
 		+ brickSpeed + ", "
 		+ duration + ", "
-		+ now 
+		+ now + ", \""
+		+ filename + "\"" 
 		+ ");"
 	;
 	
@@ -64,14 +65,15 @@ MMDatabase.prototype.overwriteSong = function(songData, notes){
 	let {songID, name, artist, difficulty, bpm, brickSpeed, duration} = songData;
 	let now = new Date().getTime();
 			
-	let sql = "INSERT INTO SONGS (Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, TimeCreated) VALUES (\"" 
+	let sql = "INSERT INTO SONGS (Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, TimeCreated, Filename) VALUES (\"" 
 		+ name + "\", \""
 		+ artist + "\", \""
 		+ difficulty + "\", "
 		+ bpm + ", "
 		+ brickSpeed + ", "
 		+ duration + ", "
-		+ now 
+		+ now + ", \""
+		+ filename + "\"" 
 		+ ");"
 	;
 	

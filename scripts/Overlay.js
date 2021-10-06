@@ -666,6 +666,8 @@ function saveSongDialog(eventPropagator){
 	let brickSpeedField = document.createElement("input");
 	let durationLabel = document.createElement("label");
 	let durationField = document.createElement("input");
+	let filenameLabel = document.createElement("label");
+	let filenameField = document.createElement("input");
 	let newLine = () => { return document.createElement("br"); }
 	
 	div.style.position = "absolute";
@@ -681,6 +683,7 @@ function saveSongDialog(eventPropagator){
 	bpmLabel.innerHTML = "BPM";
 	brickSpeedLabel.innerHTML = "Brick Speed";
 	durationLabel.innerHTML = "Song Duration";
+	filenameLabel.innerHTML = "Song file name";
 	
 	let songData = eventPropagator.runOnGame(game => {
 		return game.songData();
@@ -698,6 +701,8 @@ function saveSongDialog(eventPropagator){
 	brickSpeedField.value = songData.brickSpeed;
 	durationField.type = "text";
 	durationField.value = songData.duration;
+	filenameField.type = "text";
+	filenameField.value = songData.filename;
 	
 	saveButton.innerHTML = "Save";
 	overwriteButton.innerHTML = "Overwrite";
@@ -720,6 +725,9 @@ function saveSongDialog(eventPropagator){
 	div.appendChild(durationLabel);
 	div.appendChild(durationField);
 	div.appendChild(newLine());
+	div.appendChild(filenameLabel);
+	div.appendChild(filenameField);
+	div.appendChild(newLine());
 	div.appendChild(saveButton);
 	div.appendChild(overwriteButton);
 	
@@ -738,7 +746,8 @@ function saveSongDialog(eventPropagator){
 			difficulty: difficultyField.value,
 			bpm: bpmField.value,
 			brickSpeed: brickSpeedField.value,
-			duration: durationField.value
+			duration: durationField.value,
+			filename: filenameField.value
 		}
 		
 		let fn = game => {

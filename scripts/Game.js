@@ -135,12 +135,35 @@ Game.prototype.score = function(){
 }
 
 Game.prototype.songData = function(){
+	let {notes, song} = this.database.loadSong(this.songID);
+	
+	let name, artist, filename, difficulty;
+	song[0]["columns"].forEach( (columnName, idx) => {
+		if(columnName.toUpperCase() === "NAME"){
+			name = song[0]["values"][0][idx];
+		}
+		else if(columnName.toUpperCase() === "ARTIST"){
+			artist = song[0]["values"][0][idx];
+		}
+		else if(columnName.toUpperCase() === "DIFFICULTY"){
+			difficulty = song[0]["values"][0][idx];
+		}
+		else if(columnName.toUpperCase() === "FILENAME"){
+			filename = song[0]["values"][0][idx];
+		}
+	});
+	
 	return {
+		name: name,
+		artist: artist,
+		difficulty: difficulty,
+		bpm: this.gameData.bpm(),
 		beatInterval: this.gameData.beat_interval(),
 		brickSpeed: this.gameData.brick_speed(),
 		songTime: this.gameData.song_time(),
-		songDuration: this.gameData.song_duration(),
-		score: this.gameData.score()
+		duration: this.gameData.song_duration(),
+		score: this.gameData.score(),
+		filename: filename
 	}
 }
 

@@ -173,6 +173,10 @@ impl Game {
 		return max;
 	}
 	
+	pub fn bpm(&self) -> f32 {
+		return self.song.bpm as f32;
+	}
+	
 	// returns the time in seconds of 1 beat
 	pub fn beat_interval(&self) -> f32 {
 		let secs_per_beat = 60.0 / self.song.bpm as f32;
