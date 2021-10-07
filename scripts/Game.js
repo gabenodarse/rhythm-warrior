@@ -137,7 +137,7 @@ Game.prototype.score = function(){
 Game.prototype.songData = function(){
 	let {notes, song} = this.database.loadSong(this.songID);
 	
-	let name, artist, filename, difficulty, timeCreated, timeModified;
+	let name, artist, difficulty, startOffset, timeCreated, timeModified, filename;
 	song[0]["columns"].forEach( (columnName, idx) => {
 		if(columnName.toUpperCase() === "NAME"){
 			name = song[0]["values"][0][idx];
@@ -147,6 +147,9 @@ Game.prototype.songData = function(){
 		}
 		else if(columnName.toUpperCase() === "DIFFICULTY"){
 			difficulty = song[0]["values"][0][idx];
+		}
+		else if(columnName.toUpperCase() === "STARTOFFSET"){
+			startOffset = song[0]["values"][0][idx];
 		}
 		else if(columnName.toUpperCase() === "TIMECREATED"){
 			timeCreated = song[0]["values"][0][idx];
@@ -206,6 +209,7 @@ Game.prototype.loadSong = async function(songID){
 	});
 	
 	// TODO add error handling
+	// >:< if file is not found?
 	await fetch(filename)
 		.then(res => res.arrayBuffer())
 		.then(res => this.audioContext.decodeAudioData(res))
@@ -222,6 +226,13 @@ Game.prototype.loadSong = async function(songID){
 	}
 	
 	this.renderGame();
+}
+
+Game.prototype.loadMP3 = async function(file){
+	await file.arrayBuffer()
+		.then(res => this.audioContext.decodeAudioData(res))
+		.then(res => { this.audioBuffer = res; }
+	);
 }
 
 Game.prototype.saveSong = function(songData, overwrite){

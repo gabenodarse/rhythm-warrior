@@ -286,7 +286,7 @@ function Menu(eventPropagator, controlsMap){
 	}, "New song");
 	
 	this.saveLoadMenu.addSelection(() => {
-		alert("Not yet implemented"); // >:< this and Load database button
+		uploadMP3Dialog(eventPropagator); // >:< this and Load database button
 	}, "Load mp3");
 	
 	this.saveLoadMenu.addSelection(() => {
@@ -863,3 +863,47 @@ function loadSongDialog(eventPropagator){
 	document.addEventListener("keydown", pressKey);
 }
 
+function uploadMP3Dialog(eventPropagator){
+	let div = document.createElement("div");
+	let input = document.createElement("input");
+	let mp3File;
+	
+	input.type = "file"
+	
+	div.style.position = "absolute";
+	div.style.top = "10px";
+	div.style.left = "40%";
+	div.style.width = "20%";
+	div.style.backgroundColor = "rgb(180, 180, 180)";
+	div.style.zIndex = "300";
+	
+	div.appendChild(input);
+	document.body.appendChild(div);
+	
+	let pressKey = evt => {
+		if(evt.keyCode == 27){
+			document.removeEventListener("keydown", pressKey);
+			input.removeEventListener("change", inputFile);
+			
+			div.remove();
+		}
+	}
+	
+	let inputFile = evt => {
+		document.removeEventListener("keydown", pressKey);
+		input.removeEventListener("change", inputFile);
+			
+		mp3File = input.files[0];
+		
+		let fn = game => {
+			game.loadMP3(mp3File);
+		}
+		
+		eventPropagator.runOnGame(fn);
+		
+		div.remove();
+	} 
+	
+	input.addEventListener("change", inputFile);
+	document.addEventListener("keydown", pressKey);
+}
