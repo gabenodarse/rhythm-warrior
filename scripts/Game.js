@@ -15,8 +15,9 @@ export function Game () {
 	this.lastTick;
 	this.gameData;
 	this.graphics; // !!! can be either canvases or webGL. Add way to choose between them.
-	this.database;
-	this.songID;
+	this.database; 
+	this.songID; // id of song in database
+	this.songStartOffset; // small or 0 song offset so that the song corresponds to beat lines
 	this.isLoaded = false;
 	
 	this.audioContext = new AudioContext();
@@ -77,15 +78,16 @@ Game.prototype.resize = function(){
 }
 
 Game.prototype.start = function (callback) {
-	// !!! creating a new buffer source each time because I couldn't figure out how to resume audio precisely
-		// make sure multiple buffer sources don't linger in memory
-	this.audioSource = this.audioContext.createBufferSource(); 
-	this.audioSource.buffer = this.audioBuffer;
+	// "An AudioBufferSourceNode can only be played once; after each call to start(),
+		// you have to create a new node if you want to play the same sound again ...
+		// you can use these nodes in a "fire and forget" manner" - MDN
+	this.audioSource = new AudioBufferSourceNode(this.audioContext, {buffer: this.audioBuffer}); 
 	this.audioSource.connect(this.audioContext.destination);
 	
 	let switchTime = this.audioContext.currentTime + this.audioTimeSafetyBuffer;
-	this.audioSource.start(switchTime, this.gameData.song_time());
-	this.lastTick = new Date().getTime() + this.audioTimeSafetyBuffer * 1000;
+	// start (optional when = 0, optional offset, optional duration);
+	this.audioSource.start(switchTime, this.gameData.song_time() + this.songStartOffset); 
+	this.lastTick = new Date().getTime() + this.audioTimeSafetyBuffer * 1000; // set the last tick time to after the buffer
 	
 	// timeout to prevent negative ticks
 	setTimeout( () => {
@@ -170,6 +172,7 @@ Game.prototype.songData = function(){
 		bpm: this.gameData.bpm(),
 		brickSpeed: this.gameData.brick_speed(),
 		duration: this.gameData.song_duration(),
+		startOffset: startOffset,
 		timeCreated: timeCreated,
 		timeModified: timeModified,
 		filename: filename,
@@ -189,10 +192,9 @@ Game.prototype.loadSong = async function(songID){
 	// !!! check if current song has been saved (modified flag?) 
 		// No need to show a check for regular game usage where songs aren't edited
 	// !!! creating a new game to load a new song? Or create a load_song method? wasm garbage collected?
-	this.songID = songID;
 	let {notes, song} = this.database.loadSong(songID);
 	
-	let bpm, brickSpeed, duration, filename;
+	let bpm, brickSpeed, duration, startOffset, filename;
 	song[0]["columns"].forEach( (columnName, idx) => {
 		if(columnName.toUpperCase() === "BPM"){
 			bpm = song[0]["values"][0][idx];
@@ -203,13 +205,16 @@ Game.prototype.loadSong = async function(songID){
 		else if(columnName.toUpperCase() === "DURATION"){
 			duration = song[0]["values"][0][idx];
 		}
+		else if(columnName.toUpperCase() === "STARTOFFSET"){
+			startOffset = song[0]["values"][0][idx];
+		}
 		else if(columnName.toUpperCase() === "FILENAME"){
 			filename = song[0]["values"][0][idx];
 		}
 	});
 	
 	// TODO add error handling
-	// >:< if file is not found?
+	// !!! if file is not found?
 	await fetch(filename)
 		.then(res => res.arrayBuffer())
 		.then(res => this.audioContext.decodeAudioData(res))
@@ -225,10 +230,13 @@ Game.prototype.loadSong = async function(songID){
 		});
 	}
 	
+	this.songID = songID;
+	this.songStartOffset = startOffset;
 	this.renderGame();
 }
 
 Game.prototype.loadMP3 = async function(file){
+	// !!! add error handling
 	await file.arrayBuffer()
 		.then(res => this.audioContext.decodeAudioData(res))
 		.then(res => { this.audioBuffer = res; }

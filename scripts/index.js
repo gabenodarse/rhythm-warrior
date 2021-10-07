@@ -12,5 +12,3 @@ export function wasmMemory(){
 	wasmMemoryObj = wasmObj.memory;
 	main.run();
 })()
-
-

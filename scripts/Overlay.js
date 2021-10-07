@@ -292,7 +292,6 @@ function Menu(eventPropagator, controlsMap){
 	this.saveLoadMenu.addSelection(() => {
 		alert("Not yet implemented");
 	}, "Load database");
-
 	
 	this.menuDiv.appendChild(this.mainMenu.domElement());
 	this.menuDiv.appendChild(this.controlsMenu.domElement());
@@ -665,6 +664,8 @@ function saveSongDialog(eventPropagator){
 	let brickSpeedField = document.createElement("input");
 	let durationLabel = document.createElement("label");
 	let durationField = document.createElement("input");
+	let startOffsetLabel = document.createElement("label");
+	let startOffsetField = document.createElement("input");
 	let filenameLabel = document.createElement("label");
 	let filenameField = document.createElement("input");
 	let newLine = () => { return document.createElement("br"); }
@@ -682,6 +683,7 @@ function saveSongDialog(eventPropagator){
 	bpmLabel.innerHTML = "BPM";
 	brickSpeedLabel.innerHTML = "Brick Speed";
 	durationLabel.innerHTML = "Song Duration";
+	startOffsetLabel.innerHTML = "Start Offset";
 	filenameLabel.innerHTML = "Song file name";
 	
 	let songData = eventPropagator.runOnGame(game => {
@@ -700,6 +702,8 @@ function saveSongDialog(eventPropagator){
 	brickSpeedField.defaultValue = songData.brickSpeed;
 	durationField.type = "text";
 	durationField.defaultValue = songData.duration;
+	startOffsetField.type = "text";
+	startOffsetField.defaultValue = songData.startOffset;
 	filenameField.type = "text";
 	filenameField.defaultValue = songData.filename;
 	
@@ -724,6 +728,9 @@ function saveSongDialog(eventPropagator){
 	div.appendChild(durationLabel);
 	div.appendChild(durationField);
 	div.appendChild(newLine());
+	div.appendChild(startOffsetLabel);
+	div.appendChild(startOffsetField);
+	div.appendChild(newLine());
 	div.appendChild(filenameLabel);
 	div.appendChild(filenameField);
 	div.appendChild(newLine());
@@ -745,6 +752,7 @@ function saveSongDialog(eventPropagator){
 		songData.bpm = bpmField.value,
 		songData.brickSpeed = brickSpeedField.value,
 		songData.duration = durationField.value,
+		songData.startOffset = startOffsetField.value,
 		songData.filename = filenameField.value
 		
 		let fn = game => {

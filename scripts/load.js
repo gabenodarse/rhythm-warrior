@@ -23,16 +23,19 @@ MMDatabase.prototype.loadSong = function(songID){
 
 // >:< error handling on save and overwrite. Don't want to lose data
 MMDatabase.prototype.saveSong = function(songData, notes){
-	let {name, artist, difficulty, bpm, brickSpeed, duration, filename} = songData;
+	let {name, artist, difficulty, bpm, brickSpeed, duration, startOffset, filename} = songData;
 	let now = new Date().getTime();
 			
-	let sql = "INSERT INTO SONGS (Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, TimeCreated, TimeModified, Filename) VALUES (\"" 
+	let sql = "INSERT INTO SONGS \
+		(Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, StartOffset, TimeCreated, TimeModified, Filename) \
+		VALUES (\"" 
 		+ name + "\", \""
 		+ artist + "\", \""
 		+ difficulty + "\", "
 		+ bpm + ", "
 		+ brickSpeed + ", "
 		+ duration + ", "
+		+ startOffset + ", "
 		+ now + ", "
 		+ now + ", \""
 		+ filename + "\"" 
@@ -63,16 +66,19 @@ MMDatabase.prototype.saveSong = function(songData, notes){
 
 MMDatabase.prototype.overwriteSong = function(songData, notes){
 	// TODO if write doesn't work, data isn't saved while old data in database is lost. Problem?
-	let {songID, name, artist, difficulty, bpm, brickSpeed, duration, timeCreated, filename} = songData;
+	let {songID, name, artist, difficulty, bpm, brickSpeed, duration, startOffset, timeCreated, filename} = songData;
 	let now = new Date().getTime();
 			
-	let sql = "INSERT INTO SONGS (Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, TimeCreated, TimeModified, Filename) VALUES (\"" 
+	let sql = "INSERT INTO SONGS \
+		(Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, StartOffset, TimeCreated, TimeModified, Filename) \
+		VALUES (\"" 
 		+ name + "\", \""
 		+ artist + "\", \""
 		+ difficulty + "\", "
 		+ bpm + ", "
 		+ brickSpeed + ", "
 		+ duration + ", "
+		+ startOffset + ", "
 		+ timeCreated + ", "
 		+ now + ", \""
 		+ filename + "\"" 
