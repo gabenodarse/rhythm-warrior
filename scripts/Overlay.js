@@ -732,10 +732,10 @@ function saveSongDialog(eventPropagator){
 	
 	document.body.appendChild(div);
 	
-	let onsubmit = evt => {
-		document.removeEventListener("keydown", onkeydown);
-		saveButton.removeEventListener("click", onsubmit);
-		overwriteButton.removeEventListener("click", onsubmit);
+	let submitForm = evt => {
+		document.removeEventListener("keydown", pressKey);
+		saveButton.removeEventListener("click", submitForm);
+		overwriteButton.removeEventListener("click", submitForm);
 		
 		let overwrite = (evt.target == overwriteButton) ? true : false;
 		
@@ -754,19 +754,19 @@ function saveSongDialog(eventPropagator){
 		
 		div.remove();
 	};
-	let onkeydown = evt => {
+	let pressKey = evt => {
 		if(evt.keyCode == 27){
-			document.removeEventListener("keydown", onkeydown);
-			saveButton.removeEventListener("click", onsubmit);
-			overwriteButton.removeEventListener("click", onsubmit);
+			document.removeEventListener("keydown", pressKey);
+			saveButton.removeEventListener("click", submitForm);
+			overwriteButton.removeEventListener("click", submitForm);
 			
 			div.remove();
 		}
 	}
 	
-	saveButton.addEventListener("click", onsubmit);
-	overwriteButton.addEventListener("click", onsubmit);
-	document.addEventListener("keydown", onkeydown);
+	saveButton.addEventListener("click", submitForm);
+	overwriteButton.addEventListener("click", submitForm);
+	document.addEventListener("keydown", pressKey);
 }
 
 function loadSongDialog(eventPropagator){
@@ -832,16 +832,16 @@ function loadSongDialog(eventPropagator){
 		});
 	}
 	
-	options.forEach( option => {
-		songSelector.appendChild(option);
+	options.forEach( o => {
+		songSelector.appendChild(o);
 	});
 	div.appendChild(songSelector);
 	div.appendChild(submitButton);
 	document.body.appendChild(div);
 	
-	let onsubmit = () => {
-		document.removeEventListener("keydown", onkeydown);
-		submitButton.removeEventListener("click", onsubmit);
+	let submitForm = () => {
+		document.removeEventListener("keydown", pressKey);
+		submitButton.removeEventListener("click", submitForm);
 		
 		let fn = game => {
 			game.loadSong(parseInt(songSelector.value));
@@ -850,16 +850,16 @@ function loadSongDialog(eventPropagator){
 		
 		div.remove();
 	};
-	let onkeydown = evt => {
+	let pressKey = evt => {
 		if(evt.keyCode == 27){
-			document.removeEventListener("keydown", onkeydown);
-			submitButton.removeEventListener("click", onsubmit);
+			document.removeEventListener("keydown", pressKey);
+			submitButton.removeEventListener("click", submitForm);
 			
 			div.remove();
 		}
 	}
 	
-	submitButton.addEventListener("click", onsubmit);
-	document.addEventListener("keydown", onkeydown);
+	submitButton.addEventListener("click", submitForm);
+	document.addEventListener("keydown", pressKey);
 }
 
