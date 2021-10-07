@@ -14,12 +14,9 @@ export async function run(){
 	
 	if(Object.keys(controls).length == 0){
 		controls[32] = wasm.Input.Dash; // space
-		controls[219] = wasm.Input.Left; // left bracket
-		controls[221] = wasm.Input.Right; // right bracket
-		controls[81] = wasm.Input.Ability1; // q
-		controls[87] = wasm.Input.Ability2; // w
-		controls[69] = wasm.Input.Ability3; // e
-		controls[82] = wasm.Input.Ability4; // r
+		controls[81] = wasm.Input.Slash1; // q
+		controls[87] = wasm.Input.Slash2; // w
+		controls[69] = wasm.Input.Slash3; // e
 	}
 	
 	// !!! order kinda janky because keys have to be set before overlay creation

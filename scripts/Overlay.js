@@ -3,15 +3,7 @@ import * as wasm from "../pkg/music_mercenary.js";
 
 // !!! finish map
 let g_keyCodeNames = [];
-g_keyCodeNames[32] = "space";
-g_keyCodeNames[188] = ", (<)";
-g_keyCodeNames[190] = ". (>)";
-g_keyCodeNames[219] = "[";
-g_keyCodeNames[221] = "]";
-g_keyCodeNames[81] = "Q";
-g_keyCodeNames[87] = "W";
-g_keyCodeNames[69] = "E";
-g_keyCodeNames[82] = "R";
+g_keyCodeNames[32] = "Space";
 
 // >:< change toggle functions to display/hide functions
 // >:< save song fields are uneditable (key presses being captured and are not sent??)
@@ -341,7 +333,7 @@ function MenuPanel(){
 	};
 }
 
-// ControlsMenu class, subclass of MenuPanel
+// ControlsMenu class, subclass of MenuPanel where selection names are stored and can be modified
 // !!! redundancy check that the buttons are named correctly on menu panel activation.
 // !!! does control menu have to be a special subclass of MenuPanel? 
 function ControlsMenu(controlsMap){
@@ -371,7 +363,7 @@ function ControlsMenu(controlsMap){
 			}
 		}
 		
-		// create callback for when the selection is selected
+		// callback for changeControlDialog, when the control is being changed
 		let callback = (keyEvt) => {
 			let keyCode = keyEvt.keyCode;
 			if(keyCode == 27){
@@ -392,6 +384,7 @@ function ControlsMenu(controlsMap){
 				let controlID = controlsMap[keyCode];
 				this.setSelectionName(controlID, "");
 			}
+			
 			controlsMap[keyCode] = i;
 			this.setSelectionName(i, newKeyName);
 		}
@@ -399,7 +392,7 @@ function ControlsMenu(controlsMap){
 		this.selectionsNames.push(name);
 		this.addSelection(null, "");
 		this.selections[i].setSelectionFunction(() => { changeControlDialog(callback); });
-		let currentKeyName = g_keyCodeNames[currentKey] ? g_keyCodeNames[currentKey] : currentKey;
+		let currentKeyName = g_keyCodeNames[currentKey] ? g_keyCodeNames[currentKey] : String.fromCharCode(currentKey);
 		this.setSelectionName(i, currentKeyName);
 	}
 }

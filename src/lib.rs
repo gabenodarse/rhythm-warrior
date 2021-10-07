@@ -153,12 +153,9 @@ pub struct LingeringGraphic {
 #[derive(Clone, Copy, Debug, EnumVariantCount)]
 pub enum Input {
 	Dash,
-	Left,
-	Right,
-	Ability1,
-	Ability2,
-	Ability3,
-	Ability4,
+	Slash1,
+	Slash2,
+	Slash3,
 }
 
 #[wasm_bindgen]

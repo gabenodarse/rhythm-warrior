@@ -218,32 +218,26 @@ impl Game {
 		match input {
 			Input::Dash => {
 				self.player.input_dash(self.time_running);
-			}
-			Input::Left => (),
-			Input::Right => (),
-			Input::Ability1 => {
+			},
+			Input::Slash1 => {
 				self.player.input_slash(BrickType::Type1, self.time_running);
-			}
-			Input::Ability2 => {
+			},
+			Input::Slash2 => {
 				self.player.input_slash(BrickType::Type2, self.time_running);
-			}
-			Input::Ability3 => {
+			},
+			Input::Slash3 => {
 				self.player.input_slash(BrickType::Type3, self.time_running);
 			}
-			Input::Ability4	=> {}
 		}
 	}
 	
 	// takes key release command and passes it forward to be handled
 	pub fn stop_command (&mut self, key: Input) {
 		match key {
-			Input::Dash => {}
-			Input::Left => {},
-			Input::Right => {},
-			Input::Ability1 => {}
-			Input::Ability2 => {}
-			Input::Ability3 => {}
-			Input::Ability4 => {}
+			Input::Dash => {},
+			Input::Slash1 => {},
+			Input::Slash2 => {},
+			Input::Slash3 => {}
 		}
 	}
 	
