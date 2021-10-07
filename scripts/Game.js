@@ -215,9 +215,11 @@ Game.prototype.loadSong = async function(songID){
 	this.gameData = wasm.Game.new(bpm, brickSpeed, duration);
 	
 	// TODO flimsy way of indexing into notes to retrieve correct values
-	notes[0]["values"].forEach( note => {
-		this.gameData.toggle_brick(note[2], note[3], note[4]); 
-	});
+	if(notes[0]){
+		notes[0]["values"].forEach( note => {
+			this.gameData.toggle_brick(note[2], note[3], note[4]); 
+		});
+	}
 	
 	this.renderGame();
 }

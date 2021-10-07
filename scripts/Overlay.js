@@ -14,13 +14,14 @@ g_keyCodeNames[69] = "E";
 g_keyCodeNames[82] = "R";
 
 // >:< change toggle functions to display/hide functions
-// !!! backspace for menu navigation?
+// >:< save song fields are uneditable (key presses being captured and are not sent??)
 // !!! does overlay ever have to be resized?
 // TODO having the editor overlay included in game.js Editor class might make more sense
 	// would allow game and overlay elements to synchronize more easily
-// !!! enable/disable editor compatibility
-// !!! mouse over menu
-// TODO space for playing/pausing editor?
+// TODO space key for playing/pausing editor?
+// TODO clicking pauses editor?
+
+// main overlay class. all overlay elements are children, directly or nested
 export function Overlay(songData, eventPropagator, controlsMap){
 	this.overlayDiv;
 	this.score;
@@ -50,6 +51,7 @@ export function Overlay(songData, eventPropagator, controlsMap){
 	this.editorOverlay = editorOverlay;
 }
 
+// EditorOverlay class, contains the editor's guiding lines and the editor's controls
 function EditorOverlay(songData, eventPropagator){
 	this.div;
 	this.guidingLines;
@@ -68,7 +70,8 @@ function EditorOverlay(songData, eventPropagator){
 	this.div.appendChild(this.controls.domElement());
 }
 
-// !!! allow triplet notes
+// EditorGuidingLines class, displays lines that (should) represent beat breakpoints in a song
+	// clicking on the canvas adds notes, wheel scrolling changes the song time
 function EditorGuidingLines(songData, eventPropagator){
 	this.canvas;
 	this.beatInterval; // how long between beats in seconds // !!! get from game every time or store as state?
@@ -92,9 +95,7 @@ function EditorGuidingLines(songData, eventPropagator){
 	this.onclick = evt => {
 		let x = evt.clientX - this.canvas.offsetLeft;
 		let y = evt.clientY - this.canvas.offsetTop;
-		let fn = game => {
-			game.createNote(x, y);
-		}
+		let fn = game => { game.createNote(x, y); }
 		eventPropagator.runOnGame(fn);
 	}
 	
@@ -108,7 +109,7 @@ function EditorGuidingLines(songData, eventPropagator){
 		}
 		
 		time = eventPropagator.runOnGame(getTime);
-		time += evt.deltaY / 16;
+		time += evt.deltaY / 32;
 		eventPropagator.runOnGame(updateTime, true);
 	}
 	
@@ -117,6 +118,7 @@ function EditorGuidingLines(songData, eventPropagator){
 	
 }
 
+// EditorControls class, contains controls which can control EditorGuidingLines scrolling and game playing/pausing
 function EditorControls(songData, eventPropagator){
 	this.div;
 	this.rangesDiv;
@@ -199,6 +201,7 @@ function EditorControls(songData, eventPropagator){
 	this.div.appendChild(this.buttonDiv);
 }
 
+// Score class, displays a score which may be updated
 function Score(){
 	this.scoreDiv;
 	this.score;
@@ -224,6 +227,7 @@ function Score(){
 	document.body.appendChild(this.scoreDiv);
 }
 
+// Menu class, contains the menu div on which menu panels are displayed and contains logic of menu panels and their selections
 function Menu(eventPropagator, controlsMap){
 	this.menuDiv;
 	this.currentDisplayed;
@@ -303,6 +307,7 @@ function Menu(eventPropagator, controlsMap){
 	this.menuDiv.appendChild(this.saveLoadMenu.domElement());
 }
 
+// MenuPanel class, contains panel selections and handles up and down keypresses
 // !!! add support for hiding buttons (making navigation ignore inactive buttons)
 	// !!! once done, make disable editor and enable editor buttons mutually exclusive / non buggy
 function MenuPanel(){
@@ -336,9 +341,9 @@ function MenuPanel(){
 	};
 }
 
-// !!! note to user that holding down arrow keys disable other keys on many keyboards
+// ControlsMenu class, subclass of MenuPanel
 // !!! redundancy check that the buttons are named correctly on menu panel activation.
-// TODO does control menu have to be a special subclass of MenuPanel? 
+// !!! does control menu have to be a special subclass of MenuPanel? 
 function ControlsMenu(controlsMap){
 	MenuPanel.call(this);
 	this.selectionsNames = [];
@@ -401,6 +406,7 @@ function ControlsMenu(controlsMap){
 
 Object.setPrototypeOf(ControlsMenu.prototype, MenuPanel.prototype);
 
+// MenuSelection class. Controls highlighting style and the selection function
 function MenuSelection(onSelect, selectionText, parentPanelDiv){
 	this.div;
 	this.selectionText;
