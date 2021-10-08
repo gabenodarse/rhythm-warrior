@@ -282,7 +282,7 @@ function Menu(eventPropagator, controlsMap){
 	}, "Load song");
 	
 	this.saveLoadMenu.addSelection(() => {
-		alert("Not yet implemented"); // >:< 
+		newSongDialog(eventPropagator); // >:< 
 	}, "New song");
 	
 	this.saveLoadMenu.addSelection(() => {
@@ -644,6 +644,21 @@ function changeControlDialog(callback){
 		}
 		enterKeyDiv.remove();
 	},{once: true});
+}
+
+function newSongDialog(eventPropagator){
+	
+	let songData = eventPropagator.runOnGame( game => {
+		return game.songData();
+	})
+	let bpm = songData.bpm;
+	let songStartOffset = songData.startOffset;
+	let brickSpeed = songData.brickSpeed;
+	let duration = songData.duration;
+	
+	eventPropagator.runOnGame( game => {
+		game.newSong(bpm, brickSpeed, duration, songStartOffset);
+	}, true);
 }
 
 // TODO less ugly, this and loadSongDialog

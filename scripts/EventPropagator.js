@@ -146,7 +146,12 @@ EventPropagator.prototype.runOnGame = function(functionToRun, updateEditor){
 	}
 	
 	let ret = functionToRun(this.game);
-	if(updateEditor === true) this.overlay.updateSongData(this.game.songData());
+	
+	this.game.renderGame();
+	if(updateEditor === true) {
+		this.overlay.updateSongData(this.game.songData());
+	}
+	
 	return ret;
 }
 

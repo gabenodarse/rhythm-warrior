@@ -80,7 +80,7 @@ Game.prototype.resize = function(){
 Game.prototype.start = async function (callback) {
 	if(!this.audioBuffer){
 		let {notes, song} = this.database.loadSong(this.songID);
-	
+		
 		let filename;
 		song[0]["columns"].forEach( (columnName, idx) => {
 			if(columnName.toUpperCase() === "FILENAME"){
@@ -157,6 +157,19 @@ Game.prototype.score = function(){
 }
 
 Game.prototype.songData = function(){
+	if(!this.songID){
+		return {
+			songID: this.songID,
+			bpm: this.gameData.bpm(),
+			brickSpeed: this.gameData.brick_speed(),
+			duration: this.gameData.song_duration(),
+			startOffset: this.songStartOffset,
+			beatInterval: this.gameData.beat_interval(),
+			songTime: this.gameData.song_time(),
+			score: this.gameData.score(),
+		}
+	}
+	
 	let {notes, song} = this.database.loadSong(this.songID);
 	
 	let name, artist, difficulty, startOffset, timeCreated, timeModified, filename;
@@ -208,6 +221,13 @@ Game.prototype.songs = function(){
 	return songs;
 }
 
+// TODO confirmation on deleted data, this and load song
+Game.prototype.newSong = function(bpm, brickSpeed, duration, songStartOffset){
+	this.gameData = wasm.Game.new(bpm, brickSpeed, duration);
+	this.songID = null;
+	this.songStartOffset = songStartOffset;
+}
+
 Game.prototype.loadSong = function(songID){
 	// !!! check if current song has been saved (modified flag?) 
 		// No need to show a check for regular game usage where songs aren't edited
@@ -245,14 +265,6 @@ Game.prototype.loadSong = function(songID){
 	this.songID = songID;
 	this.songStartOffset = startOffset;
 	
-	// attempt to fetch song early without awaiting this.audioBuffer (start() will refetch if it's not fetched in time)
-	// !!! add error handling
-	fetch(filename)
-		.then(res => res.arrayBuffer())
-		.then(res => this.audioContext.decodeAudioData(res))
-		.then(res => { this.audioBuffer = res; }
-	);
-	
 	this.renderGame();
 }
 
@@ -266,7 +278,7 @@ Game.prototype.loadMP3 = async function(file){
 
 Game.prototype.saveSong = function(songData, overwrite){
 	let notes = JSON.parse(this.gameData.song_notes_json());
-	if(overwrite === true){
+	if(overwrite === true && this.songID){
 		this.database.overwriteSong(songData, notes);
 	}
 	else{
