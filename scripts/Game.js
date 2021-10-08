@@ -77,7 +77,27 @@ Game.prototype.resize = function(){
 	this.renderGame();
 }
 
-Game.prototype.start = function (callback) {
+Game.prototype.start = async function (callback) {
+	if(!this.audioBuffer){
+		let {notes, song} = this.database.loadSong(this.songID);
+	
+		let filename;
+		song[0]["columns"].forEach( (columnName, idx) => {
+			if(columnName.toUpperCase() === "FILENAME"){
+				filename = song[0]["values"][0][idx];
+			}
+		});
+		
+		// fetch the mp3
+		// TODO add error handling
+		// !!! if file is not found?
+		await fetch(filename)
+			.then(res => res.arrayBuffer())
+			.then(res => this.audioContext.decodeAudioData(res))
+			.then(res => { this.audioBuffer = res; }
+		);
+	}
+	
 	// "An AudioBufferSourceNode can only be played once; after each call to start(),
 		// you have to create a new node if you want to play the same sound again ...
 		// you can use these nodes in a "fire and forget" manner" - MDN
@@ -188,7 +208,7 @@ Game.prototype.songs = function(){
 	return songs;
 }
 
-Game.prototype.loadSong = async function(songID){
+Game.prototype.loadSong = function(songID){
 	// !!! check if current song has been saved (modified flag?) 
 		// No need to show a check for regular game usage where songs aren't edited
 	// !!! creating a new game to load a new song? Or create a load_song method? wasm garbage collected?
@@ -213,14 +233,6 @@ Game.prototype.loadSong = async function(songID){
 		}
 	});
 	
-	// TODO add error handling
-	// !!! if file is not found?
-	await fetch(filename)
-		.then(res => res.arrayBuffer())
-		.then(res => this.audioContext.decodeAudioData(res))
-		.then(res => { this.audioBuffer = res; }
-	);
-	
 	this.gameData = wasm.Game.new(bpm, brickSpeed, duration);
 	
 	// TODO flimsy way of indexing into notes to retrieve correct values
@@ -232,6 +244,15 @@ Game.prototype.loadSong = async function(songID){
 	
 	this.songID = songID;
 	this.songStartOffset = startOffset;
+	
+	// attempt to fetch song early without awaiting this.audioBuffer (start() will refetch if it's not fetched in time)
+	// !!! add error handling
+	fetch(filename)
+		.then(res => res.arrayBuffer())
+		.then(res => this.audioContext.decodeAudioData(res))
+		.then(res => { this.audioBuffer = res; }
+	);
+	
 	this.renderGame();
 }
 
