@@ -302,8 +302,6 @@ Game.prototype.toEditor = function(){
 
 export function Editor () {
 	Game.call(this);
-	
-	this.onScreenClick;
 }
 
 Object.setPrototypeOf(Editor.prototype, Game.prototype);
@@ -340,10 +338,6 @@ Editor.prototype.toGame = function(){
 		throw Error("game object has not been loaded");
 	}
 	
-	this.screenDiv.removeEventListener("click", this.onScreenClick);
-	this.onScreenClick = undefined;
-	// !!! rethink the relationship between editor and game. Seems flimsy to switch to game while retaining all game data.
-		// Clear hack right now, switch to editor and back to rewind song
 	Object.setPrototypeOf(this, Game.prototype);
 	
 	return this;

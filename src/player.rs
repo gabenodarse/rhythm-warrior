@@ -29,7 +29,7 @@ use crate::objects::BRICK_WIDTH;
 use crate::objects::DASH_WIDTH;
 use crate::objects::SLASH_WIDTH;
 
-const SLASH_TIME: f32 = 0.04; // delay dash/slash by a tiny amount so they can be pressed at the same time
+const SLASH_TIME: f32 = 0.06; // delay dash/slash by a tiny amount so they can be pressed at the same time
 const SLASH_LINGER_TIME: f32 = 0.1; // how long the slash graphic lingers
 const DASH_LINGER_TIME: f32 = 0.3; // how long the dash graphic lingers
 const BOOST_LINGER_TIME: f32 = 0.14;
@@ -62,7 +62,8 @@ enum PlayerState {
 
 struct TargetInfo {
 	time: f32,
-	pos: f32
+	pos: f32,
+	hit_dir: Direction
 }
 
 impl Object for Player {
@@ -177,7 +178,7 @@ impl Player {
 		
 		let pos_difference = target.pos - self.bounds.left_x;
 		// if within range where boost is reasonable, then boost
-		if pos_difference > 0.5 * PLAYER_WIDTH as f32 && pos_difference < 4.0 * PLAYER_WIDTH as f32 {
+		if pos_difference < 4.0 * PLAYER_WIDTH as f32 {
 			self.lingering_graphics.push( LingeringGraphic {
 				positioned_graphic: self.rendering_instruction(),
 				start_t: time_running - BOOST_PRELINGER_TIME,
@@ -185,7 +186,8 @@ impl Player {
 			});
 			self.bounds.left_x = target.pos;
 			self.bounds.right_x = target.pos + PLAYER_WIDTH as f32;
-		} else if pos_difference < -0.5 * PLAYER_WIDTH as f32 && pos_difference > -4.0 * PLAYER_WIDTH as f32 { // >:<
+			self.hit_dir = target.hit_dir;
+		} else if pos_difference > -4.0 * PLAYER_WIDTH as f32 {
 			self.lingering_graphics.push( LingeringGraphic {
 				positioned_graphic: self.rendering_instruction(),
 				start_t: time_running - BOOST_PRELINGER_TIME,
@@ -193,6 +195,7 @@ impl Player {
 			});
 			self.bounds.left_x = target.pos;
 			self.bounds.right_x = target.pos + PLAYER_WIDTH as f32;
+			self.hit_dir = target.hit_dir;
 		}
 	}
 	
@@ -305,19 +308,19 @@ impl Player {
 				// if left of target, right of target, in between targets
 				if left_target - self.bounds.left_x >= 0.0 {
 					self.face_dir = Direction::Right;
-					self.target = Some( TargetInfo { time: bi.time, pos: left_target} )
+					self.target = Some( TargetInfo { time: bi.time, pos: left_target, hit_dir: Direction::Right} )
 				} else if self.bounds.left_x - right_target >= 0.0 {
 					self.face_dir = Direction::Left;
-					self.target = Some( TargetInfo { time: bi.time, pos: right_target} )
+					self.target = Some( TargetInfo { time: bi.time, pos: right_target, hit_dir: Direction::Left} )
 				} else if left_target - self.bounds.left_x > self.bounds.left_x - right_target {
 					self.face_dir = Direction::Left;
-					self.target = Some ( TargetInfo { time: bi.time, pos: left_target} )
+					self.target = Some ( TargetInfo { time: bi.time, pos: left_target, hit_dir: Direction::Right} )
 				} else {
 					self.face_dir = Direction::Right;
-					self.target = Some ( TargetInfo { time: bi.time, pos: right_target} )
+					self.target = Some ( TargetInfo { time: bi.time, pos: right_target, hit_dir: Direction::Left} )
 				}
 				
-				self.hit_dir = self.face_dir; // >:< 
+				self.hit_dir = self.face_dir;
 			}
 		}
 	}

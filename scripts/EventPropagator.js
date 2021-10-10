@@ -28,48 +28,50 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	
 	this.gameLoop = () => {
 		if(this.paused) {
-			return;
+			this.pause();
+		} else {
+			this.game.tick();
+			this.overlay.updateScore(this.game.score());
 		}
-		
-		this.game.tick();
-		this.overlay.updateScore(this.game.score());
-		requestAnimationFrame(this.loop); // !!! set timeout or request animation frame better?
+		requestAnimationFrame(this.loop);
 	}
 	
 	this.editorLoop = () => {
 		if(this.paused) {
-			return;
+			this.pause();
+		} else {
+			this.game.tick();
+			this.overlay.updateSongData(this.game.songData());
 		}
-		
-		this.game.tick();
-		this.overlay.updateSongData(this.game.songData());
 		requestAnimationFrame(this.loop);
+	}
+	
+	this.pauseLoop = () => {
+		if(!this.paused) {
+			this.start(); // start a new loop cycle (because game.start() is asynchronous)
+		} else {
+			requestAnimationFrame(this.loop);
+		}
 	}
 	
 	this.handleKeyDown = evt => {
 		// TODO faster handling of repeated key inputs from holding down a key?
-		evt.preventDefault(); // only explicit events handlers are run
 		if (evt.keyCode === 27){
 			this.overlay.toggleElement("menu");
 			
-			// !!! doesn't work as intended if menu is open and song is playing (via editor before switching back to game)
+			// if the game is not in editor mode, pause/unpause
 			if(!(this.game instanceof Editor)){
-				if(this.paused){
-					this.start();
-				}
-				else{
-					this.pause();
-				}
+				this.paused = !this.paused;
 			}
 		}
-		else if(typeof(this.controls[event.keyCode]) === "number" && !this.paused){
-			this.game.startControl(this.controls[event.keyCode]);
+		else if(typeof(this.controls[evt.keyCode]) === "number" && !this.paused){
+			this.game.startControl(this.controls[evt.keyCode]);
 		}
 	}
 	
 	this.handleKeyUp = evt => {
-		if(typeof(this.controls[event.keyCode]) === "number" && !this.paused){
-			this.game.stopControl(this.controls[event.keyCode]);
+		if(typeof(this.controls[evt.keyCode]) === "number" && !this.paused){
+			this.game.stopControl(this.controls[evt.keyCode]);
 		}
 	}
 	
@@ -95,20 +97,21 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 }
 
 EventPropagator.prototype.togglePlay = function(){
-	if(this.paused){
-		this.start();
-	}
-	else{
-		this.pause();
-	}
+	this.paused = !this.paused;
 }
 
 EventPropagator.prototype.start = function(){
 	this.paused = false;
+	if(this.game instanceof Editor){
+		this.loop = this.editorLoop;
+	} else {
+		this.loop = this.gameLoop;
+	}
 	this.game.start(this.loop);
 }
 
 EventPropagator.prototype.pause = function(){
+	this.paused = true;
 	// !!! handle game key states on pause/unpause (as of now fires key up events on pause)
 	for(const key in this.controls) {
 		let evt = new KeyboardEvent("keyup", {
@@ -116,24 +119,21 @@ EventPropagator.prototype.pause = function(){
 		});
 		this.handleKeyUp(evt);
 	}
-	this.paused = true;
+	this.loop = this.pauseLoop;
 	this.game.pause();
 }
 
 EventPropagator.prototype.enableEditor = async function(){
 	this.overlay.toggleElement("editorOverlay");
 	this.overlay.toggleElement("score");
-	this.game = await this.game.toEditor();
-	this.loop = this.editorLoop;
+	this.game = this.game.toEditor();
 	this.overlay.updateSongData(this.game.songData());
 }
-// !!! make screwing with game through UI impossible. Through hacking IDC. 
-	// Distinction from game and editor (going to game from editor starts at 0?)
+
 EventPropagator.prototype.disableEditor = function(){
 	this.overlay.toggleElement("editorOverlay");
 	this.overlay.toggleElement("score");
 	this.game = this.game.toGame();
-	this.loop = this.gameLoop;
 }
 
 EventPropagator.prototype.restartSong = function(){
