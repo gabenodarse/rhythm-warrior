@@ -22,6 +22,7 @@ use crate::dash::Dash;
 use crate::brick::Brick;
 
 use crate::GROUND_POS;
+use crate::GAME_WIDTH;
 use crate::Song;
 use crate::objects::PLAYER_WIDTH;
 use crate::objects::PLAYER_HEIGHT;
@@ -331,26 +332,19 @@ impl Player {
 		
 		match &self.target {
 			None => {
-				
+				if self.bounds.left_x < 0.0 { self.bounds.left_x = 0.0 };
+				if self.bounds.left_x > GAME_WIDTH as f32 { self.bounds.left_x = GAME_WIDTH as f32 - PLAYER_WIDTH as f32 };
+				self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
 			},
 			Some(ti) => {
-				// >:< can shorten
 				match self.face_dir {
 					Direction::Left => {
 						let end_pos = self.bounds.left_x - seconds_passed * RUN_SPEED;
-						if end_pos < ti.pos {
-							self.bounds.left_x = ti.pos;
-						} else {
-							self.bounds.left_x = end_pos;
-						}
+						self.bounds.left_x = if end_pos < ti.pos { ti.pos } else { end_pos };
 					},
 					Direction::Right => {
 						let end_pos = self.bounds.left_x + seconds_passed * RUN_SPEED;
-						if end_pos > ti.pos {
-							self.bounds.left_x = ti.pos;
-						} else {
-							self.bounds.left_x = end_pos;
-						}
+						self.bounds.left_x = if end_pos > ti.pos { ti.pos } else { end_pos };
 					}
 				}
 				
