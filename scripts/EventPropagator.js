@@ -123,7 +123,7 @@ EventPropagator.prototype.pause = function(){
 	this.game.pause();
 }
 
-EventPropagator.prototype.enableEditor = async function(){
+EventPropagator.prototype.enableEditor = function(){
 	this.overlay.toggleElement("editorOverlay");
 	this.overlay.toggleElement("score");
 	this.game = this.game.toEditor();

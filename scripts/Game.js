@@ -59,7 +59,7 @@ Game.prototype.init = async function () {
 	
 	// !!! don't load song (mp3 and notes from database) on initialization
 	// !!! loading arbitrary song... instead should query and load first song, or allow no song to be loaded
-	await this.loadSong(6); 
+	await this.loadSong(7); 
 	
 	this.isLoaded = true;
 }

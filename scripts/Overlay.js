@@ -118,7 +118,6 @@ function EditorControls(songData, eventPropagator){
 	this.broadRange;
 	this.preciseRange;
 	this.playPauseButton;
-	this.enableTicksButton;
 	this.songDuration;
 	this.beatInterval;
 	
@@ -161,8 +160,6 @@ function EditorControls(songData, eventPropagator){
 	
 	this.playPauseButton = document.createElement("button");
 	this.playPauseButton.innerHTML = "|> / ||";
-	this.enableTicksButton = document.createElement("button");
-	this.enableTicksButton.innerHTML = "Ticking";
 	
 	this.rangesDiv.addEventListener("input", evt => {
         let t = parseFloat(this.broadRange.value) / 100 * this.songDuration 
@@ -179,16 +176,9 @@ function EditorControls(songData, eventPropagator){
 		eventPropagator.togglePlay();
 	});
 	
-	this.enableTicksButton.addEventListener("click", evt => {
-		eventPropagator.runOnGame( game => {
-			game.toggleTickingSound();
-		});
-	});
-	
 	this.rangesDiv.appendChild(this.preciseRange);
 	this.rangesDiv.appendChild(this.broadRange);
 	this.buttonDiv.appendChild(this.playPauseButton);
-	this.buttonDiv.appendChild(this.enableTicksButton);
 	this.div.appendChild(this.rangesDiv);
 	this.div.appendChild(this.buttonDiv);
 }
@@ -450,8 +440,10 @@ EditorOverlay.prototype.toggle = function(){
 }
 
 EditorOverlay.prototype.updateSongData = function(songData){
-	this.guidingLines.updateSongData(songData);
-	this.controls.updateSongData(songData);
+	if(this.div.style.display != "none"){
+		this.guidingLines.updateSongData(songData);
+		this.controls.updateSongData(songData);
+	}
 }
 
 EditorOverlay.prototype.domElement = function(){
@@ -482,9 +474,13 @@ EditorGuidingLines.prototype.updateSongData = function(songData){
 	let quarterBeatPixelInterval = beatPixelInterval / 4;
 	let timeIntoBeat = time % beatInterval;
 	let timeIntoQuarterBeat = time % quarterBeatInterval;
-	// round to next quarter beat interval
+	
 	let posOffset = this.groundPosOffset;
+	// account for timeIntoQuarterBeat,
+		// e.g. if halfway into a quarter beat, display beat bar halfway into a quarter beat higher
 	posOffset -= timeIntoQuarterBeat / quarterBeatInterval * quarterBeatPixelInterval;
+	
+	// draw lines to match beats
 	let quarterBeatCounter = Math.floor(timeIntoBeat / quarterBeatInterval);
 	for(let y = posOffset; y < this.canvas.height; y += quarterBeatPixelInterval){
 		if(quarterBeatCounter % 4 == 0){ // beat line
