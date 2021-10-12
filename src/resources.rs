@@ -50,30 +50,30 @@ pub fn max_graphics(g: GraphicGroup) -> u32 {
 pub fn graphic_size(g: GraphicGroup) -> Position {
 	return match g {
 		GraphicGroup::Background => { Position {
-			x: GAME_WIDTH as i32,
-			y: GAME_HEIGHT as i32,
+			x: GAME_WIDTH as f32,
+			y: GAME_HEIGHT as f32,
 		}},
 		GraphicGroup::Walking => { Position {
-			x: objects::PLAYER_WIDTH as i32,
-			y: objects::PLAYER_HEIGHT as i32,
+			x: objects::PLAYER_WIDTH as f32,
+			y: objects::PLAYER_HEIGHT as f32,
 		}},
 		GraphicGroup::Running => { Position {
-			x: objects::PLAYER_WIDTH as i32,
-			y: objects::PLAYER_HEIGHT as i32,
+			x: objects::PLAYER_WIDTH as f32,
+			y: objects::PLAYER_HEIGHT as f32,
 		}},
 		GraphicGroup::Brick1 | GraphicGroup::Brick2 | GraphicGroup::Brick3 => { Position {
-			x: objects::BRICK_WIDTH as i32,
-			y: objects::BRICK_HEIGHT as i32,
+			x: objects::BRICK_WIDTH as f32,
+			y: objects::BRICK_HEIGHT as f32,
 		}},
 		GraphicGroup::Slash1 | GraphicGroup::Slash2 | GraphicGroup::Slash3 => { 
 			Position {
-				x: objects::SLASH_WIDTH as i32,
-				y: objects::SLASH_HEIGHT as i32
+				x: objects::SLASH_WIDTH as f32,
+				y: objects::SLASH_HEIGHT as f32
 			}
 		},
 		GraphicGroup::Dash0 | GraphicGroup::Dash1 | GraphicGroup::Dash2 | GraphicGroup::Dash3 => { Position {
-			x: objects::DASH_WIDTH as i32,
-			y: objects::DASH_HEIGHT as i32
+			x: objects::DASH_WIDTH as f32,
+			y: objects::DASH_HEIGHT as f32
 		}},
 	};
 }

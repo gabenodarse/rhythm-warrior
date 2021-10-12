@@ -35,13 +35,11 @@ mod objects;
 mod resources;
 mod player;
 mod brick;
-mod slash;
-mod dash;
 mod game;
 
 use std::collections::btree_set::BTreeSet; 
 use std::cmp::Ordering;
-use macros; // >:< 
+use macros;
 
 use wasm_bindgen::prelude::*;
 use macros::EnumVariantCount;
@@ -56,6 +54,7 @@ const RIGHT_BOUNDARY: f32 = LEFT_BOUNDARY + GAME_WIDTH as f32;
 const TOP_BOUNDARY: f32 = 0.0;
 const GROUND_POS: f32 = TOP_BOUNDARY + 240.0; // !!! associate with the graphic for the ground
 const MAX_TIME_BETWEEN_TICKS: f32 = 0.025;
+const FRAME_TIME: f32 = 0.015;
 
 const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -F32_ZERO and +F32_ZERO is essentially 0
 
@@ -131,14 +130,14 @@ pub struct RenderingInstructions {
 #[derive(Clone)]
 pub struct PositionedGraphic {
 	pub g: Graphic,
-	pub x: i32,
-	pub y: i32,
+	pub x: f32,
+	pub y: f32,
 }
 
 #[wasm_bindgen]
 pub struct Position {
-	pub x: i32,
-	pub y: i32
+	pub x: f32,
+	pub y: f32
 }
 
 #[derive(Clone)]

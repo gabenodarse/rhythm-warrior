@@ -89,8 +89,8 @@ impl Brick {
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
 		PositionedGraphic {
 			g: self.graphic,
-			x: self.bounds.left_x as i32,
-			y: self.bounds.top_y as i32,
+			x: self.bounds.left_x as f32,
+			y: self.bounds.top_y as f32,
 		}
 	}
 }

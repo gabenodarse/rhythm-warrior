@@ -17,10 +17,9 @@ use crate::objects::ObjectBounds;
 use crate::objects::BrickType;
 use crate::objects::HitBox;
 
-use crate::slash::Slash;
-use crate::dash::Dash;
 use crate::brick::Brick;
 
+use crate::FRAME_TIME;
 use crate::GROUND_POS;
 use crate::GAME_WIDTH;
 use crate::Song;
@@ -46,9 +45,8 @@ pub struct Player {
 	face_dir: Direction,
 	hit_dir: Direction,
 	
-	slash: Option<Slash>,
-	dash: Option<Dash>,
 	hit_type: Option<BrickType>,
+	hitbox: Option<HitBox>,
 	
 	lingering_graphics: Vec<LingeringGraphic>
 }
@@ -56,9 +54,12 @@ pub struct Player {
 enum PlayerState {
 	Running,
 	Walking,
-	PreSlash(f32), // init time of slash/dash, to insert very short delay before becoming active
+	PreSlash(f32), // init time of slash/dash, to insert short delay before becoming active
 	PreDash(f32),
-	PreSlashDash(f32)
+	PreSlashDash(f32),
+	Slash(f32), // init time so there can be a delay before becoming inactive
+	Dash(f32),
+	SlashDash(f32)
 }
 
 struct TargetInfo {
@@ -92,23 +93,15 @@ impl Player {
 			hit_dir: Direction::Right,
 			target: None,
 			
-			slash: None,
-			dash: None,
 			hit_type: None,
+			hitbox: None,
+			
 			lingering_graphics: Vec::new() // graphics for objects no longer present but still showing, e.g. slashes/dashes that have executed
 		}
 	}
 	
 	// tick the player's state
 	pub fn tick(&mut self, seconds_passed: f32, bricks_iter: vec_deque::Iter<Brick>, time_running: f32, song: &Song) {
-		
-		if let Some(slash) = &self.slash {
-			self.slash = None;
-		}
-		if let Some(dash) = &self.dash {
-			self.dash = None;
-		}
-		
 		self.update_target_info(bricks_iter, time_running, song.brick_speed);
 		self.regular_move(seconds_passed, time_running);
 		self.update_state(time_running);
@@ -143,37 +136,11 @@ impl Player {
 		}
 	}
 	
-	// returns the hitbox of the slash, if any
-	pub fn slash_hitbox(&self) -> Option<HitBox> {
-		match &self.slash {
-			None => return None,
-			Some(slash) => {
-				return Some( HitBox {
-					brick_type: slash.brick_type,
-					bounds: slash.bounds
-				});
-			}
-		}
+	pub fn hitbox (&self) -> &Option<HitBox> {
+		return &self.hitbox;
 	}
 	
-	// returns the hitbox of the dash, if any
-	pub fn dash_hitbox(&self) -> Option<HitBox> {
-		match &self.dash {
-			None => return None,
-			Some(dash) => {
-				match dash.brick_type {
-					None => return None,
-					Some(bt) => {
-						return Some( HitBox {
-							brick_type: bt,
-							bounds: dash.bounds
-						});
-					}
-				}
-			}
-		}
-	}
-	
+	// boost from current position to next to target, if close enough
 	fn boost(&mut self, time_running: f32) {
 		let target = if let Some(t) = &self.target { t } else { return; };
 		
@@ -198,59 +165,6 @@ impl Player {
 			self.bounds.right_x = target.pos + PLAYER_WIDTH as f32;
 			self.hit_dir = target.hit_dir;
 		}
-	}
-	
-	// creates a new slash if one is not present
-	fn slash(&mut self, brick_type: BrickType, time_running: f32) {
-		if let None = self.slash { 
-			let slash = match self.hit_dir {
-				Direction::Right => {
-					Slash::new( self.bounds.right_x, self.bounds.top_y, brick_type, Direction::Right)
-				},
-				Direction::Left => {
-					Slash::new( self.bounds.left_x - SLASH_WIDTH as f32, self.bounds.top_y, brick_type, Direction::Left)
-				}
-			};
-			
-			self.lingering_graphics.push( LingeringGraphic {
-				positioned_graphic: slash.rendering_instruction(),
-				start_t: time_running,
-				end_t: time_running + SLASH_LINGER_TIME
-			});
-			self.slash = Some(slash);
-		}
-	}
-	
-	// creates a new dash if one is not present, updates player pos
-	fn dash(&mut self, brick_type: Option<BrickType>, time_running: f32) {
-		if let None = self.dash {
-			let dash = match self.hit_dir {
-				Direction::Right => {
-					Dash::new( self.bounds.right_x, self.bounds.top_y, brick_type, self.hit_dir)
-				},
-				Direction::Left => {
-					Dash::new( self.bounds.left_x - DASH_WIDTH as f32, self.bounds.top_y, brick_type, self.hit_dir)
-				}
-			};
-			
-			match self.hit_dir {
-				Direction::Right => {
-					self.bounds.left_x = dash.bounds.right_x;
-					self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
-				},
-				Direction::Left => {
-					self.bounds.right_x = dash.bounds.left_x;
-					self.bounds.left_x = self.bounds.right_x - PLAYER_WIDTH as f32;
-				}
-			}
-			
-			self.lingering_graphics.push( LingeringGraphic {
-				positioned_graphic: dash.rendering_instruction(),
-				start_t: time_running,
-				end_t: time_running + DASH_LINGER_TIME
-			});
-			self.dash = Some(dash);
-		}		
 	}
 	
 	// updates target, face_dir, and hit_dir
@@ -382,38 +296,156 @@ impl Player {
 			},
 			PlayerState::PreSlash(t) => {
 				if time_running - t > SLASH_TIME {
-					let brick_type;
-					if let Some(bt) = self.hit_type {
-						brick_type = bt;
-					} else { panic!(); }
-					self.hit_type = None;
-					
 					self.boost(time_running);
-					self.slash(brick_type, time_running);
-					self.state = PlayerState::Walking;
+					
+					let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
+					let graphic_group;
+					let frame = 0;
+					let flags;
+					let arg = 0;
+					let graphic_x;
+					let hitbox_x;
+					let mut hitbox = HitBox { bounds: self.bounds, brick_type: brick_type };
+					
+					graphic_group = match brick_type {
+						BrickType::Type1 => { GraphicGroup::Slash1 },
+						BrickType::Type2 => { GraphicGroup::Slash2 },
+						BrickType::Type3 => { GraphicGroup::Slash3 }
+					};
+					
+					match self.hit_dir {
+						Direction::Right => { 
+							flags = 0;
+							graphic_x = self.bounds.right_x;
+							hitbox_x = self.bounds.left_x;
+						},
+						Direction::Left => { 
+							flags = GraphicFlags::HorizontalFlip as u8;
+							graphic_x = self.bounds.left_x - SLASH_WIDTH as f32;
+							hitbox_x = graphic_x;
+						}
+					};
+					
+					let slash_graphic =  Graphic{ g: graphic_group, frame, flags, arg };
+					
+					self.lingering_graphics.push( LingeringGraphic {
+						positioned_graphic: PositionedGraphic { g: slash_graphic, x: graphic_x, y: self.bounds.top_y },
+						start_t: time_running,
+						end_t: time_running + SLASH_LINGER_TIME
+					});
+					
+					hitbox.bounds.left_x = hitbox_x;
+					hitbox.bounds.right_x = hitbox_x + PLAYER_WIDTH as f32 + SLASH_WIDTH as f32;
+					self.hitbox = Some(hitbox);
+					self.state = PlayerState::Slash(time_running);
 				}
 			},
 			PlayerState::PreDash(t) => {
 				if time_running - t > SLASH_TIME {
 					self.boost(time_running);
-					self.dash(None, time_running);
-					self.state = PlayerState::Walking;
+					
+					let dash_x;
+					let dash_graphic_group = GraphicGroup::Dash0;
+					
+					match self.hit_dir {
+						Direction::Right => {
+							dash_x = self.bounds.right_x;
+							self.bounds.left_x = self.bounds.right_x + DASH_WIDTH as f32;
+							self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+						},
+						Direction::Left => {
+							self.bounds.right_x = self.bounds.left_x - DASH_WIDTH as f32;
+							self.bounds.left_x = self.bounds.right_x - PLAYER_WIDTH as f32;
+							dash_x = self.bounds.right_x;
+						}
+					}
+					
+					let dash_graphic = Graphic { g: dash_graphic_group, frame: 0, flags: 0, arg: 0 };
+					self.lingering_graphics.push( LingeringGraphic {
+						positioned_graphic: PositionedGraphic { g: dash_graphic, x: dash_x, y: self.bounds.top_y },
+						start_t: time_running,
+						end_t: time_running + DASH_LINGER_TIME
+					});
+					
+					self.hitbox = None;
+					self.state = PlayerState::Dash(time_running);
 				}
 			},
 			PlayerState::PreSlashDash(t) => {
 				if time_running - t > SLASH_TIME {
-					let brick_type;
-					if let Some(bt) = self.hit_type {
-						brick_type = bt;
-					} else { panic!(); }
-					self.hit_type = None;
-					
 					self.boost(time_running);
-					self.dash(Some(brick_type), time_running);
-					self.slash(brick_type, time_running);
 					
-					self.state = PlayerState::Walking;
+					let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
+					
+					let frame = 0;
+					let slash_flags;
+					let arg = 0;
+					let slash_graphic_x;
+					let dash_graphic_x;
+					let hitbox_x;
+					let mut hitbox = HitBox { bounds: self.bounds, brick_type: brick_type };
+					
+					// fill variables based on hit dir
+					match self.hit_dir {
+						Direction::Right => {
+							dash_graphic_x = self.bounds.right_x;
+							self.bounds.left_x = self.bounds.right_x + DASH_WIDTH as f32;
+							self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+							slash_graphic_x = self.bounds.right_x;
+							slash_flags = 0;
+							hitbox_x = dash_graphic_x;
+						},
+						Direction::Left => {
+							self.bounds.right_x = self.bounds.left_x - DASH_WIDTH as f32;
+							self.bounds.left_x = self.bounds.right_x - PLAYER_WIDTH as f32;
+							dash_graphic_x = self.bounds.right_x as f32;
+							slash_graphic_x = self.bounds.left_x - SLASH_WIDTH as f32;
+							slash_flags = GraphicFlags::HorizontalFlip as u8;
+							hitbox_x = slash_graphic_x;
+						}
+					}
+					
+					// get graphic groups based on brick type
+					let (slash_graphic_group, dash_graphic_group) = match brick_type {
+						BrickType::Type1 => { (GraphicGroup::Slash1, GraphicGroup::Dash1) },
+						BrickType::Type2 => { (GraphicGroup::Slash2, GraphicGroup::Dash2) },
+						BrickType::Type3 => { (GraphicGroup::Slash3, GraphicGroup::Dash3) }
+					};
+					
+					let slash_graphic = Graphic { g: slash_graphic_group, frame, flags: slash_flags, arg };
+					let dash_graphic = Graphic { g: dash_graphic_group, frame, flags: 0, arg };
+					
+					// push dash and slash to lingering graphics
+					self.lingering_graphics.push( LingeringGraphic {
+						positioned_graphic: PositionedGraphic { g: dash_graphic, x: dash_graphic_x, y: self.bounds.top_y },
+						start_t: time_running,
+						end_t: time_running + DASH_LINGER_TIME
+					});
+					
+					self.lingering_graphics.push( LingeringGraphic {
+						positioned_graphic: PositionedGraphic { g: slash_graphic, x: slash_graphic_x, y: self.bounds.top_y },
+						start_t: time_running,
+						end_t: time_running + SLASH_LINGER_TIME
+					});
+					
+					// update hitbox and state
+					hitbox.bounds.left_x = hitbox_x;
+					hitbox.bounds.right_x = hitbox_x + PLAYER_WIDTH as f32 + SLASH_WIDTH as f32 + DASH_WIDTH as f32;
+					self.hitbox = Some(hitbox);
+					self.state = PlayerState::SlashDash(time_running);
 				}
+			},
+			PlayerState::Slash(t) => {
+				self.state = PlayerState::Running;
+				self.hitbox = None;
+			},
+			PlayerState::Dash(t) => {
+				self.state = PlayerState::Running;
+				self.hitbox = None;
+			},
+			PlayerState::SlashDash(t) => {
+				self.state = PlayerState::Running;
+				self.hitbox = None;
 			}
 		}
 	}
@@ -427,7 +459,7 @@ impl Player {
 		match self.state {
 			PlayerState::Running => {
 				g = GraphicGroup::Running;
-				frame = ((time_running / 0.01667) % 256.0) as u8;
+				frame = ((time_running / FRAME_TIME) % 256.0) as u8;
 			}
 			_ => {
 				g = GraphicGroup::Walking;
@@ -450,8 +482,8 @@ impl Player {
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
 		PositionedGraphic {
 			g: self.graphic,
-			x: self.bounds.left_x as i32,
-			y: self.bounds.top_y as i32,
+			x: self.bounds.left_x as f32,
+			y: self.bounds.top_y as f32,
 		}
 	}
 	

@@ -77,9 +77,10 @@ impl Game {
 		
 		// get the destruction bounds for slashing or dashing
 		// TODO assumes that the brick type for slashing and dashing are the same
+		// >:< move together
 		let destruction_type;
 		let destruction_bounds = [
-			match self.player.slash_hitbox() {
+			match self.player.hitbox() {
 				Some(hb) => {
 					destruction_type = Some(hb.brick_type);
 					Some(hb.bounds)
@@ -89,11 +90,8 @@ impl Game {
 					None
 				}
 			},
-			match self.player.dash_hitbox() {
-				Some(hb) => Some(hb.bounds),
-				None => None
-			}
 		];
+		
 		
 		// check for brick destruction 
 		// TODO: might be a little faster to do as bricks are updated
@@ -134,8 +132,8 @@ impl Game {
 		graphics.push(
 			PositionedGraphic {
 				g: Graphic{ g: GraphicGroup::Background, frame: 0, flags: 0, arg: 0},
-				x: 0,
-				y: 0
+				x: 0.0,
+				y: 0.0
 			},
 		);
 		
@@ -359,7 +357,7 @@ impl Game {
 #[wasm_bindgen]
 pub fn game_dimensions() -> Position {
 	Position {
-		x: GAME_WIDTH as i32,
-		y: GAME_HEIGHT as i32,
+		x: GAME_WIDTH as f32,
+		y: GAME_HEIGHT as f32,
 	}
 }
