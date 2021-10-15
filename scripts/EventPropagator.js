@@ -59,7 +59,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	this.handleKeyDown = evt => {
 		// TODO faster handling of repeated key inputs from holding down a key?
 		if (evt.keyCode === 27){
-			this.overlay.toggleElement("menu");
+			this.overlay.handleEscape();
 			
 			// if the game is not in editor mode, pause/unpause
 			if(!this.isEditor){
@@ -129,19 +129,26 @@ EventPropagator.prototype.pause = function(){
 
 EventPropagator.prototype.enableEditor = function(){
 	if(!this.isEditor){
-		this.overlay.toggleElement("editorOverlay");
-		this.overlay.toggleElement("score");
+		this.overlay.showElement("editorOverlay");
+		this.overlay.hideElement("score");
+		
 		this.game = this.game.toEditor();
+		
 		this.overlay.updateSongData(this.game.songData());
+		
 		this.isEditor = true;
 	}
 }
 
 EventPropagator.prototype.disableEditor = function(){
 	if(this.isEditor){
-		this.overlay.toggleElement("editorOverlay");
-		this.overlay.toggleElement("score");
+		this.overlay.hideElement("editorOverlay");
+		this.overlay.showElement("score");
+		
 		this.game = this.game.toGame();
+		
+		this.overlay.updateSongData(this.game.songData());
+		
 		this.isEditor = false;
 	}
 }

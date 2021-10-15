@@ -411,32 +411,47 @@ function MenuSelection(onSelect, selectionText, parentPanelDiv){
 	parentPanelDiv.appendChild(this.div);
 }
 
-
-Overlay.prototype.updateSongData = function(songData){
-	this.editorOverlay.updateSongData(songData);
-	this.updateScore(songData.score);
-}
-
-Overlay.prototype.toggleElement = function(elementName){
+Overlay.prototype.showElement = function(elementName){
 	if(this[elementName] != undefined){
-		this[elementName].toggle();
+		this[elementName].show();
 	}
 	else{
 		console.log("the overlay does not have member \"" + elementName + "\"");
 	}
 }
 
+Overlay.prototype.hideElement = function(elementName){
+	if(this[elementName] != undefined){
+		this[elementName].hide();
+	}
+	else{
+		console.log("the overlay does not have member \"" + elementName + "\"");
+	}
+}
+
+Overlay.prototype.updateSongData = function(songData){
+	this.editorOverlay.updateSongData(songData);
+	this.updateScore(songData.score);
+}
+
 Overlay.prototype.updateScore = function(newScore){
 	this.score.update(newScore);
 }
 
-EditorOverlay.prototype.toggle = function(){
-	if(this.div.style.display != "none"){
-		this.div.style.display = "none";
+Overlay.prototype.handleEscape = function(){
+	if(this.menu.domElement().style.display == "none"){
+		this.menu.show();
+	} else {
+		this.menu.hide();
 	}
-	else{
-		this.div.style.display = "block";
-	}
+}
+
+EditorOverlay.prototype.show = function(){
+	this.div.style.display = "block";
+}
+
+EditorOverlay.prototype.hide = function(){
+	this.div.style.display = "none";
 }
 
 EditorOverlay.prototype.updateSongData = function(songData){
@@ -544,13 +559,12 @@ Score.prototype.domElement = function(){
 	return this.scoreDiv;
 }
 
-Score.prototype.toggle = function(){
-	if(this.scoreDiv.style.display != "none"){
-		this.scoreDiv.style.display = "none";
-	}
-	else{
-		this.scoreDiv.style.display = "block";
-	}
+Score.prototype.show = function(){
+	this.scoreDiv.style.display = "block";
+}
+
+Score.prototype.hide = function(){
+	this.scoreDiv.style.display = "none";
 }
 
 Score.prototype.update = function(newScore){
@@ -564,21 +578,20 @@ Menu.prototype.domElement = function(){
 	return this.menuDiv;
 }
 
-Menu.prototype.toggle = function(){
-	if(this.menuDiv.style.display != "none"){
-		this.menuDiv.style.display = "none";
-		if(this.currentDisplayed){
-			this.currentDisplayed.deactivate();
-			this.currentDisplayed = null;
-		}
+Menu.prototype.show = function(){
+	this.menuDiv.style.display = "block";
+	if(this.currentDisplayed){
+		this.currentDisplayed.deactivate();
 	}
-	else{
-		this.menuDiv.style.display = "block";
-		if(this.currentDisplayed){
-			this.currentDisplayed.deactivate();
-		}
-		this.currentDisplayed = this.mainMenu;
-		this.mainMenu.activate();
+	this.currentDisplayed = this.mainMenu;
+	this.mainMenu.activate();
+}
+
+Menu.prototype.hide = function(){
+	this.menuDiv.style.display = "none";
+	if(this.currentDisplayed){
+		this.currentDisplayed.deactivate();
+		this.currentDisplayed = null;
 	}
 }
 
