@@ -16,6 +16,9 @@ pub enum GraphicGroup {
 	Background,
 	Walking,
 	Running,
+	Slashing1,
+	Slashing2,
+	Slashing3,
 	Brick1,
 	Brick2,
 	Brick3,
@@ -35,6 +38,7 @@ pub fn max_graphics(g: GraphicGroup) -> u32 {
 		GraphicGroup::Background => 1,
 		GraphicGroup::Walking => 3,
 		GraphicGroup::Running => 3,
+		GraphicGroup::Slashing1 | GraphicGroup::Slashing2 | GraphicGroup::Slashing3 => 1,
 		GraphicGroup::Brick1 | GraphicGroup::Brick2 | GraphicGroup::Brick3 => 32,
 		GraphicGroup::Slash1 | GraphicGroup::Slash2 | GraphicGroup::Slash3 => 1,
 		GraphicGroup::Dash0 => 1,
@@ -59,6 +63,10 @@ pub fn graphic_size(g: GraphicGroup) -> Position {
 		}},
 		GraphicGroup::Running => { Position {
 			x: objects::PLAYER_WIDTH as f32,
+			y: objects::PLAYER_HEIGHT as f32,
+		}},
+		GraphicGroup::Slashing1 | GraphicGroup::Slashing2 | GraphicGroup::Slashing3 => { Position {
+			x: objects::PLAYER_WIDTH as f32 + objects::SLASH_WIDTH as f32,
 			y: objects::PLAYER_HEIGHT as f32,
 		}},
 		GraphicGroup::Brick1 | GraphicGroup::Brick2 | GraphicGroup::Brick3 => { Position {

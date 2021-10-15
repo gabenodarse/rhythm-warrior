@@ -29,7 +29,7 @@ contains the Dash class, initialized when the player dashes
 each key in the resources.json file represents 1 graphic or animation. 
 to add a graphic or animation, add the key to the resources.json file and create an array with the associated images
 then, modify resources.rs such that: 
-	keys are in the corresponding order 
+	keys have a corresponding name
 	max count of the new graphic/animation and its size are as desired
 
 graphics are displayed by passing the graphic id and frame number (along with transformation flags) to js

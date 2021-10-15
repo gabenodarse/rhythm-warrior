@@ -10,7 +10,9 @@ export function EventPropagator(){
 	
 	this.controls;
 	
-	this.paused;
+	this.isPaused;
+	this.isEditor;
+	
 	this.gameLoop;
 	this.editorLoop;
 	this.loop;
@@ -27,7 +29,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	this.controls = controls;
 	
 	this.gameLoop = () => {
-		if(this.paused) {
+		if(this.isPaused) {
 			this.pause();
 		} else {
 			this.game.tick();
@@ -37,7 +39,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	}
 	
 	this.editorLoop = () => {
-		if(this.paused) {
+		if(this.isPaused) {
 			this.pause();
 		} else {
 			this.game.tick();
@@ -47,8 +49,8 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	}
 	
 	this.pauseLoop = () => {
-		if(!this.paused) {
-			this.start(); // start a new loop cycle (because game.start() is asynchronous)
+		if(!this.isPaused) {
+			this.start(); // starts a new loop
 		} else {
 			requestAnimationFrame(this.loop);
 		}
@@ -60,17 +62,17 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 			this.overlay.toggleElement("menu");
 			
 			// if the game is not in editor mode, pause/unpause
-			if(!(this.game instanceof Editor)){
-				this.paused = !this.paused;
+			if(!this.isEditor){
+				this.isPaused = !this.isPaused;
 			}
 		}
-		else if(typeof(this.controls[evt.keyCode]) === "number" && !this.paused){
+		else if(typeof(this.controls[evt.keyCode]) === "number" && !this.isPaused){
 			this.game.startControl(this.controls[evt.keyCode]);
 		}
 	}
 	
 	this.handleKeyUp = evt => {
-		if(typeof(this.controls[evt.keyCode]) === "number" && !this.paused){
+		if(typeof(this.controls[evt.keyCode]) === "number" && !this.isPaused){
 			this.game.stopControl(this.controls[evt.keyCode]);
 		}
 	}
@@ -97,12 +99,13 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 }
 
 EventPropagator.prototype.togglePlay = function(){
-	this.paused = !this.paused;
+	this.isPaused = !this.isPaused;
 }
 
+// only called from asynchronous game/editor/pause loop. Sends the loop to the game as a callback, starting a new loop.
 EventPropagator.prototype.start = function(){
-	this.paused = false;
-	if(this.game instanceof Editor){
+	this.isPaused = false;
+	if(this.isEditor){
 		this.loop = this.editorLoop;
 	} else {
 		this.loop = this.gameLoop;
@@ -110,8 +113,9 @@ EventPropagator.prototype.start = function(){
 	this.game.start(this.loop);
 }
 
+// only called from within the asynchronous game/editor/pause loop
 EventPropagator.prototype.pause = function(){
-	this.paused = true;
+	this.isPaused = true;
 	// !!! handle game key states on pause/unpause (as of now fires key up events on pause)
 	for(const key in this.controls) {
 		let evt = new KeyboardEvent("keyup", {
@@ -124,16 +128,22 @@ EventPropagator.prototype.pause = function(){
 }
 
 EventPropagator.prototype.enableEditor = function(){
-	this.overlay.toggleElement("editorOverlay");
-	this.overlay.toggleElement("score");
-	this.game = this.game.toEditor();
-	this.overlay.updateSongData(this.game.songData());
+	if(!this.isEditor){
+		this.overlay.toggleElement("editorOverlay");
+		this.overlay.toggleElement("score");
+		this.game = this.game.toEditor();
+		this.overlay.updateSongData(this.game.songData());
+		this.isEditor = true;
+	}
 }
 
 EventPropagator.prototype.disableEditor = function(){
-	this.overlay.toggleElement("editorOverlay");
-	this.overlay.toggleElement("score");
-	this.game = this.game.toGame();
+	if(this.isEditor){
+		this.overlay.toggleElement("editorOverlay");
+		this.overlay.toggleElement("score");
+		this.game = this.game.toGame();
+		this.isEditor = false;
+	}
 }
 
 EventPropagator.prototype.restartSong = function(){
@@ -141,9 +151,7 @@ EventPropagator.prototype.restartSong = function(){
 }
 
 EventPropagator.prototype.runOnGame = function(functionToRun, updateEditor){
-	if(this.paused == false){
-		this.pause();
-	}
+	this.isPaused = true;
 	
 	let ret = functionToRun(this.game);
 	
