@@ -15,8 +15,9 @@ export function EventPropagator(){
 	
 	this.gameLoop;
 	this.editorLoop;
+	this.pauseLoop;
 	this.loop;
-	this.resumeGame;
+	
 	this.handleKeyDown;
 	this.handleKeyUp;
 	this.resize;

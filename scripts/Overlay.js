@@ -19,11 +19,13 @@ export function Overlay(songData, eventPropagator, controlsMap){
 	this.score;
 	this.menu;
 	this.editorOverlay;
+	this.homeScreen;
 	
 	let overlayDiv = document.createElement("div");
 	let score = new Score();
 	let menu = new Menu(eventPropagator, controlsMap);
 	let editorOverlay = new EditorOverlay(songData, eventPropagator);
+	let homeScreen = new HomeScreen(eventPropagator);
 	
 	overlayDiv.style.width = "100vw";
 	overlayDiv.style.height = "100vh";
@@ -35,13 +37,205 @@ export function Overlay(songData, eventPropagator, controlsMap){
 	overlayDiv.appendChild(score.domElement());
 	overlayDiv.appendChild(menu.domElement());
 	overlayDiv.appendChild(editorOverlay.domElement());
+	overlayDiv.appendChild(homeScreen.domElement());
 	document.body.appendChild(overlayDiv);
 	
 	this.overlayDiv = overlayDiv;
+	this.homeScreen = homeScreen;
 	this.score = score;
 	this.menu = menu;
 	this.editorOverlay = editorOverlay;
 }
+
+function HomeScreen(eventPropagator){
+	this.eventPropagator = eventPropagator;
+	this.homeScreenDiv;
+	this.eventListener;
+	this.songSelections = [];
+	this.selectionIdx;
+	
+	this.homeScreenDiv = document.createElement("div");
+	this.homeScreenDiv.style.display = "none";
+	this.homeScreenDiv.style.position = "absolute";
+	this.homeScreenDiv.style.top = "0";
+	this.homeScreenDiv.style.left = "0";
+	this.homeScreenDiv.style.height = "100vh";
+	this.homeScreenDiv.style.width = "100vw";
+	this.homeScreenDiv.style.fontSize = "3em";
+	this.homeScreenDiv.style.zIndex = "100";
+	this.homeScreenDiv.style.backgroundColor = "#5577ff";
+	
+	let mmTitle = document.createElement("p");
+	mmTitle.style.margin = "0 auto";
+	mmTitle.style.fontSize = "3em";
+	mmTitle.innerHTML = "Music Mercenary";
+	this.homeScreenDiv.appendChild(mmTitle);
+	
+	
+	
+	// this.eventListener = evt => {
+		// if(evt.keyCode == 38 && this.selectionIdx > 0){ // up arrow
+			// this.selections[this.selectionIdx].toggleHighlight();
+			// --this.selectionIdx;
+			// this.selections[this.selectionIdx].toggleHighlight();
+		// }
+		// else if(evt.keyCode == 40 && this.selectionIdx + 1 < this.selections.length){ // down arrow
+			// this.selections[this.selectionIdx].toggleHighlight();
+			// ++this.selectionIdx;
+			// this.selections[this.selectionIdx].toggleHighlight();
+		// }
+		// else if(evt.keyCode == 13){
+			// if(this.selections[this.selectionIdx]){
+				// this.selections[this.selectionIdx].select();
+			// }
+		// }
+	// };
+	
+	
+	
+	// if(this.highlighted){
+		// this.div.style.outline = "";
+		// this.highlighted = false;
+	// }
+	// else{
+		// this.div.style.outline = "4px solid cyan";
+		// this.highlighted = true;
+	// }
+	
+	// Load songs from DB
+	// Display them
+	// Add navigation between them
+}
+
+HomeScreen.prototype.show = function(){
+	let retrieveSongs = game => {
+		return game.songs();
+	}
+	let songs = this.eventPropagator.runOnGame(retrieveSongs);
+	this.populateSelections(songs);
+	
+	this.homeScreenDiv.style.display = "block";
+	
+	// >:< 
+	// if(this.currentDisplayed){
+		// this.currentDisplayed.deactivate();
+	// }
+	// this.currentDisplayed = this.mainMenu;
+	// this.mainMenu.activate();
+}
+
+HomeScreen.prototype.hide = function(){
+	this.menuDiv.style.display = "none";
+}
+
+HomeScreen.prototype.domElement = function(){
+	return this.homeScreenDiv;
+}
+
+HomeScreen.prototype.populateSelections = function(songs){
+	this.songSelections = new Array(2);
+	
+	let idIDX;
+	let nameIDX;
+	let artistIDX;
+	let difficultyIDX;
+	let durationIDX;
+	let timeCreatedIDX;
+	let timeModifiedIDX;
+	
+	if(songs.length != 0){
+		songs[0]["columns"].forEach( (columnName, idx) => {
+			if(columnName.toUpperCase() === "SONGID"){
+				idIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "NAME"){
+				nameIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "ARTIST"){
+				artistIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "DIFFICULTY"){
+				difficultyIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "DURATION"){
+				durationIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "TIMECREATED"){
+				timeCreatedIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "TIMEMODIFIED"){
+				timeModifiedIDX = idx;
+			}
+		});
+		
+		songs[0]["values"].forEach( (song, idx) => {
+			if(song[idIDX] == 6 && song[nameIDX].toUpperCase() === "WAKE ME UP"){
+				this.songSelections[0] = 
+					new HomeSelection(song[idIDX], song[nameIDX], song[artistIDX], song[difficultyIDX], song[durationIDX]);
+				this.homeScreenDiv.appendChild(this.songSelections[0].domElement());
+			}
+			if(song[idIDX] == 7 && song[nameIDX].toUpperCase() === "ANIMALS"){
+				this.songSelections[1] = 
+					new HomeSelection(song[idIDX], song[nameIDX], song[artistIDX], song[difficultyIDX], song[durationIDX]);
+				this.homeScreenDiv.appendChild(this.songSelections[1].domElement());
+			}
+		});
+	}
+}
+
+function HomeSelection(id, name, artist, difficulty, duration){
+	this.div;
+	this.highlighted;
+	
+	this.songID;
+	this.name;
+	this.artist;
+	this.difficulty;
+	this.duration;
+	
+	this.songID = id;
+	this.name = name;
+	this.artist = artist;
+	this.difficulty = difficulty;
+	this.duration = duration;
+	
+	this.div = document.createElement("div");
+	this.div.style.margin = "4px";
+	this.div.style.height = "10vh";
+	this.div.style.width = "20vw";
+	this.div.style.fontSize = "1rem";
+	this.div.style.backgroundColor = "#99ff00";
+	this.div.style.textAlign = "center";
+	this.highlighted = false;
+	
+	this.nameField = document.createElement("p");
+	this.artistField = document.createElement("p");
+	this.infoField = document.createElement("p");
+	
+	this.nameField.innerHTML = name;
+	this.artistField.innerHTML = artist;
+	this.infoField.innerHTML = `Difficulty: ${difficulty} Duration: ${duration}`;
+	
+	this.div.appendChild(this.nameField);
+	this.div.appendChild(this.artistField);
+	this.div.appendChild(this.infoField);
+}
+
+HomeSelection.prototype.domElement = function(){
+	return this.div;
+}
+
+HomeSelection.prototype.toggleHighlight = function(){
+	if(this.highlighted){
+		this.div.style.outline = "";
+		this.highlighted = false;
+	}
+	else{
+		this.div.style.outline = "4px solid cyan";
+		this.highlighted = true;
+	}
+}
+
 
 // EditorOverlay class, contains the editor's guiding lines and the editor's controls
 function EditorOverlay(songData, eventPropagator){
@@ -272,15 +466,15 @@ function Menu(eventPropagator, controlsMap){
 	}, "Load song");
 	
 	this.saveLoadMenu.addSelection(() => {
-		newSongDialog(eventPropagator); // >:< 
+		newSongDialog(eventPropagator);
 	}, "New song");
 	
 	this.saveLoadMenu.addSelection(() => {
-		uploadMP3Dialog(eventPropagator); // >:< this and Load database button
+		uploadMP3Dialog(eventPropagator);
 	}, "Load mp3");
 	
 	this.saveLoadMenu.addSelection(() => {
-		alert("Not yet implemented");
+		alert("Not yet implemented"); // >:< load database
 	}, "Load database");
 	
 	this.menuDiv.appendChild(this.mainMenu.domElement());
@@ -439,6 +633,7 @@ Overlay.prototype.updateScore = function(newScore){
 }
 
 Overlay.prototype.handleEscape = function(){
+	this.homeScreen.show();
 	if(this.menu.domElement().style.display == "none"){
 		this.menu.show();
 	} else {
