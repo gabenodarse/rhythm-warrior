@@ -416,7 +416,7 @@ impl Player {
 				self.hitbox = None;
 			},
 			PlayerState::Dash(t) => {
-				self.state = PlayerState::Running;
+				self.state = PlayerState::Walking;
 				self.hitbox = None;
 			},
 			PlayerState::SlashDash(t) => {
@@ -425,7 +425,7 @@ impl Player {
 			},
 			PlayerState::PostSlash(t) => {
 				if time_running - t > SLASH_TIME {
-					self.state = PlayerState::Running;
+					self.state = PlayerState::Walking;
 					self.hit_type = None;
 				}
 			}

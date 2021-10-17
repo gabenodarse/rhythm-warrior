@@ -10,13 +10,11 @@ export function EventPropagator(){
 	
 	this.controls;
 	
-	this.isPaused;
+	this.isRunning;
 	this.isEditor;
+	this.stopFlag;
 	
-	this.gameLoop;
-	this.editorLoop;
-	this.pauseLoop;
-	this.loop;
+	this.loop;// >:< 
 	
 	this.handleKeyDown;
 	this.handleKeyUp;
@@ -29,34 +27,6 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	this.overlay = overlay;
 	this.controls = controls;
 	
-	this.gameLoop = () => {
-		if(this.isPaused) {
-			this.pause();
-		} else {
-			this.game.tick();
-			this.overlay.updateScore(this.game.score());
-		}
-		requestAnimationFrame(this.loop);
-	}
-	
-	this.editorLoop = () => {
-		if(this.isPaused) {
-			this.pause();
-		} else {
-			this.game.tick();
-			this.overlay.updateSongData(this.game.songData());
-		}
-		requestAnimationFrame(this.loop);
-	}
-	
-	this.pauseLoop = () => {
-		if(!this.isPaused) {
-			this.start(); // starts a new loop
-		} else {
-			requestAnimationFrame(this.loop);
-		}
-	}
-	
 	this.handleKeyDown = evt => {
 		// TODO faster handling of repeated key inputs from holding down a key?
 		if (evt.keyCode === 27){
@@ -64,16 +34,16 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 			
 			// if the game is not in editor mode, pause/unpause
 			if(!this.isEditor){
-				this.isPaused = !this.isPaused;
+				this.togglePlay();
 			}
 		}
-		else if(typeof(this.controls[evt.keyCode]) === "number" && !this.isPaused){
+		else if(typeof(this.controls[evt.keyCode]) === "number" && this.isRunning){
 			this.game.startControl(this.controls[evt.keyCode]);
 		}
 	}
 	
 	this.handleKeyUp = evt => {
-		if(typeof(this.controls[evt.keyCode]) === "number" && !this.isPaused){
+		if(typeof(this.controls[evt.keyCode]) === "number" && this.isRunning){
 			this.game.stopControl(this.controls[evt.keyCode]);
 		}
 	}
@@ -91,32 +61,58 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 		}
 	}
 	
-	this.loop = this.gameLoop;
+	this.loop = () => this.gameLoop();
 	this.resize();
+	
+	this.stopFlag = false;
+	this.isRunning = false;
+	this.isEditor = false;
 	
 	window.addEventListener("keydown", this.handleKeyDown);
 	window.addEventListener("keyup", this.handleKeyUp);
 	window.addEventListener("resize", this.resize);
 }
 
+EventPropagator.prototype.gameLoop = function(){
+	if(this.stopFlag){
+		this.pause();
+	} else {
+		this.game.tick();
+		this.overlay.updateScore(this.game.score());
+		requestAnimationFrame(this.loop);
+	}
+}
+
+EventPropagator.prototype.editorLoop = function(){
+	if(this.stopFlag) {
+		this.pause();
+	} else {
+		this.game.tick();
+		this.overlay.updateSongData(this.game.songData());
+		requestAnimationFrame(this.loop);
+	}
+}
+
 EventPropagator.prototype.togglePlay = function(){
-	this.isPaused = !this.isPaused;
+	console.log("toggle" + this.isRunning);
+	if(this.isRunning){
+		this.stopFlag = true;
+	} else {
+		this.stopFlag = false;
+		this.start();
+	}
 }
 
 // only called from asynchronous game/editor/pause loop. Sends the loop to the game as a callback, starting a new loop.
 EventPropagator.prototype.start = function(){
-	this.isPaused = false;
-	if(this.isEditor){
-		this.loop = this.editorLoop;
-	} else {
-		this.loop = this.gameLoop;
-	}
+	this.isRunning = true;
 	this.game.start(this.loop);
 }
 
 // only called from within the asynchronous game/editor/pause loop
 EventPropagator.prototype.pause = function(){
-	this.isPaused = true;
+	this.isRunning = false;
+	this.stopFlag = false;
 	// !!! handle game key states on pause/unpause (as of now fires key up events on pause)
 	for(const key in this.controls) {
 		let evt = new KeyboardEvent("keyup", {
@@ -124,7 +120,6 @@ EventPropagator.prototype.pause = function(){
 		});
 		this.handleKeyUp(evt);
 	}
-	this.loop = this.pauseLoop;
 	this.game.pause();
 }
 
@@ -137,6 +132,7 @@ EventPropagator.prototype.enableEditor = function(){
 		
 		this.overlay.updateSongData(this.game.songData());
 		
+		this.loop = () => this.editorLoop();
 		this.isEditor = true;
 	}
 }
@@ -150,6 +146,7 @@ EventPropagator.prototype.disableEditor = function(){
 		
 		this.overlay.updateSongData(this.game.songData());
 		
+		this.loop = () => this.gameLoop();
 		this.isEditor = false;
 	}
 }
@@ -159,7 +156,7 @@ EventPropagator.prototype.restartSong = function(){
 }
 
 EventPropagator.prototype.runOnGame = function(functionToRun, updateEditor){
-	this.isPaused = true;
+	this.stopFlag = true;
 	
 	let ret = functionToRun(this.game);
 	

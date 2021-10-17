@@ -633,7 +633,6 @@ Overlay.prototype.updateScore = function(newScore){
 }
 
 Overlay.prototype.handleEscape = function(){
-	this.homeScreen.show();
 	if(this.menu.domElement().style.display == "none"){
 		this.menu.show();
 	} else {
