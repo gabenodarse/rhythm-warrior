@@ -79,7 +79,7 @@ function HomeSelection(id, name, artist, difficulty, duration){
 	
 	this.nameField.innerHTML = name;
 	this.artistField.innerHTML = artist;
-	this.infoField.innerHTML = `Difficulty: ${difficulty} Duration: ${duration}`;
+	this.infoField.innerHTML = `Difficulty: ${difficulty} -- Duration: ${duration}`;
 	
 	this.div.appendChild(this.nameField);
 	this.div.appendChild(this.artistField);
@@ -266,7 +266,7 @@ function Menu(eventPropagator, controlsMap){
 	}, "Quit song");
 	
 	this.mainMenu.addSelection(() => {
-		eventPropagator.enableEditor(); // !!! await?
+		eventPropagator.enableEditor();
 	}, "Enable Editor");
 	
 	this.mainMenu.addSelection(() => {

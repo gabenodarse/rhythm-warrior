@@ -30,6 +30,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	// !!! keep these 3 closures as members? addEventListeners function to cleanup init?
 	this.handleKeyDown = evt => {
 		// TODO faster handling of repeated key inputs from holding down a key?
+		this.overlay.handleEvent(evt);
 		if (evt.keyCode === 27){
 			// if the game is not in editor mode, pause/unpause
 			if(!this.isEditor && !this.overlay.inHomeScreen()){
@@ -40,7 +41,6 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 			this.game.startControl(this.controls[evt.keyCode]);
 		}
 		
-		this.overlay.handleEvent(evt);
 	}
 	
 	this.handleKeyUp = evt => {
@@ -109,6 +109,7 @@ EventPropagator.prototype.start = function(){
 	this.stopFlag = false;
 	this.overlay.hideElement("menu");
 	this.overlay.hideElement("homeScreen");
+	console.log("hi");
 	this.game.start(this.loop);
 }
 
@@ -173,5 +174,7 @@ EventPropagator.prototype.runOnGame = function(functionToRun, updateEditor){
 EventPropagator.prototype.exitToHomeScreen = function(){
 	this.stopFlag = true;
 	this.overlay.hideElement("menu");
+	this.overlay.hideElement("score");
+	this.overlay.hideElement("editorOverlay");
 	this.overlay.showElement("homeScreen");
 }
