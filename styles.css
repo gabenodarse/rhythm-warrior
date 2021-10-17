@@ -19,3 +19,137 @@ canvas{
 	width: 100%;
 	height: 100vh;
 }
+
+.overlay{
+	width: 100vw;
+	height: 100vh;
+	position: absolute;
+	left: 0;
+	top: 0;
+	font-family: Arial;
+}
+
+.homescreen{
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 100vh;
+	width: 100vw;
+	font-size: 3rem;
+	zIndex: 100;
+	background-color: #5577ff;
+	user-select: none;
+}
+
+.homescreen h1{
+	margin: 0 auto;
+	font-size: 2em;
+}
+
+.home-selection{
+	margin: 4px;
+	height: 10vh;
+	width: 20vw;
+	min-width: 20rem;
+	font-size: 1rem;
+	background-color: #ffdd00;
+	text-align: center;
+	highlighted: false;
+}
+
+.home-selection p{
+	margin: 4px 0 0 0;
+}
+
+.editor-overlay{
+	width: 100vw;
+	height: 100vh;
+	display: none;
+}
+
+.editor-controls{
+	position: absolute;
+	bottom: 0;
+	width: 100%;
+	z-index: 200;
+	background-color: rgba(100, 100, 100, 0.4);
+}
+
+.editor-ranges-div{
+	width: 90%;
+	margin-left: 5%;
+}
+
+.editor-buttons-div{
+	position: absolute;
+	width: 5%;
+	left: 0;
+	top: 0;
+	height: 100%;
+}
+
+.editor-broad-range{
+	width: 100%;
+	display: block;
+}
+
+.editor-precise-range{
+	width: 25%;
+	display: block;
+}
+
+.score{
+	position: absolute;
+	top: 0;
+	right: 0;
+	height: 3vw;
+	width: 9vw;
+	font-size: 2em;
+	z-index: 200;
+	margin: 0;
+	user-select: none;
+}
+
+.menu{
+	position: absolute;
+	top: 10vh;
+	left: 40vw;
+	height: 70vh;
+	width: 20vw;
+	font-size: 3em;
+	z-index: 200;
+	background-color: #9999ff;
+}
+
+.menu-panel{
+	width: 100%;
+}
+
+.menu-selection{
+	width: 100%;
+	height: 20%;
+	margin-bottom: 2px;
+}
+
+.menu-selection p{
+	margin: 0;
+	user-select: none;
+}
+
+.change-control-dialog{
+	position: absolute;
+	width: 20vw;
+	height: 12vw;
+	left: 40vw;
+	top: 20vh;
+	z-index: 300;
+}
+
+.extra-dialog{
+	position: absolute;
+	top: 10px;
+	left: 40%;
+	width: 20%;
+	background-color: #aaaaaa;
+	z-index: 300;
+}

@@ -14,7 +14,7 @@ export function EventPropagator(){
 	this.isEditor;
 	this.stopFlag;
 	
-	this.loop;// >:< 
+	this.loop;
 	
 	this.handleKeyDown;
 	this.handleKeyUp;
@@ -27,6 +27,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	this.overlay = overlay;
 	this.controls = controls;
 	
+	// !!! keep these 3 closures as members? addEventListeners function to cleanup init?
 	this.handleKeyDown = evt => {
 		// TODO faster handling of repeated key inputs from holding down a key?
 		if (evt.keyCode === 27){
@@ -94,7 +95,6 @@ EventPropagator.prototype.editorLoop = function(){
 }
 
 EventPropagator.prototype.togglePlay = function(){
-	console.log("toggle" + this.isRunning);
 	if(this.isRunning){
 		this.stopFlag = true;
 	} else {

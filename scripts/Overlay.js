@@ -27,12 +27,7 @@ export function Overlay(songData, eventPropagator, controlsMap){
 	let editorOverlay = new EditorOverlay(songData, eventPropagator);
 	let homeScreen = new HomeScreen(eventPropagator);
 	
-	overlayDiv.style.width = "100vw";
-	overlayDiv.style.height = "100vh";
-	overlayDiv.style.position = "absolute";
-	overlayDiv.style.left = "0";
-	overlayDiv.style.top = "0";
-	overlayDiv.style.fontFamily = "Arial"
+	overlayDiv.className = "overlay";
 	
 	overlayDiv.appendChild(score.domElement());
 	overlayDiv.appendChild(menu.domElement());
@@ -55,19 +50,10 @@ function HomeScreen(eventPropagator){
 	this.selectionIdx;
 	
 	this.homeScreenDiv = document.createElement("div");
+	this.homeScreenDiv.className = "homescreen";
 	this.homeScreenDiv.style.display = "none";
-	this.homeScreenDiv.style.position = "absolute";
-	this.homeScreenDiv.style.top = "0";
-	this.homeScreenDiv.style.left = "0";
-	this.homeScreenDiv.style.height = "100vh";
-	this.homeScreenDiv.style.width = "100vw";
-	this.homeScreenDiv.style.fontSize = "3em";
-	this.homeScreenDiv.style.zIndex = "100";
-	this.homeScreenDiv.style.backgroundColor = "#5577ff";
 	
-	let mmTitle = document.createElement("p");
-	mmTitle.style.margin = "0 auto";
-	mmTitle.style.fontSize = "3em";
+	let mmTitle = document.createElement("h1");
 	mmTitle.innerHTML = "Music Mercenary";
 	this.homeScreenDiv.appendChild(mmTitle);
 	
@@ -200,13 +186,7 @@ function HomeSelection(id, name, artist, difficulty, duration){
 	this.duration = duration;
 	
 	this.div = document.createElement("div");
-	this.div.style.margin = "4px";
-	this.div.style.height = "10vh";
-	this.div.style.width = "20vw";
-	this.div.style.fontSize = "1rem";
-	this.div.style.backgroundColor = "#99ff00";
-	this.div.style.textAlign = "center";
-	this.highlighted = false;
+	this.div.className = "home-selection";
 	
 	this.nameField = document.createElement("p");
 	this.artistField = document.createElement("p");
@@ -227,7 +207,7 @@ HomeSelection.prototype.domElement = function(){
 
 HomeSelection.prototype.toggleHighlight = function(){
 	if(this.highlighted){
-		this.div.style.outline = "";
+		this.div.style.outline = ""; // >:< move to style
 		this.highlighted = false;
 	}
 	else{
@@ -245,8 +225,7 @@ function EditorOverlay(songData, eventPropagator){
 	this.controls;
 	
 	this.div = document.createElement("div");
-	this.div.style.width = "100vw";
-	this.div.style.height = "100vh";
+	this.div.className = "editor-overlay";
 	this.div.style.display = "none";
 	
 	this.guidingLines = new EditorGuidingLines(songData, eventPropagator);
@@ -319,34 +298,23 @@ function EditorControls(songData, eventPropagator){
 	this.beatInterval = songData.beatInterval;
 	
 	this.div = document.createElement("div");
-	this.div.style.position = "absolute";
-	this.div.style.bottom = "0";
-	this.div.style.width = "100%";
-	this.div.style.zIndex = "200";
-	this.div.style.backgroundColor = "rgba(100, 100, 100, 0.4)";
+	this.div.className = "editor-controls";
 	
 	this.rangesDiv = document.createElement("div");
-	this.rangesDiv.style.width = "90%";
-	this.rangesDiv.style.marginLeft = "5%";
+	this.rangesDiv.className = "editor-ranges-div";
 	
 	this.buttonDiv = document.createElement("div");
-	this.buttonDiv.style.position = "absolute";
-	this.buttonDiv.style.width = "5%";
-	this.buttonDiv.style.left = "0";
-	this.buttonDiv.style.top = "0";
-	this.buttonDiv.style.height = "100%";
+	this.buttonDiv.className = "editor-buttons-div";
 	
 	this.broadRange = document.createElement("input");
-	this.broadRange.style.width = "100%";
-	this.broadRange.style.display = "block";
+	this.broadRange.className = "editor-broad-range";
 	this.broadRange.type = "range";
 	this.broadRange.max = 100;
 	this.broadRange.step = 0.1;
 	this.broadRange.value = 0;
 	
 	this.preciseRange = document.createElement("input");
-	this.preciseRange.style.width = "25%";
-	this.preciseRange.style.display = "block";
+	this.preciseRange.className = "editor-precise-range";
 	this.preciseRange.type = "range";
 	this.preciseRange.max = 4;
 	this.preciseRange.step = 0.05;
@@ -384,19 +352,12 @@ function Score(){
 	this.scoreInner;
 	
 	this.scoreDiv = document.createElement("div");
+	this.scoreDiv.className = "score";
+	this.scoreDiv.style.display = "none";
+	
 	this.score = 0;
 	this.scoreInner = document.createElement("p");
 	
-	this.scoreDiv.style.display = "none";
-	this.scoreDiv.style.position = "absolute";
-	this.scoreDiv.style.top = "0";
-	this.scoreDiv.style.right = "0";
-	this.scoreDiv.style.height = "3vw";
-	this.scoreDiv.style.width = "9vw";
-	this.scoreDiv.style.fontSize = "2em";
-	this.scoreDiv.style.zIndex = "200";
-	this.scoreInner.style.margin = "0";
-	this.scoreInner.style.userSelect = "none";
 	this.scoreInner.innerHTML = this.score;
 	
 	this.scoreDiv.appendChild(this.scoreInner);
@@ -413,14 +374,7 @@ function Menu(eventPropagator, controlsMap){
 	
 	this.menuDiv = document.createElement("div");
 	this.menuDiv.style.display = "none";
-	this.menuDiv.style.position = "absolute";
-	this.menuDiv.style.top = "10vh";
-	this.menuDiv.style.left = "40vw";
-	this.menuDiv.style.height = "70vh";
-	this.menuDiv.style.width = "20vw";
-	this.menuDiv.style.fontSize = "3em";
-	this.menuDiv.style.zIndex = "200";
-	this.menuDiv.style.backgroundColor = "#9999ff";
+	this.menuDiv.className = "menu";
 	
 	this.mainMenu = new MenuPanel();
 	this.controlsMenu = new ControlsMenu(controlsMap);
@@ -492,7 +446,7 @@ function MenuPanel(){
 	this.selectionIdx;
 	
 	this.div = document.createElement("div");
-	this.div.style.width = "100%";
+	this.div.className = "menu-panel";
 	this.div.style.display = "none";
 	this.selections = [];
 	this.selectionIdx = 0;
@@ -590,14 +544,11 @@ function MenuSelection(onSelect, selectionText, parentPanelDiv){
 	this.highlighted;
 	
 	this.div = document.createElement("div");
-	this.div.style.width = "100%";
-	this.div.style.height = "20%";
-	this.div.style.marginBottom = "2px";
+	this.div.className = "menu-selection";
 	
 	this.selectionText = document.createElement("p");
 	this.selectionText.innerHTML = selectionText;
-	this.selectionText.style.margin = "0";
-	this.selectionText.style.userSelect = "none";
+	
 	this.onSelect = onSelect;
 	this.highlighted = false;
 	
@@ -633,6 +584,7 @@ Overlay.prototype.updateScore = function(newScore){
 }
 
 Overlay.prototype.handleEscape = function(){
+	//this.homeScreen.show();
 	if(this.menu.domElement().style.display == "none"){
 		this.menu.show();
 	} else {
@@ -826,12 +778,7 @@ function changeControlDialog(callback){
 	let enterKeyDiv = document.createElement("div");
 	let enterKeyText = document.createElement("p");
 	
-	enterKeyDiv.style.position = "absolute";
-	enterKeyDiv.style.width = "20vw";
-	enterKeyDiv.style.height = "12vw";
-	enterKeyDiv.style.left = "40vw";
-	enterKeyDiv.style.top = "20vh";
-	enterKeyDiv.style.zIndex = "300";
+	enterKeyDiv.className = "change-control-dialog";
 	
 	enterKeyText.innerHTML = "Enter Key";
 	enterKeyText.fontSize = "3.5em";
@@ -849,6 +796,7 @@ function changeControlDialog(callback){
 	},{once: true});
 }
 
+// TODO rename or accept fields
 function newSongDialog(eventPropagator){
 	
 	let songData = eventPropagator.runOnGame( game => {
@@ -865,7 +813,6 @@ function newSongDialog(eventPropagator){
 }
 
 // TODO less ugly, this and loadSongDialog
-// >:< Dialog class / universal createDialog function?
 function saveSongDialog(eventPropagator){
 	let div = document.createElement("div");
 	let saveButton = document.createElement("button");
@@ -888,12 +835,7 @@ function saveSongDialog(eventPropagator){
 	let filenameField = document.createElement("input");
 	let newLine = () => { return document.createElement("br"); }
 	
-	div.style.position = "absolute";
-	div.style.top = "10px";
-	div.style.left = "40%";
-	div.style.width = "20%";
-	div.style.backgroundColor = "rgb(180, 180, 180)";
-	div.style.zIndex = "300";
+	div.className = "extra-dialog";
 	
 	nameLabel.innerHTML = "Song name";
 	artistLabel.innerHTML = "Artist";
@@ -1001,12 +943,7 @@ function loadSongDialog(eventPropagator){
 	let submitButton = document.createElement("button");
 	let options = [];
 	
-	div.style.position = "absolute";
-	div.style.top = "10px";
-	div.style.left = "40%";
-	div.style.width = "20%";
-	div.style.backgroundColor = "rgb(180, 180, 180)";
-	div.style.zIndex = "300";
+	div.className = "extra-dialog";
 	
 	submitButton.innerHTML = "Load song";
 	
@@ -1096,12 +1033,7 @@ function uploadMP3Dialog(eventPropagator){
 	
 	input.type = "file"
 	
-	div.style.position = "absolute";
-	div.style.top = "10px";
-	div.style.left = "40%";
-	div.style.width = "20%";
-	div.style.backgroundColor = "rgb(180, 180, 180)";
-	div.style.zIndex = "300";
+	div.className = "extra-dialog";
 	
 	div.appendChild(input);
 	document.body.appendChild(div);
