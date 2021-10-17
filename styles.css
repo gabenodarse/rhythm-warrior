@@ -47,7 +47,7 @@ canvas{
 }
 
 .home-selection{
-	margin: 4px;
+	margin: 0.5rem 0 0 0;
 	height: 10vh;
 	width: 20vw;
 	min-width: 20rem;

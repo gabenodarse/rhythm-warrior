@@ -262,6 +262,7 @@ Game.prototype.loadSong = function(songID){
 		});
 	}
 	
+	this.audioBuffer = null;
 	this.songID = songID;
 	this.songStartOffset = startOffset;
 	

@@ -1,12 +1,9 @@
 
 import * as wasm from "../pkg/music_mercenary.js";
 
-// !!! finish map
 let g_keyCodeNames = [];
 g_keyCodeNames[32] = "Space";
 
-// >:< change toggle functions to display/hide functions
-// >:< save song fields are uneditable (key presses being captured and are not sent??)
 // !!! does overlay ever have to be resized?
 // TODO having the editor overlay included in game.js Editor class might make more sense
 	// would allow game and overlay elements to synchronize more easily
@@ -45,7 +42,6 @@ export function Overlay(songData, eventPropagator, controlsMap){
 function HomeScreen(eventPropagator){
 	this.eventPropagator = eventPropagator;
 	this.homeScreenDiv;
-	this.eventListener;
 	this.songSelections = [];
 	this.selectionIdx;
 	
@@ -56,117 +52,6 @@ function HomeScreen(eventPropagator){
 	let mmTitle = document.createElement("h1");
 	mmTitle.innerHTML = "Music Mercenary";
 	this.homeScreenDiv.appendChild(mmTitle);
-	
-	
-	
-	// this.eventListener = evt => {
-		// if(evt.keyCode == 38 && this.selectionIdx > 0){ // up arrow
-			// this.selections[this.selectionIdx].toggleHighlight();
-			// --this.selectionIdx;
-			// this.selections[this.selectionIdx].toggleHighlight();
-		// }
-		// else if(evt.keyCode == 40 && this.selectionIdx + 1 < this.selections.length){ // down arrow
-			// this.selections[this.selectionIdx].toggleHighlight();
-			// ++this.selectionIdx;
-			// this.selections[this.selectionIdx].toggleHighlight();
-		// }
-		// else if(evt.keyCode == 13){
-			// if(this.selections[this.selectionIdx]){
-				// this.selections[this.selectionIdx].select();
-			// }
-		// }
-	// };
-	
-	
-	
-	// if(this.highlighted){
-		// this.div.style.outline = "";
-		// this.highlighted = false;
-	// }
-	// else{
-		// this.div.style.outline = "4px solid cyan";
-		// this.highlighted = true;
-	// }
-	
-	// Load songs from DB
-	// Display them
-	// Add navigation between them
-}
-
-HomeScreen.prototype.show = function(){
-	let retrieveSongs = game => {
-		return game.songs();
-	}
-	let songs = this.eventPropagator.runOnGame(retrieveSongs);
-	this.populateSelections(songs);
-	
-	this.homeScreenDiv.style.display = "block";
-	
-	// >:< 
-	// if(this.currentDisplayed){
-		// this.currentDisplayed.deactivate();
-	// }
-	// this.currentDisplayed = this.mainMenu;
-	// this.mainMenu.activate();
-}
-
-HomeScreen.prototype.hide = function(){
-	this.menuDiv.style.display = "none";
-}
-
-HomeScreen.prototype.domElement = function(){
-	return this.homeScreenDiv;
-}
-
-HomeScreen.prototype.populateSelections = function(songs){
-	this.songSelections = new Array(2);
-	
-	let idIDX;
-	let nameIDX;
-	let artistIDX;
-	let difficultyIDX;
-	let durationIDX;
-	let timeCreatedIDX;
-	let timeModifiedIDX;
-	
-	if(songs.length != 0){
-		songs[0]["columns"].forEach( (columnName, idx) => {
-			if(columnName.toUpperCase() === "SONGID"){
-				idIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "NAME"){
-				nameIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "ARTIST"){
-				artistIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "DIFFICULTY"){
-				difficultyIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "DURATION"){
-				durationIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "TIMECREATED"){
-				timeCreatedIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "TIMEMODIFIED"){
-				timeModifiedIDX = idx;
-			}
-		});
-		
-		songs[0]["values"].forEach( (song, idx) => {
-			if(song[idIDX] == 6 && song[nameIDX].toUpperCase() === "WAKE ME UP"){
-				this.songSelections[0] = 
-					new HomeSelection(song[idIDX], song[nameIDX], song[artistIDX], song[difficultyIDX], song[durationIDX]);
-				this.homeScreenDiv.appendChild(this.songSelections[0].domElement());
-			}
-			if(song[idIDX] == 7 && song[nameIDX].toUpperCase() === "ANIMALS"){
-				this.songSelections[1] = 
-					new HomeSelection(song[idIDX], song[nameIDX], song[artistIDX], song[difficultyIDX], song[durationIDX]);
-				this.homeScreenDiv.appendChild(this.songSelections[1].domElement());
-			}
-		});
-	}
 }
 
 function HomeSelection(id, name, artist, difficulty, duration){
@@ -200,22 +85,6 @@ function HomeSelection(id, name, artist, difficulty, duration){
 	this.div.appendChild(this.artistField);
 	this.div.appendChild(this.infoField);
 }
-
-HomeSelection.prototype.domElement = function(){
-	return this.div;
-}
-
-HomeSelection.prototype.toggleHighlight = function(){
-	if(this.highlighted){
-		this.div.style.outline = ""; // >:< move to style
-		this.highlighted = false;
-	}
-	else{
-		this.div.style.outline = "4px solid cyan";
-		this.highlighted = true;
-	}
-}
-
 
 // EditorOverlay class, contains the editor's guiding lines and the editor's controls
 function EditorOverlay(songData, eventPropagator){
@@ -393,7 +262,7 @@ function Menu(eventPropagator, controlsMap){
 	}, "Restart song");
 	
 	this.mainMenu.addSelection(() => {
-		// !!! 
+		eventPropagator.exitToHomeScreen();
 	}, "Quit song");
 	
 	this.mainMenu.addSelection(() => {
@@ -441,7 +310,6 @@ function Menu(eventPropagator, controlsMap){
 	// !!! once done, make disable editor and enable editor buttons mutually exclusive / non buggy
 function MenuPanel(){
 	this.div;
-	this.eventListener;
 	this.selections;
 	this.selectionIdx;
 	
@@ -450,24 +318,6 @@ function MenuPanel(){
 	this.div.style.display = "none";
 	this.selections = [];
 	this.selectionIdx = 0;
-	
-	this.eventListener = evt => {
-		if(evt.keyCode == 38 && this.selectionIdx > 0){ // up arrow
-			this.selections[this.selectionIdx].toggleHighlight();
-			--this.selectionIdx;
-			this.selections[this.selectionIdx].toggleHighlight();
-		}
-		else if(evt.keyCode == 40 && this.selectionIdx + 1 < this.selections.length){ // down arrow
-			this.selections[this.selectionIdx].toggleHighlight();
-			++this.selectionIdx;
-			this.selections[this.selectionIdx].toggleHighlight();
-		}
-		else if(evt.keyCode == 13){
-			if(this.selections[this.selectionIdx]){
-				this.selections[this.selectionIdx].select();
-			}
-		}
-	};
 }
 
 // ControlsMenu class, subclass of MenuPanel where selection names are stored and can be modified
@@ -583,13 +433,140 @@ Overlay.prototype.updateScore = function(newScore){
 	this.score.update(newScore);
 }
 
-Overlay.prototype.handleEscape = function(){
-	//this.homeScreen.show();
-	if(this.menu.domElement().style.display == "none"){
-		this.menu.show();
-	} else {
-		this.menu.hide();
+Overlay.prototype.handleEvent = function(evt){
+	if(evt.keyCode === 27){
+		if(this.menu.domElement().style.display == "block"){
+			this.menu.hide();
+		} else {
+			this.menu.show();
+		}
+	} else if(this.menu.domElement().style.display == "block"){
+		this.menu.handleEvent(evt);
+	} else if(this.homeScreen.domElement().style.display == "block"){
+		this.homeScreen.handleEvent(evt);
 	}
+}
+
+Overlay.prototype.inHomeScreen = function(){
+	return this.homeScreen.domElement().style.display == "block";
+}
+
+HomeScreen.prototype.show = function(){
+	let retrieveSongs = game => {
+		return game.songs();
+	}
+	let songs = this.eventPropagator.runOnGame(retrieveSongs);
+	this.populateSelections(songs);
+	
+	this.homeScreenDiv.style.display = "block";
+}
+
+HomeScreen.prototype.hide = function(){
+	this.homeScreenDiv.style.display = "none";
+}
+
+HomeScreen.prototype.domElement = function(){
+	return this.homeScreenDiv;
+}
+
+HomeScreen.prototype.handleEvent = function(evt){
+	if(evt.keyCode == 38 && this.selectionIdx > 0){ // up arrow
+		this.songSelections[this.selectionIdx].toggleHighlight();
+		--this.selectionIdx;
+		this.songSelections[this.selectionIdx].toggleHighlight();
+	}
+	else if(evt.keyCode == 40 && this.selectionIdx + 1 < this.songSelections.length){ // down arrow
+		this.songSelections[this.selectionIdx].toggleHighlight();
+		++this.selectionIdx;
+		this.songSelections[this.selectionIdx].toggleHighlight();
+	}
+	else if(evt.keyCode == 13){ // enter
+		if(this.songSelections[this.selectionIdx]){
+			let songID = this.songSelections[this.selectionIdx].getSongID();
+			let fn = game => game.loadSong(songID);
+			this.eventPropagator.runOnGame(fn);
+			this.eventPropagator.start();
+		}
+	}
+}
+
+HomeScreen.prototype.populateSelections = function(songs){
+	for(let i = 0; i < this.songSelections.length; ++i){
+		this.songSelections[i].domElement().remove();
+	}
+	
+	this.songSelections = [];
+	
+	let idIDX;
+	let nameIDX;
+	let artistIDX;
+	let difficultyIDX;
+	let durationIDX;
+	let timeCreatedIDX;
+	let timeModifiedIDX;
+	
+	if(songs.length != 0){
+		songs[0]["columns"].forEach( (columnName, idx) => {
+			if(columnName.toUpperCase() === "SONGID"){
+				idIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "NAME"){
+				nameIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "ARTIST"){
+				artistIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "DIFFICULTY"){
+				difficultyIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "DURATION"){
+				durationIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "TIMECREATED"){
+				timeCreatedIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "TIMEMODIFIED"){
+				timeModifiedIDX = idx;
+			}
+		});
+		
+		songs[0]["values"].forEach( (song, idx) => {
+			if(song[idIDX] == 6 && song[nameIDX].toUpperCase() === "WAKE ME UP"){
+				let selection = new HomeSelection(song[idIDX], song[nameIDX], song[artistIDX], song[difficultyIDX], song[durationIDX]);
+				this.songSelections.push(selection);
+				this.homeScreenDiv.appendChild(selection.domElement());
+			}
+			if(song[idIDX] == 7 && song[nameIDX].toUpperCase() === "ANIMALS"){
+				let selection = new HomeSelection(song[idIDX], song[nameIDX], song[artistIDX], song[difficultyIDX], song[durationIDX]);
+				this.songSelections.push(selection);
+				this.homeScreenDiv.appendChild(selection.domElement());
+			}
+		});
+	}
+	
+	if(this.songSelections.length > 0){
+		this.selectionIdx = 0;
+		this.songSelections[0].toggleHighlight();
+	}
+}
+
+HomeSelection.prototype.domElement = function(){
+	return this.div;
+}
+
+HomeSelection.prototype.toggleHighlight = function(){
+	if(this.highlighted){
+		this.div.style.outline = ""; // >:< move to style
+		this.highlighted = false;
+	}
+	else{
+		this.div.style.outline = "4px solid cyan";
+		this.highlighted = true;
+	}
+}
+
+HomeSelection.prototype.getSongID = function(){
+	return this.songID;
 }
 
 EditorOverlay.prototype.show = function(){
@@ -681,12 +658,10 @@ MenuPanel.prototype.activate = function(){
 		this.selections[0].toggleHighlight();
 		this.selectionIdx = 0;
 	}
-	document.addEventListener("keydown", this.eventListener);
 	this.div.style.display = "block";
 }
 
 MenuPanel.prototype.deactivate = function(){
-	document.removeEventListener("keydown", this.eventListener);
 	this.div.style.display = "none";
 }
 
@@ -699,6 +674,24 @@ MenuPanel.prototype.addSelection = function(onSelect, selectionText){
 
 MenuPanel.prototype.domElement = function(){
 	return this.div;
+}
+
+MenuPanel.prototype.handleEvent = function(evt){
+	if(evt.keyCode == 38 && this.selectionIdx > 0){ // up arrow
+		this.selections[this.selectionIdx].toggleHighlight();
+		--this.selectionIdx;
+		this.selections[this.selectionIdx].toggleHighlight();
+	}
+	else if(evt.keyCode == 40 && this.selectionIdx + 1 < this.selections.length){ // down arrow
+		this.selections[this.selectionIdx].toggleHighlight();
+		++this.selectionIdx;
+		this.selections[this.selectionIdx].toggleHighlight();
+	}
+	else if(evt.keyCode == 13){ // enter
+		if(this.selections[this.selectionIdx]){
+			this.selections[this.selectionIdx].select();
+		}
+	}
 }
 
 Score.prototype.domElement = function(){
@@ -719,7 +712,7 @@ Score.prototype.update = function(newScore){
 		this.scoreInner.innerHTML = newScore;
 	}
 }
-
+	
 Menu.prototype.domElement = function(){
 	return this.menuDiv;
 }
@@ -739,6 +732,10 @@ Menu.prototype.hide = function(){
 		this.currentDisplayed.deactivate();
 		this.currentDisplayed = null;
 	}
+}
+
+Menu.prototype.handleEvent = function(evt){
+	this.currentDisplayed.handleEvent(evt);
 }
 
 ControlsMenu.prototype.setSelectionName = function(selectionID, controlName){
@@ -786,8 +783,11 @@ function changeControlDialog(callback){
 	enterKeyDiv.appendChild(enterKeyText);
 	document.body.appendChild(enterKeyDiv);
 	
-	// TODO preventDefault() and {capture: true} do not prevent event from being sent to other event handlers. 
+	// >:< preventDefault() and {capture: true} do not prevent event from being sent to other event handlers. 
 		// Way to make this temporarily the only even handler for key presses?
+		// Solution:
+		// eventPropagator.launchDialog() launches the specified dialog (changeControlDialog, loadSongDialog, etc.)
+		// launchDialog() prevents events until the dialog is closed via escape or otherwise
 	document.addEventListener("keydown", evt => {
 		if(evt.keyCode != 27){
 			callback(evt);

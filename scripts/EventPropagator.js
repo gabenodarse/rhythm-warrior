@@ -31,16 +31,16 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	this.handleKeyDown = evt => {
 		// TODO faster handling of repeated key inputs from holding down a key?
 		if (evt.keyCode === 27){
-			this.overlay.handleEscape();
-			
 			// if the game is not in editor mode, pause/unpause
-			if(!this.isEditor){
+			if(!this.isEditor && !this.overlay.inHomeScreen()){
 				this.togglePlay();
 			}
 		}
 		else if(typeof(this.controls[evt.keyCode]) === "number" && this.isRunning){
 			this.game.startControl(this.controls[evt.keyCode]);
 		}
+		
+		this.overlay.handleEvent(evt);
 	}
 	
 	this.handleKeyUp = evt => {
@@ -106,13 +106,15 @@ EventPropagator.prototype.togglePlay = function(){
 // only called from asynchronous game/editor/pause loop. Sends the loop to the game as a callback, starting a new loop.
 EventPropagator.prototype.start = function(){
 	this.isRunning = true;
+	this.stopFlag = false;
+	this.overlay.hideElement("menu");
+	this.overlay.hideElement("homeScreen");
 	this.game.start(this.loop);
 }
 
 // only called from within the asynchronous game/editor/pause loop
 EventPropagator.prototype.pause = function(){
 	this.isRunning = false;
-	this.stopFlag = false;
 	// !!! handle game key states on pause/unpause (as of now fires key up events on pause)
 	for(const key in this.controls) {
 		let evt = new KeyboardEvent("keyup", {
@@ -168,3 +170,8 @@ EventPropagator.prototype.runOnGame = function(functionToRun, updateEditor){
 	return ret;
 }
 
+EventPropagator.prototype.exitToHomeScreen = function(){
+	this.stopFlag = true;
+	this.overlay.hideElement("menu");
+	this.overlay.showElement("homeScreen");
+}
