@@ -428,9 +428,19 @@ Overlay.prototype.hideElement = function(elementName){
 	}
 }
 
+Overlay.prototype.populateMenu = function(mode){
+	this.menu.populate(mode);
+}
+
 Overlay.prototype.isElementShowing = function(elementName){
 	if(this[elementName] != undefined && typeof this[elementName].domElement == "function"){
 		return this[elementName].domElement().style.display == "block";
+	}
+}
+
+Overlay.prototype.passEvent = function(elementName, evt){
+	if(this[elementName] != undefined && typeof this[elementName].handleEvent == "function"){
+		this[elementName].handleEvent(evt);
 	}
 }
 
@@ -441,31 +451,6 @@ Overlay.prototype.updateSongData = function(songData){
 
 Overlay.prototype.updateScore = function(newScore){
 	this.score.update(newScore);
-}
-
-Overlay.prototype.handleEvent = function(evt){
-	// branching if statements to handle events based on state of game and menus
-	if(evt.keyCode === 27){
-		if(this.menu.domElement().style.display == "block"){
-			this.menu.hide();
-		} else {
-			this.menu.show();
-			
-			if(this.homeScreen.domElement().style.display == "block"){
-				this.menu.showHomeMenu();
-			} else {
-				this.menu.showGameMenu();
-			}
-		}
-	} else if(this.menu.domElement().style.display == "block"){
-		this.menu.handleEvent(evt);
-	} else if(this.homeScreen.domElement().style.display == "block"){
-		this.homeScreen.handleEvent(evt);
-	}
-}
-
-Overlay.prototype.inHomeScreen = function(){
-	return this.homeScreen.domElement().style.display == "block";
 }
 
 HomeScreen.prototype.show = function(){
@@ -750,11 +735,20 @@ Menu.prototype.hide = function(){
 	}
 }
 
-Menu.prototype.showHomeMenu = function(){
+Menu.prototype.populate = function(menuPanelName){
+	console.log(menuPanelName);
 	if(this.currentDisplayed){
 		this.currentDisplayed.hide();
 	}
 	
+	if(this[menuPanelName] instanceof MenuPanel){
+		this[menuPanelName].show();
+		this.currentDisplayed = this[menuPanelName];
+	}
+}
+
+// >:< 
+Menu.prototype.showHomeMenu = function(){
 	this.homeMenu.show();
 	this.currentDisplayed = this.homeMenu;
 }
@@ -841,11 +835,6 @@ function changeControlDialog(controlsMap, controlsMenu, inputID){
 		// Solution:
 			// eventPropagator flag when a dialog is launched (changeControlDialog, loadSongDialog, etc.)
 			// prevents events until the dialog is closed via escape or otherwise
-		// Solution:
-			// hierarchy of event listeners, new ones on top of old ones
-			// new ones choose whether to pass the event on or not
-			// when menus/dialogs stack, new ones get added
-			// would also solve buggy spacebar presses and such on editor
 	document.addEventListener("keydown", evt => {
 		if(evt.keyCode != 27){
 			let keyCode = evt.keyCode;

@@ -82,7 +82,9 @@ EventPropagator.prototype.start = function(){
 }
 
 EventPropagator.prototype.pause = function(){
-	// >:< show menu?
+	this.overlay.showElement("menu");
+	this.overlay.populateMenu("gameMenu");
+	this.overlay.hideElement("score");
 	this.stopFlag = true;
 }
 
@@ -140,16 +142,35 @@ EventPropagator.prototype.runOnGame = function(functionToRun, updateEditor){
 }
 
 EventPropagator.prototype.handleKeyDown = function(evt){
-	this.overlay.handleEvent(evt);
-	if (evt.keyCode === 27){
+	// branching if statements to handle events based on state of game and menus
+	if(evt.keyCode === 27){ // escape key
 		// if the game is not in editor mode, pause/unpause
-		if(!this.isEditor && !this.overlay.inHomeScreen()){
-			this.togglePlay();
+		if(!this.overlay.isElementShowing("homeScreen") && this.overlay.isElementShowing("menu")){
+			this.overlay.hideElement("menu");
+			if(!this.isRunning && !this.isEditor){
+				this.start();
+			}
+		} else if(!this.overlay.isElementShowing("homeScreen") && !this.overlay.isElementShowing("menu")){
+			this.overlay.showElement("menu");
+			this.overlay.populateMenu("gameMenu");
+			if(this.isRunning && !this.isEditor){
+				this.pause();
+			}
+		} else if(this.overlay.isElementShowing("homeScreen") && this.overlay.isElementShowing("menu")){
+			this.overlay.hideElement("menu");
+		} else if(this.overlay.isElementShowing("homeScreen") && !this.overlay.isElementShowing("menu")){
+			this.overlay.showElement("menu");
+			this.overlay.populateMenu("homeMenu");
 		}
-	}
-	else if(typeof(this.controls[evt.keyCode]) === "number" && this.isRunning){
+	} else if(typeof(this.controls[evt.keyCode]) === "number" && this.isRunning){
 		this.game.startControl(this.controls[evt.keyCode]);
+	} else if(this.overlay.isElementShowing("menu")){
+		this.overlay.passEvent("menu", evt);
+	} else if(this.overlay.isElementShowing("homeScreen")){
+		this.overlay.passEvent("homeScreen", evt);
 	}
+	
+
 }
 
 EventPropagator.prototype.gameLoop = function(){
