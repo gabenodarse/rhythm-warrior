@@ -27,7 +27,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	this.overlay = overlay;
 	this.controls = controls;
 	
-	// !!! keep these 3 closures as members? addEventListeners function to cleanup init?
+	// !!! keep these 3 closures as members? addClosures function to cleanup init?
 	this.handleKeyDown = evt => {
 		// TODO faster handling of repeated key inputs from holding down a key?
 		this.overlay.handleEvent(evt);
@@ -109,6 +109,7 @@ EventPropagator.prototype.start = function(){
 	this.stopFlag = false;
 	this.overlay.hideElement("menu");
 	this.overlay.hideElement("homeScreen");
+	this.overlay.showElement("score");
 	this.game.start(this.loop);
 }
 

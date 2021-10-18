@@ -39,6 +39,7 @@ export function Overlay(songData, eventPropagator, controlsMap){
 	this.editorOverlay = editorOverlay;
 }
 
+// class for the homescreen which holds song selections
 function HomeScreen(eventPropagator){
 	this.eventPropagator = eventPropagator;
 	this.homeScreenDiv;
@@ -54,6 +55,7 @@ function HomeScreen(eventPropagator){
 	this.homeScreenDiv.appendChild(mmTitle);
 }
 
+// class for song selections which are attached to the home screen
 function HomeSelection(id, name, artist, difficulty, duration){
 	this.div;
 	this.highlighted;
@@ -245,41 +247,70 @@ function Menu(eventPropagator, controlsMap){
 	this.menuDiv.style.display = "none";
 	this.menuDiv.className = "menu";
 	
-	this.mainMenu = new MenuPanel();
+	this.homeMenu = new MenuPanel();
+	this.gameMenu = new MenuPanel();
+	this.masterGameMenu = new MenuPanel();
 	this.controlsMenu = new MenuPanel();
 	this.saveLoadMenu = new MenuPanel();
 	
-	// main menu items
-	this.mainMenu.addSelection(() => { 
-		this.mainMenu.deactivate();
+	// --- home menu selections ---
+	
+	this.homeMenu.addSelection(() => { 
+		this.currentDisplayed.deactivate();
 		this.controlsMenu.activate();
 		this.currentDisplayed = this.controlsMenu;
 	}, "Controls");
 	
-	this.mainMenu.addSelection(() => {
+	// --- game menu selections ---
+	
+	this.gameMenu.addSelection(() => { 
+		this.currentDisplayed.deactivate();
+		this.controlsMenu.activate();
+		this.currentDisplayed = this.controlsMenu;
+	}, "Controls");
+	
+	this.gameMenu.addSelection(() => {
 		let fn = game => { game.restart() }
 		eventPropagator.runOnGame(fn, true);
 	}, "Restart song");
 	
-	this.mainMenu.addSelection(() => {
+	this.gameMenu.addSelection(() => {
 		eventPropagator.exitToHomeScreen();
 	}, "Quit song");
 	
-	this.mainMenu.addSelection(() => {
+	// --- master game menu selections ---
+	
+	this.masterGameMenu.addSelection(() => { 
+		this.currentDisplayed.deactivate();
+		this.controlsMenu.activate();
+		this.currentDisplayed = this.controlsMenu;
+	}, "Controls");
+	
+	this.masterGameMenu.addSelection(() => {
+		let fn = game => { game.restart() }
+		eventPropagator.runOnGame(fn, true);
+	}, "Restart song");
+	
+	this.masterGameMenu.addSelection(() => {
+		eventPropagator.exitToHomeScreen();
+	}, "Quit song");
+	
+	this.masterGameMenu.addSelection(() => {
 		eventPropagator.enableEditor();
 	}, "Enable Editor");
 	
-	this.mainMenu.addSelection(() => {
+	this.masterGameMenu.addSelection(() => {
 		eventPropagator.disableEditor();
 	}, "Disable Editor");
 	
-	this.mainMenu.addSelection(() => {
-		this.mainMenu.deactivate();
+	this.masterGameMenu.addSelection(() => {
+		this.currentDisplayed.deactivate();
 		this.saveLoadMenu.activate();
 		this.currentDisplayed = this.saveLoadMenu;
 	}, "Save/Load");
 	
-	// save load menu items
+	// --- save/load menu selections ---
+	
 	this.saveLoadMenu.addSelection(() => {
 		saveSongDialog(eventPropagator);
 	}, "Save song");
@@ -300,7 +331,9 @@ function Menu(eventPropagator, controlsMap){
 		alert("Not yet implemented"); // >:< load database
 	}, "Load database");
 	
-	// controls menu items, add a selection for each possible input
+	// --- controls menu selections ---
+	
+	// add a selection for each possible input
 	let possible_inputs = wasm.Input;
 	let num_inputs = Object.keys(possible_inputs).length
 	for(let i = 0; i < num_inputs; ++i){
@@ -332,7 +365,9 @@ function Menu(eventPropagator, controlsMap){
 		this.controlsMenu.setSelectionText(i,  inputName + " - " + defaultKeyName);
 	}
 	
-	this.menuDiv.appendChild(this.mainMenu.domElement());
+	this.menuDiv.appendChild(this.homeMenu.domElement());
+	this.menuDiv.appendChild(this.gameMenu.domElement());
+	this.menuDiv.appendChild(this.masterGameMenu.domElement());
 	this.menuDiv.appendChild(this.controlsMenu.domElement());
 	this.menuDiv.appendChild(this.saveLoadMenu.domElement());
 }
@@ -403,11 +438,18 @@ Overlay.prototype.updateScore = function(newScore){
 }
 
 Overlay.prototype.handleEvent = function(evt){
+	// branching if statements to handle events based on state of game and menus
 	if(evt.keyCode === 27){
 		if(this.menu.domElement().style.display == "block"){
 			this.menu.hide();
 		} else {
 			this.menu.show();
+			
+			if(this.homeScreen.domElement().style.display == "block"){
+				this.menu.showHomeMenu();
+			} else {
+				this.menu.showGameMenu();
+			}
 		}
 	} else if(this.menu.domElement().style.display == "block"){
 		this.menu.handleEvent(evt);
@@ -691,8 +733,7 @@ Menu.prototype.show = function(){
 	if(this.currentDisplayed){
 		this.currentDisplayed.deactivate();
 	}
-	this.currentDisplayed = this.mainMenu;
-	this.mainMenu.activate();
+	this.currentDisplayed = null;
 }
 
 Menu.prototype.hide = function(){
@@ -701,6 +742,33 @@ Menu.prototype.hide = function(){
 		this.currentDisplayed.deactivate();
 		this.currentDisplayed = null;
 	}
+}
+
+Menu.prototype.showHomeMenu = function(){
+	if(this.currentDisplayed){
+		this.currentDisplayed.deactivate();
+	}
+	
+	this.homeMenu.activate();
+	this.currentDisplayed = this.homeMenu;
+}
+
+Menu.prototype.showGameMenu = function(){
+	if(this.currentDisplayed){
+		this.currentDisplayed.deactivate();
+	}
+	
+	this.gameMenu.activate();
+	this.currentDisplayed = this.gameMenu;
+}
+
+Menu.prototype.showMasterGameMenu = function(){
+	if(this.currentDisplayed){
+		this.currentDisplayed.deactivate();
+	}
+	
+	this.masterGameMenu.activate();
+	this.currentDisplayed = this.masterGameMenu;
 }
 
 Menu.prototype.handleEvent = function(evt){
@@ -765,8 +833,13 @@ function changeControlDialog(controlsMap, controlsMenu, inputID){
 	// >:< preventDefault() and {capture: true} do not prevent event from being sent to other event handlers. 
 		// Way to make this temporarily the only even handler for key presses?
 		// Solution:
-		// eventPropagator.launchDialog() launches the specified dialog (changeControlDialog, loadSongDialog, etc.)
-		// launchDialog() prevents events until the dialog is closed via escape or otherwise
+			// eventPropagator flag when a dialog is launched (changeControlDialog, loadSongDialog, etc.)
+			// prevents events until the dialog is closed via escape or otherwise
+		// Solution:
+			// hierarchy of event listeners, new ones on top of old ones
+			// new ones choose whether to pass the event on or not
+			// when menus/dialogs stack, new ones get added
+			// would also solve buggy spacebar presses and such on editor
 	document.addEventListener("keydown", evt => {
 		if(evt.keyCode != 27){
 			let keyCode = evt.keyCode;
