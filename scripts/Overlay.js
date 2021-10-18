@@ -428,6 +428,12 @@ Overlay.prototype.hideElement = function(elementName){
 	}
 }
 
+Overlay.prototype.isElementShowing = function(elementName){
+	if(this[elementName] != undefined && typeof this[elementName].domElement == "function"){
+		return this[elementName].domElement().style.display == "block";
+	}
+}
+
 Overlay.prototype.updateSongData = function(songData){
 	this.editorOverlay.updateSongData(songData);
 	this.updateScore(songData.score);
