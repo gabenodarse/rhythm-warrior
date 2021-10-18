@@ -256,16 +256,16 @@ function Menu(eventPropagator, controlsMap){
 	// --- home menu selections ---
 	
 	this.homeMenu.addSelection(() => { 
-		this.currentDisplayed.deactivate();
-		this.controlsMenu.activate();
+		this.currentDisplayed.hide();
+		this.controlsMenu.show();
 		this.currentDisplayed = this.controlsMenu;
 	}, "Controls");
 	
 	// --- game menu selections ---
 	
 	this.gameMenu.addSelection(() => { 
-		this.currentDisplayed.deactivate();
-		this.controlsMenu.activate();
+		this.currentDisplayed.hide();
+		this.controlsMenu.show();
 		this.currentDisplayed = this.controlsMenu;
 	}, "Controls");
 	
@@ -281,8 +281,8 @@ function Menu(eventPropagator, controlsMap){
 	// --- master game menu selections ---
 	
 	this.masterGameMenu.addSelection(() => { 
-		this.currentDisplayed.deactivate();
-		this.controlsMenu.activate();
+		this.currentDisplayed.hide();
+		this.controlsMenu.show();
 		this.currentDisplayed = this.controlsMenu;
 	}, "Controls");
 	
@@ -304,8 +304,8 @@ function Menu(eventPropagator, controlsMap){
 	}, "Disable Editor");
 	
 	this.masterGameMenu.addSelection(() => {
-		this.currentDisplayed.deactivate();
-		this.saveLoadMenu.activate();
+		this.currentDisplayed.hide();
+		this.saveLoadMenu.show();
 		this.currentDisplayed = this.saveLoadMenu;
 	}, "Save/Load");
 	
@@ -663,7 +663,7 @@ EditorControls.prototype.updateSongData = function(songData){
 	}
 }
 
-MenuPanel.prototype.activate = function(){
+MenuPanel.prototype.show = function(){
 	if(this.selectionIdx != 0){
 		this.selections[this.selectionIdx].toggleHighlight();
 		this.selections[0].toggleHighlight();
@@ -672,7 +672,7 @@ MenuPanel.prototype.activate = function(){
 	this.div.style.display = "block";
 }
 
-MenuPanel.prototype.deactivate = function(){
+MenuPanel.prototype.hide = function(){
 	this.div.style.display = "none";
 }
 
@@ -731,7 +731,7 @@ Menu.prototype.domElement = function(){
 Menu.prototype.show = function(){
 	this.menuDiv.style.display = "block";
 	if(this.currentDisplayed){
-		this.currentDisplayed.deactivate();
+		this.currentDisplayed.hide();
 	}
 	this.currentDisplayed = null;
 }
@@ -739,35 +739,35 @@ Menu.prototype.show = function(){
 Menu.prototype.hide = function(){
 	this.menuDiv.style.display = "none";
 	if(this.currentDisplayed){
-		this.currentDisplayed.deactivate();
+		this.currentDisplayed.hide();
 		this.currentDisplayed = null;
 	}
 }
 
 Menu.prototype.showHomeMenu = function(){
 	if(this.currentDisplayed){
-		this.currentDisplayed.deactivate();
+		this.currentDisplayed.hide();
 	}
 	
-	this.homeMenu.activate();
+	this.homeMenu.show();
 	this.currentDisplayed = this.homeMenu;
 }
 
 Menu.prototype.showGameMenu = function(){
 	if(this.currentDisplayed){
-		this.currentDisplayed.deactivate();
+		this.currentDisplayed.hide();
 	}
 	
-	this.gameMenu.activate();
+	this.gameMenu.show();
 	this.currentDisplayed = this.gameMenu;
 }
 
 Menu.prototype.showMasterGameMenu = function(){
 	if(this.currentDisplayed){
-		this.currentDisplayed.deactivate();
+		this.currentDisplayed.hide();
 	}
 	
-	this.masterGameMenu.activate();
+	this.masterGameMenu.show();
 	this.currentDisplayed = this.masterGameMenu;
 }
 
