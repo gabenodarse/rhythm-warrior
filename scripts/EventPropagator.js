@@ -109,7 +109,6 @@ EventPropagator.prototype.start = function(){
 	this.stopFlag = false;
 	this.overlay.hideElement("menu");
 	this.overlay.hideElement("homeScreen");
-	console.log("hi");
 	this.game.start(this.loop);
 }
 

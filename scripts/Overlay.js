@@ -246,7 +246,7 @@ function Menu(eventPropagator, controlsMap){
 	this.menuDiv.className = "menu";
 	
 	this.mainMenu = new MenuPanel();
-	this.controlsMenu = new ControlsMenu(controlsMap);
+	this.controlsMenu = new MenuPanel();
 	this.saveLoadMenu = new MenuPanel();
 	
 	// main menu items
@@ -300,6 +300,38 @@ function Menu(eventPropagator, controlsMap){
 		alert("Not yet implemented"); // >:< load database
 	}, "Load database");
 	
+	// controls menu items, add a selection for each possible input
+	let possible_inputs = wasm.Input;
+	let num_inputs = Object.keys(possible_inputs).length
+	for(let i = 0; i < num_inputs; ++i){
+		let inputName = "";
+		let defaultKey = "";
+		
+		// find the control name mapping to input i (Dash, Slash1, etc.)
+		for (const key in possible_inputs){
+			if(possible_inputs[key] == i){
+				inputName = key;
+				break;
+			}
+		}
+		
+		// find the default key mapping to input i
+		for (const key in controlsMap){
+			if(controlsMap[key] == i){
+				defaultKey = key;
+			}
+		}
+		
+		// add the selection
+		this.controlsMenu.addSelection(() => { 
+			changeControlDialog(controlsMap, this.controlsMenu, i)
+		}, inputName);
+		
+		// set the selection name
+		let defaultKeyName = g_keyCodeNames[defaultKey] ? g_keyCodeNames[defaultKey] : String.fromCharCode(defaultKey);
+		this.controlsMenu.setSelectionText(i,  inputName + " - " + defaultKeyName);
+	}
+	
 	this.menuDiv.appendChild(this.mainMenu.domElement());
 	this.menuDiv.appendChild(this.controlsMenu.domElement());
 	this.menuDiv.appendChild(this.saveLoadMenu.domElement());
@@ -320,75 +352,10 @@ function MenuPanel(){
 	this.selectionIdx = 0;
 }
 
-// ControlsMenu class, subclass of MenuPanel where selection names are stored and can be modified
-// !!! redundancy check that the buttons are named correctly on menu panel activation.
-// !!! does control menu have to be a special subclass of MenuPanel? 
-function ControlsMenu(controlsMap){
-	MenuPanel.call(this);
-	this.selectionsNames = [];
-	
-	let possible_inputs = wasm.Input;
-	let num_inputs = Object.keys(possible_inputs).length
-	for(let i = 0; i < num_inputs; ++i){
-		let name = "";
-		let currentKey = "";
-		
-		let controlSelection;
-		
-		// find the control name mapping to i
-		for (const key in possible_inputs){
-			if(possible_inputs[key] == i){
-				name = key;
-				break;
-			}
-		}
-		
-		// find the current key mapping to i
-		for (const key in controlsMap){
-			if(controlsMap[key] == i){
-				currentKey = key;
-			}
-		}
-		
-		// callback for changeControlDialog, when the control is being changed
-		let callback = (keyEvt) => {
-			let keyCode = keyEvt.keyCode;
-			if(keyCode == 27){
-				return;
-			}
-			
-			let prevKey = null;
-			let newKeyName = g_keyCodeNames[keyCode] ? g_keyCodeNames[keyCode] : keyEvt.key;
-			for (const key in controlsMap){
-				if(controlsMap[key] == i){
-					controlsMap[key] = undefined;
-					break;
-				}
-			}
-			
-			// reset name if a key is rebound
-			if(controlsMap[keyCode] != undefined){
-				let controlID = controlsMap[keyCode];
-				this.setSelectionName(controlID, "");
-			}
-			
-			controlsMap[keyCode] = i;
-			this.setSelectionName(i, newKeyName);
-		}
-		
-		this.selectionsNames.push(name);
-		this.addSelection(null, "");
-		this.selections[i].setSelectionFunction(() => { changeControlDialog(callback); });
-		let currentKeyName = g_keyCodeNames[currentKey] ? g_keyCodeNames[currentKey] : String.fromCharCode(currentKey);
-		this.setSelectionName(i, currentKeyName);
-	}
-}
-
-Object.setPrototypeOf(ControlsMenu.prototype, MenuPanel.prototype);
-
 // MenuSelection class. Controls highlighting style and the selection function
-function MenuSelection(onSelect, selectionText, parentPanelDiv){
+function MenuSelection(onSelect, value, parentPanelDiv){
 	this.div;
+	this.value;
 	this.selectionText;
 	this.onSelect;
 	this.highlighted;
@@ -396,8 +363,10 @@ function MenuSelection(onSelect, selectionText, parentPanelDiv){
 	this.div = document.createElement("div");
 	this.div.className = "menu-selection";
 	
+	this.value = value;
+	
 	this.selectionText = document.createElement("p");
-	this.selectionText.innerHTML = selectionText;
+	this.selectionText.innerHTML = value;
 	
 	this.onSelect = onSelect;
 	this.highlighted = false;
@@ -738,8 +707,14 @@ Menu.prototype.handleEvent = function(evt){
 	this.currentDisplayed.handleEvent(evt);
 }
 
-ControlsMenu.prototype.setSelectionName = function(selectionID, controlName){
-	this.selections[selectionID].setText( this.selectionsNames[selectionID] + " - " + controlName);
+MenuPanel.prototype.setSelectionText = function(selectionID, newText){
+	this.selections[selectionID].setText( newText );
+}
+
+MenuPanel.prototype.getSelectionValue = function(selectionID){
+	if(this.selections[selectionID]){
+		return this.selections[selectionID].getValue();
+	}
 }
 
 MenuSelection.prototype.select = function(){
@@ -771,7 +746,11 @@ MenuSelection.prototype.domElement = function(){
 	return this.div;
 }
 
-function changeControlDialog(callback){
+MenuSelection.prototype.getValue = function(){
+	return this.value;
+}
+
+function changeControlDialog(controlsMap, controlsMenu, inputID){
 	let enterKeyDiv = document.createElement("div");
 	let enterKeyText = document.createElement("p");
 	
@@ -790,8 +769,31 @@ function changeControlDialog(callback){
 		// launchDialog() prevents events until the dialog is closed via escape or otherwise
 	document.addEventListener("keydown", evt => {
 		if(evt.keyCode != 27){
-			callback(evt);
+			let keyCode = evt.keyCode;
+		
+			let newKeyName = g_keyCodeNames[keyCode] ? g_keyCodeNames[keyCode] : (evt.key).toUpperCase();
+			
+			// unbind the previous key for this input
+			for (const key in controlsMap){
+				if(controlsMap[key] == inputID){
+					controlsMap[key] = undefined;
+					break;
+				}
+			}
+			
+			// if the new key is mapped to a different input, set that input to have no key mapping to it
+			if(controlsMap[keyCode] != undefined){
+				let controlID = controlsMap[keyCode];
+				let controlName = controlsMenu.getSelectionValue(controlID);
+				controlsMenu.setSelectionText(controlID, "" + controlName + " - UNBOUND");
+			}
+			
+			controlsMap[keyCode] = inputID;
+			
+			let inputName = controlsMenu.getSelectionValue(inputID);
+			controlsMenu.setSelectionText(inputID, inputName + " - " + newKeyName);
 		}
+		
 		enterKeyDiv.remove();
 	},{once: true});
 }
