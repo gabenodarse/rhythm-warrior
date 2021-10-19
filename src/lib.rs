@@ -105,7 +105,6 @@ impl Ord for UpcomingNote {
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
 // fits within 32 bits
-// >:< might mean that graphics must come in 8s / 16s factors of 256
 pub struct Graphic {
 	pub g: GraphicGroup,
 	pub frame: u8, // each frame adds 1 to frame mod 256. From timer javascript code chooses animation frame.
@@ -188,7 +187,7 @@ pub fn num_possible_inputs() -> usize {
 	return Input::num_variants();
 }
 
-// >:< logging
+// !!! logging
 #[wasm_bindgen]
 extern {
     #[wasm_bindgen(js_namespace = console)]

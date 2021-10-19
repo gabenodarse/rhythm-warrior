@@ -193,7 +193,7 @@ impl Game {
 		return self.song.duration;
 	}
 	
-	// >:< THIS NEEDS TO BE RELIABLE, OR ELSE USER CREATED SONG DATA MAY BE LOST
+	// !!! THIS NEEDS TO BE RELIABLE, OR ELSE USER CREATED SONG DATA MAY BE LOST
 	// returns the song in json format
 	pub fn song_notes_json(&self) -> String {
 		let mut res = String::new();

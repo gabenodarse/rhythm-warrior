@@ -281,7 +281,7 @@ impl Player {
 				match &self.target {
 					None => self.state = PlayerState::Walking,
 					Some(ti) => {
-						if ti.pos == self.bounds.left_x { // >:< comparison against F32_ZERO is more robust
+						if ti.pos - self.bounds.left_x < F32_ZERO && ti.pos - self.bounds.left_x > -F32_ZERO {
 							self.state = PlayerState::Walking;
 						} else {
 							self.state = PlayerState::Running;
@@ -293,7 +293,7 @@ impl Player {
 				match &self.target {
 					None => self.state = PlayerState::Walking,
 					Some(ti) => {
-						if ti.pos == self.bounds.left_x { // >:< comparison against F32_ZERO is more robust
+						if ti.pos - self.bounds.left_x < F32_ZERO && ti.pos - self.bounds.left_x > -F32_ZERO {
 							self.state = PlayerState::Walking;
 						} else {
 							self.state = PlayerState::Running;
