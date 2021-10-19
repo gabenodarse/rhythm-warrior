@@ -56,9 +56,9 @@ contains logic for rendering graphics
 contains function for loading graphics
 contains glue code for interacting with sqlite database
 
-## scripts/readMIDI.js and scripts/upload.js
+## scripts/readMIDI.js
 
-remnant files that are soon to be discarded
+remnant file that is kept around in case it is useful in the future
 
 # resources.json / src/resources.rs / graphics
 each key in the resources.json file represents 1 graphic or animation. 
