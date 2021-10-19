@@ -27,16 +27,9 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	this.overlay = overlay;
 	this.controls = controls;
 	
-	// !!! keep these 3 closures as members? addClosures function to cleanup init?
-	
-	this.handleKeyUp = evt => {
-		if(typeof(this.controls[evt.keyCode]) === "number" && this.isRunning){
-			this.game.stopControl(this.controls[evt.keyCode]);
-		}
-	}
-	
+	// >:< resizing window same as resizing game space?
 	let resizeRefresher = true;
-	this.resize = () => {
+	let resize = () => {
 		const delay = 50; // minimum delay between screen size refreshes
 		if(resizeRefresher){
 			resizeRefresher = false;
@@ -49,15 +42,19 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	}
 	
 	this.loop = () => this.gameLoop();
-	this.resize();
+	resize();
 	
 	this.stopFlag = false;
 	this.isRunning = false;
 	this.isEditor = false;
 	
 	window.addEventListener("keydown", evt => {	this.handleKeyDown(evt) });
-	window.addEventListener("keyup", this.handleKeyUp);
-	window.addEventListener("resize", this.resize);
+	window.addEventListener("keyup", evt => {
+		if(typeof(this.controls[evt.keyCode]) === "number" && this.isRunning){
+			this.game.stopControl(this.controls[evt.keyCode]);
+		}
+	});
+	window.addEventListener("resize", resize);
 }
 
 EventPropagator.prototype.togglePlay = function(){
