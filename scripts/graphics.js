@@ -23,7 +23,7 @@ function CanvasGroup(fullsizeCanvas, numCanvases, screenDiv){
 		this.canvases[i].width = fullsizeCanvas.width;
 		this.canvases[i].height = fullsizeCanvas.height;
 		this.canvases[i].getContext("2d").drawImage(fullsizeCanvas, 0, 0, fullsizeCanvas.width, fullsizeCanvas.height);
-		this.canvases[i].style.visibility = "hidden"; // >:< visibility vs display performance
+		this.canvases[i].style.visibility = "hidden";
 		screenDiv.appendChild( this.canvases[i] );
 	}
 }
@@ -79,7 +79,7 @@ CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
 		let graphicArg = u8buf[i*4 + 3];
 		++i;
 		
-		let numFrames = this.canvases[graphicIdx].length; // >:< 
+		let numFrames = this.canvases[graphicIdx].length;
 		let graphicSubID = graphicFrame % numFrames;
 		let canvasGroup = this.canvases[graphicIdx][graphicSubID];
 		let idx = canvasGroup.nextCanvasIdx;
@@ -230,7 +230,6 @@ WebGLGraphics.prototype.resize = function(xFactor, yFactor){
 	this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 }
 
-// >:< duplicate code this and other render function
 WebGLGraphics.prototype.render = function(instructions, xFactor, yFactor){
 	const gl = this.gl;
 	const positionBuffer = this.positionBuffer;

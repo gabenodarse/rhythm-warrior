@@ -328,7 +328,7 @@ function Menu(eventPropagator, controlsMap){
 	}, "Load mp3");
 	
 	this.saveLoadMenu.addSelection(() => {
-		alert("Not yet implemented"); // >:< load database
+		alert("Not yet implemented"); // !!! load database
 	}, "Load database");
 	
 	// --- controls menu selections ---
@@ -558,11 +558,11 @@ HomeSelection.prototype.domElement = function(){
 
 HomeSelection.prototype.toggleHighlight = function(){
 	if(this.highlighted){
-		this.div.style.outline = ""; // >:< move to style
+		this.div.className = "home-selection";
 		this.highlighted = false;
 	}
 	else{
-		this.div.style.outline = "4px solid cyan";
+		this.div.className = "home-selection highlighted-home-selection";
 		this.highlighted = true;
 	}
 }
@@ -596,7 +596,7 @@ EditorGuidingLines.prototype.domElement = function(){
 
 // TODO faster if the canvas stays the same and is just repositioned on time changes. 
 	// However, if the game height is not the full screen height, lines would show outside the game's boundaries
-	// >:< range scroller isn't modified when the song is modified
+	// !!! range scroller isn't modified when the song is modified
 EditorGuidingLines.prototype.updateSongData = function(songData){
 	let time = songData.songTime;
 	let beatInterval = songData.beatInterval;
@@ -736,7 +736,6 @@ Menu.prototype.hide = function(){
 }
 
 Menu.prototype.populate = function(menuPanelName){
-	console.log(menuPanelName);
 	if(this.currentDisplayed){
 		this.currentDisplayed.hide();
 	}
@@ -745,30 +744,6 @@ Menu.prototype.populate = function(menuPanelName){
 		this[menuPanelName].show();
 		this.currentDisplayed = this[menuPanelName];
 	}
-}
-
-// >:< 
-Menu.prototype.showHomeMenu = function(){
-	this.homeMenu.show();
-	this.currentDisplayed = this.homeMenu;
-}
-
-Menu.prototype.showGameMenu = function(){
-	if(this.currentDisplayed){
-		this.currentDisplayed.hide();
-	}
-	
-	this.gameMenu.show();
-	this.currentDisplayed = this.gameMenu;
-}
-
-Menu.prototype.showMasterGameMenu = function(){
-	if(this.currentDisplayed){
-		this.currentDisplayed.hide();
-	}
-	
-	this.masterGameMenu.show();
-	this.currentDisplayed = this.masterGameMenu;
 }
 
 Menu.prototype.handleEvent = function(evt){
@@ -793,11 +768,11 @@ MenuSelection.prototype.select = function(){
 
 MenuSelection.prototype.toggleHighlight = function(){
 	if(this.highlighted){
-		this.div.style.outline = "";
+		this.div.className = "menu-selection";
 		this.highlighted = false;
 	}
 	else{
-		this.div.style.outline = "4px solid cyan";
+		this.div.className = "highlighted-menu-selection menu-selection";
 		this.highlighted = true;
 	}
 }
