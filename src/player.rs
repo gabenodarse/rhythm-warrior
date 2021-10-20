@@ -30,8 +30,10 @@ use crate::objects::BRICK_WIDTH;
 use crate::objects::MIN_DASH_WIDTH;
 use crate::objects::SLASH_WIDTH;
 
-const PRE_SLASH_TIME: f32 = 0.06; // delay dash/slash by a tiny amount so they can be pressed at the same time
-const SLASH_TIME: f32 = 0.1;
+// delays dash/slash by a tiny amount so they can be pressed at the same time. starts snimation during delay
+const PRE_SLASH_TIME: f32 = 0.06; 
+// so slash animation can finish
+const POST_SLASH_TIME: f32 = 0.06;
 const DASH_LINGER_TIME: f32 = 0.3; // how long the dash graphic lingers
 const BOOST_LINGER_TIME: f32 = 0.3;
 const BOOST_PRELINGER_TIME: f32 = 1.2;
@@ -160,9 +162,11 @@ impl Player {
 		if pos_difference < MAX_BOOST_DISTANCE && pos_difference > 0.0 {
 			let mut remaining_pos_difference = pos_difference;
 			let mut rendering_instruction = self.rendering_instruction();
-			while remaining_pos_difference > 0.0 {				
+			while remaining_pos_difference > 0.0 { 
+				let mut positioned_graphic = rendering_instruction.clone();
+				positioned_graphic.g.g = GraphicGroup::Running;
 				self.lingering_graphics.push( LingeringGraphic {
-					positioned_graphic: rendering_instruction.clone(),
+					positioned_graphic: positioned_graphic,
 					start_t: time_running - BOOST_PRELINGER_TIME,
 					end_t: time_running + BOOST_LINGER_TIME
 				});
@@ -176,9 +180,11 @@ impl Player {
 		} else if pos_difference > -MAX_BOOST_DISTANCE && pos_difference < 0.0 {
 			let mut remaining_pos_difference = -pos_difference;
 			let mut rendering_instruction = self.rendering_instruction();
-			while remaining_pos_difference > 0.0 {				
+			while remaining_pos_difference > 0.0 { 
+				let mut positioned_graphic = rendering_instruction.clone();
+				positioned_graphic.g.g = GraphicGroup::Running;
 				self.lingering_graphics.push( LingeringGraphic {
-					positioned_graphic: rendering_instruction.clone(),
+					positioned_graphic: positioned_graphic,
 					start_t: time_running - BOOST_PRELINGER_TIME,
 					end_t: time_running + BOOST_LINGER_TIME
 				});
@@ -461,7 +467,7 @@ impl Player {
 				self.hitbox = None;
 			},
 			PlayerState::PostSlash(t) => {
-				if time_running - t > SLASH_TIME {
+				if time_running - t > POST_SLASH_TIME {
 					self.state = PlayerState::Walking;
 					self.hit_type = None;
 				}
@@ -482,7 +488,7 @@ impl Player {
 				graphic_group = GraphicGroup::Running;
 				frame = frame_number(time_running);
 			},
-			PlayerState::Slash(t) | PlayerState::SlashDash(t) | PlayerState::PostSlash(t) => {
+			PlayerState::PreSlash(t) | PlayerState::PreSlashDash(t) => {
 				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
 				graphic_group = match brick_type {
 					BrickType::Type1 => GraphicGroup::Slashing1,
@@ -494,7 +500,20 @@ impl Player {
 					Direction::Right => (),
 					Direction::Left => x = self.bounds.left_x - SLASH_WIDTH as f32,
 				};
-			}
+			},
+			PlayerState::Slash(t) | PlayerState::SlashDash(t) | PlayerState::PostSlash(t) => {
+				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
+				graphic_group = match brick_type {
+					BrickType::Type1 => GraphicGroup::Slashing1,
+					BrickType::Type2 => GraphicGroup::Slashing2,
+					BrickType::Type3 => GraphicGroup::Slashing3
+				};
+				frame = frame_number(time_running - t + PRE_SLASH_TIME);
+				match self.face_dir {
+					Direction::Right => (),
+					Direction::Left => x = self.bounds.left_x - SLASH_WIDTH as f32,
+				};
+			},
 			_ => {
 				graphic_group = GraphicGroup::Walking;
 				frame = 0;
