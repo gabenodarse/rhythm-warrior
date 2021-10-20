@@ -23,7 +23,7 @@ use crate::FRAME_TIME;
 use crate::GROUND_POS;
 use crate::GAME_WIDTH;
 use crate::F32_ZERO;
-use crate::Song;
+use crate::GameData;
 use crate::objects::PLAYER_WIDTH;
 use crate::objects::PLAYER_HEIGHT;
 use crate::objects::BRICK_WIDTH;
@@ -109,11 +109,11 @@ impl Player {
 	}
 	
 	// tick the player's state
-	pub fn tick(&mut self, seconds_passed: f32, bricks_iter: vec_deque::Iter<Brick>, time_running: f32, song: &Song) {
-		self.update_target_info(bricks_iter, time_running, song.game_data.brick_speed);
-		self.regular_move(seconds_passed, time_running);
-		self.update_state(time_running);
-		self.update_graphics(time_running);
+	pub fn tick(&mut self, seconds_passed: f32, bricks_iter: vec_deque::Iter<Brick>, game_data: &GameData) {
+		self.update_target_info(bricks_iter, game_data.time_running, game_data.brick_speed);
+		self.regular_move(seconds_passed, game_data.time_running);
+		self.update_state(game_data.time_running);
+		self.update_graphics(game_data.time_running);
 	}
 	
 	// inputs a slash command, updating player state

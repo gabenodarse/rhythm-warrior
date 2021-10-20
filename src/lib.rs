@@ -71,11 +71,6 @@ pub struct GameData {
 	pub duration: f32,
 }
 
-struct Song {
-	notes: BTreeSet<UpcomingNote>,
-	game_data: GameData
-}
-
 #[derive(Clone, Copy)]
 pub struct UpcomingNote {
 	note_type: BrickType,

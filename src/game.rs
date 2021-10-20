@@ -6,6 +6,12 @@ use brick::Brick;
 use objects::Object;
 use objects::BrickType;
 
+
+struct Song {
+	notes: BTreeSet<UpcomingNote>,
+	game_data: GameData
+}
+
 #[wasm_bindgen]
 pub struct Game {
 	// !!! create a copy of the reference to player and bricks in a data structure for ordering objects
@@ -18,6 +24,7 @@ pub struct Game {
 	graphics: Vec<PositionedGraphic>,
 	bricks_broken: u8
 }
+
 #[wasm_bindgen]
 impl Game {
 	pub fn new(bpm: f32, brick_speed: f32, duration: f32) -> Game {
@@ -57,7 +64,7 @@ impl Game {
 		// retrieve necessary data from the next bricks to hit: 
 			// the time of the upcoming bricks, the leftmost x of those bricks and the rightmost x
 		let bricks_iter = self.bricks.iter();
-		self.player.tick(seconds_passed, bricks_iter, self.song.game_data.time_running, &self.song); // >:< time_running part of song
+		self.player.tick(seconds_passed, bricks_iter, &self.song.game_data);
 		
 		// tick bricks while discarding any bricks off screen 
 		// TODO might not need to check on screen for all notes
