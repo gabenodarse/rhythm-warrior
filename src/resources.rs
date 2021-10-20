@@ -41,10 +41,7 @@ pub fn max_graphics(g: GraphicGroup) -> u32 {
 		GraphicGroup::Slashing1 | GraphicGroup::Slashing2 | GraphicGroup::Slashing3 => 1,
 		GraphicGroup::Brick1 | GraphicGroup::Brick2 | GraphicGroup::Brick3 => 32,
 		GraphicGroup::Slash1 | GraphicGroup::Slash2 | GraphicGroup::Slash3 => 1,
-		GraphicGroup::Dash0 => 1,
-		GraphicGroup::Dash1 => 1,
-		GraphicGroup::Dash2 => 1,
-		GraphicGroup::Dash3 => 1,
+		GraphicGroup::Dash0  | GraphicGroup::Dash1 | GraphicGroup::Dash2 | GraphicGroup::Dash3 => 10,
 		
 	}
 }
@@ -80,7 +77,7 @@ pub fn graphic_size(g: GraphicGroup) -> Position {
 			}
 		},
 		GraphicGroup::Dash0 | GraphicGroup::Dash1 | GraphicGroup::Dash2 | GraphicGroup::Dash3 => { Position {
-			x: objects::DASH_WIDTH as f32,
+			x: objects::MIN_DASH_WIDTH as f32,
 			y: objects::DASH_HEIGHT as f32
 		}},
 	};
