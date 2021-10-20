@@ -10,8 +10,6 @@ use objects::BrickType;
 pub struct Game {
 	// !!! create a copy of the reference to player and bricks in a data structure for ordering objects
 		// the objects either point to subsequently positioned objects or not (Option type)
-	time_running: f32, // invariant: should never be negative
-	score: i32,
 	player: Player,
 	bricks: VecDeque<Brick>,
 	// !!! create a song type to hold song notes and meta data
@@ -22,18 +20,22 @@ pub struct Game {
 }
 #[wasm_bindgen]
 impl Game {
-	pub fn new(bpm: u32, brick_speed: f32, duration: f32) -> Game {
+	pub fn new(bpm: f32, brick_speed: f32, duration: f32) -> Game {
 		
 		return Game {
-			time_running: 0.0,
 			player: Player::new((GAME_WIDTH / 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0),
 			bricks: VecDeque::new(), // bricks on screen, ordered by time they are meant to be played
-			score: 0,
 			song: Song { 
 				notes: BTreeSet::new(),
-				bpm,
-				brick_speed,
-				duration,
+				game_data: GameData {
+					bpm,
+					beat_interval: 60.0 / bpm as f32,
+					brick_speed,
+					time_running: 0.0,
+					score: 0,
+					max_score: 0, // >:< 
+					duration,
+				}
 			},
 			upcoming_note: None,
 			graphics: Vec::with_capacity(512), // TODO what should the upper limit be? Make it a hard limit
@@ -50,12 +52,12 @@ impl Game {
 			seconds_passed = MAX_TIME_BETWEEN_TICKS;
 		}
 		
-		self.time_running += seconds_passed;
+		self.song.game_data.time_running += seconds_passed;
 		
 		// retrieve necessary data from the next bricks to hit: 
 			// the time of the upcoming bricks, the leftmost x of those bricks and the rightmost x
 		let bricks_iter = self.bricks.iter();
-		self.player.tick(seconds_passed, bricks_iter, self.time_running, &self.song);
+		self.player.tick(seconds_passed, bricks_iter, self.song.game_data.time_running, &self.song); // >:< time_running part of song
 		
 		// tick bricks while discarding any bricks off screen 
 		// TODO might not need to check on screen for all notes
@@ -65,7 +67,7 @@ impl Game {
 			if self.bricks[i].bounds().bottom_y < 0.0 {
 				del += 1;
 			} else {
-				self.bricks[i].tick(self.song.brick_speed, seconds_passed);
+				self.bricks[i].tick(self.song.game_data.brick_speed, seconds_passed);
 				if del > 0 {
 					self.bricks.swap(i - del, i);
 				}
@@ -96,8 +98,8 @@ impl Game {
 		// check for brick destruction 
 		// TODO: might be a little faster to do as bricks are updated
 		// TODO more efficient way than checking ALL bricks
-		let t = self.time_running;
-		let score = &mut self.score;
+		let t = self.song.game_data.time_running;
+		let score = &mut self.song.game_data.score;
 		let bricks = &mut self.bricks;
 		let bricks_broken = &mut self.bricks_broken;
 		if let Some(destruction_type) = destruction_type {
@@ -143,16 +145,12 @@ impl Game {
 			graphics.push(brick.rendering_instruction());
 		}
 		
-		graphics.append(&mut self.player.lg_rendering_instructions(self.time_running));
+		graphics.append(&mut self.player.lg_rendering_instructions(self.song.game_data.time_running));
 		
 		return RenderingInstructions {
 			num_graphics: graphics.len(),
 			graphics_ptr: graphics.as_ptr()
 		}
-	}
-	
-	pub fn score(&self) -> i32 {
-		return self.score;
 	}
 	
 	// returns the number of bricks broken since the last check
@@ -162,35 +160,8 @@ impl Game {
 		return bb;
 	}
 	
-	// returns the maximum possible score for the song
-	pub fn max_score(&self) -> i32 {
-		let mut max = 0;
-		for _ in self.song.notes.iter() {
-			max += 100;
-		}
-		return max;
-	}
-	
-	pub fn bpm(&self) -> f32 {
-		return self.song.bpm as f32;
-	}
-	
-	// returns the time in seconds of 1 beat
-	pub fn beat_interval(&self) -> f32 {
-		let secs_per_beat = 60.0 / self.song.bpm as f32;
-		return secs_per_beat;
-	}
-	
-	pub fn brick_speed(&self) -> f32 {
-		return self.song.brick_speed;
-	}
-	
-	pub fn song_time(&self) -> f32 {
-		return self.time_running;
-	}
-	
-	pub fn song_duration(&self) -> f32 {
-		return self.song.duration;
+	pub fn game_data(&self) -> GameData {
+		return self.song.game_data;
 	}
 	
 	// !!! THIS NEEDS TO BE RELIABLE, OR ELSE USER CREATED SONG DATA MAY BE LOST
@@ -215,16 +186,16 @@ impl Game {
 	pub fn input_command (&mut self, input: Input) {
 		match input {
 			Input::Dash => {
-				self.player.input_dash(self.time_running);
+				self.player.input_dash(self.song.game_data.time_running);
 			},
 			Input::Slash1 => {
-				self.player.input_slash(BrickType::Type1, self.time_running);
+				self.player.input_slash(BrickType::Type1, self.song.game_data.time_running);
 			},
 			Input::Slash2 => {
-				self.player.input_slash(BrickType::Type2, self.time_running);
+				self.player.input_slash(BrickType::Type2, self.song.game_data.time_running);
 			},
 			Input::Slash3 => {
-				self.player.input_slash(BrickType::Type3, self.time_running);
+				self.player.input_slash(BrickType::Type3, self.song.game_data.time_running);
 			}
 		}
 	}
@@ -243,7 +214,7 @@ impl Game {
 	// TODO separate toggling/rotating through brick types and strictly adding bricks
 	// toggles a brick at the position and time specified. If a brick is already there it will toggle the note of the brick
 	pub fn toggle_brick (&mut self, bt: BrickType, time: f32, pos: u8) {
-		if time > self.song.duration {
+		if time > self.song.game_data.duration {
 			return;
 		}
 		
@@ -286,6 +257,8 @@ impl Game {
 			Some(note) => self.upcoming_note = Some(*note),
 			None => self.upcoming_note = None
 		}
+		
+		self.song.game_data.max_score = 100 * self.song.notes.len() as i32;
 	}
 	
 	// add any bricks from song that have reached the time to appear
@@ -293,7 +266,7 @@ impl Game {
 	fn add_upcoming_notes(&mut self) {
 		if let Some(upcoming_note) = &self.upcoming_note {
 			// time that notes should be played plus a buffer time where they travel up the screen
-			let appearance_buffer = self.time_running + GAME_HEIGHT as f32 / self.song.brick_speed;
+			let appearance_buffer = self.song.game_data.time_running + GAME_HEIGHT as f32 / self.song.game_data.brick_speed;
 			if upcoming_note.time < appearance_buffer {
 				
 				let upcoming_notes = self.song.notes.range(*upcoming_note..); // !!! range bounds with a float possible?
@@ -311,7 +284,7 @@ impl Game {
 						upcoming_note.x,
 						GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32,
 						upcoming_note.time );
-					brick.tick(self.song.brick_speed, time_difference);
+					brick.tick(self.song.game_data.brick_speed, time_difference);
 					self.bricks.push_back(brick);
 				}
 				
@@ -324,12 +297,12 @@ impl Game {
 	// seeks (changes the song time) to the time specified. resets song
 		// !!! resetting song uses duplicate code from add_upcoming_notes
 	pub fn seek(&mut self, time: f32) {
-		self.time_running = time;
+		self.song.game_data.time_running = time;
 		self.bricks = VecDeque::new();
-		self.score = 0;
+		self.song.game_data.score = 0;
 		
-		let min_time = time - (GROUND_POS / self.song.brick_speed);
-		let appearance_buffer = time + GAME_HEIGHT as f32 / self.song.brick_speed;
+		let min_time = time - (GROUND_POS / self.song.game_data.brick_speed);
+		let appearance_buffer = time + GAME_HEIGHT as f32 / self.song.game_data.brick_speed;
 		
 		for note in self.song.notes.iter() {
 			if note.time > min_time {
@@ -345,7 +318,7 @@ impl Game {
 					note.x,
 					GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32,
 					note.time);
-				brick.tick(self.song.brick_speed, time_difference);
+				brick.tick(self.song.game_data.brick_speed, time_difference);
 				self.bricks.push_back(brick);
 			}
 		}
@@ -354,6 +327,7 @@ impl Game {
 	}
 }
 
+// >:< move to lib
 #[wasm_bindgen]
 pub fn game_dimensions() -> Position {
 	Position {

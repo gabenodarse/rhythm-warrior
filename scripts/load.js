@@ -22,6 +22,7 @@ MMDatabase.prototype.loadSong = function(songID){
 }
 
 // !!! error handling on save and overwrite. Don't want to lose data
+	// check song data fields validity and for existence of bricks
 MMDatabase.prototype.saveSong = function(songData, notes){
 	let {name, artist, difficulty, bpm, brickSpeed, duration, startOffset, filename} = songData;
 	let now = new Date().getTime();

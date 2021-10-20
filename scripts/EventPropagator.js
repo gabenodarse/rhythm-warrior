@@ -104,7 +104,7 @@ EventPropagator.prototype.enableEditor = function(){
 		
 		this.game = this.game.toEditor();
 		
-		this.overlay.updateSongData(this.game.songData());
+		this.overlay.updateSongData(this.game.getSongData());
 		
 		this.loop = () => this.editorLoop();
 		this.isEditor = true;
@@ -118,7 +118,7 @@ EventPropagator.prototype.disableEditor = function(){
 		
 		this.game = this.game.toGame();
 		
-		this.overlay.updateSongData(this.game.songData());
+		this.overlay.updateSongData(this.game.getSongData());
 		
 		this.loop = () => this.gameLoop();
 		this.isEditor = false;
@@ -132,7 +132,7 @@ EventPropagator.prototype.runOnGame = function(functionToRun, updateEditor){
 	
 	this.game.renderGame();
 	if(updateEditor === true) {
-		this.overlay.updateSongData(this.game.songData());
+		this.overlay.updateSongData(this.game.getSongData());
 	}
 	
 	return ret;
@@ -175,7 +175,13 @@ EventPropagator.prototype.gameLoop = function(){
 		this.stopLoop();
 	} else {
 		this.game.tick();
-		this.overlay.updateScore(this.game.score());
+		let songData = this.game.getSongData();
+		this.overlay.updateScore(songData.gameData.score);
+		
+		if(songData.gameData.time_running > 60){
+			this.overlay.showElement("endGameScreen");
+			this.stopLoop();
+		}
 		requestAnimationFrame(this.loop);
 	}
 }
@@ -185,7 +191,7 @@ EventPropagator.prototype.editorLoop = function(){
 		this.stopLoop();
 	} else {
 		this.game.tick();
-		this.overlay.updateSongData(this.game.songData());
+		this.overlay.updateSongData(this.game.getSongData());
 		requestAnimationFrame(this.loop);
 	}
 }
@@ -203,13 +209,13 @@ EventPropagator.prototype.stopLoop = function(){
 	this.isRunning = false;
 	this.stopFlag = false;
 	
-	// !!! handle game key states on both pause/unpause (as of now fires key up events on pause)
-	for(const key in this.controls) {
-		let evt = new KeyboardEvent("keyup", {
-			keyCode: key,
-		});
-		this.handleKeyUp(evt);
-	}
+	// !!! handle game key states on both pause/unpause (artificial key up / key down events?)
+	// for(const key in this.controls) {
+		// let evt = new KeyboardEvent("keyup", {
+			// keyCode: key,
+		// });
+		// this.handleKeyUp(evt);
+	// }
 	
 	this.game.pause();
 }

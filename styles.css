@@ -35,7 +35,6 @@ canvas{
 	left: 0;
 	height: 100vh;
 	width: 100vw;
-	font-size: 3rem;
 	zIndex: 100;
 	background-color: #5577ff;
 	user-select: none;
@@ -43,7 +42,7 @@ canvas{
 
 .homescreen h1{
 	margin: 0 auto;
-	font-size: 2em;
+	font-size: 6rem;
 }
 
 .home-selection{
@@ -59,10 +58,32 @@ canvas{
 
 .home-selection p{
 	margin: 4px 0 0 0;
+	font-size: 1.2em;
 }
 
 .highlighted-home-selection{
 	outline: 4px solid cyan;
+}
+
+.end-game-screen{
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 100vh;
+	width: 100vw;
+	font-size: 3rem;
+	zIndex: 100;
+	background-color: #5577ff;
+	user-select: none;
+}
+
+.end-game-screen p{
+	margin: 16px 0 0 0;
+	font-size: 2rem;
+}
+
+.end-game-screen-text-div{
+	background-color: #9999ff;
 }
 
 .editor-overlay{

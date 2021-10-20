@@ -21,7 +21,7 @@ export async function run(){
 	
 	// !!! order kinda janky because keys have to be set before overlay creation
 		// and overlay creation needs to happen before propagator init
-	overlay = new Overlay(game.songData(), propagator, controls);
+	overlay = new Overlay(game.getSongData(), propagator, controls);
 	propagator.init(game, overlay, controls);
 	
 	overlay.showElement("homeScreen");

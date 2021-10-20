@@ -17,26 +17,24 @@ export function Overlay(songData, eventPropagator, controlsMap){
 	this.menu;
 	this.editorOverlay;
 	this.homeScreen;
+	this.endGameScreen;
 	
-	let overlayDiv = document.createElement("div");
-	let score = new Score();
-	let menu = new Menu(eventPropagator, controlsMap);
-	let editorOverlay = new EditorOverlay(songData, eventPropagator);
-	let homeScreen = new HomeScreen(eventPropagator);
+	this.overlayDiv = document.createElement("div");
+	this.homeScreen = new HomeScreen(eventPropagator);
+	this.endGameScreen = new EndGameScreen(eventPropagator);
+	this.score = new Score();
+	this.menu = new Menu(eventPropagator, controlsMap);
+	this.editorOverlay = new EditorOverlay(songData, eventPropagator);
 	
-	overlayDiv.className = "overlay";
+	this.overlayDiv.className = "overlay";
 	
-	overlayDiv.appendChild(score.domElement());
-	overlayDiv.appendChild(menu.domElement());
-	overlayDiv.appendChild(editorOverlay.domElement());
-	overlayDiv.appendChild(homeScreen.domElement());
-	document.body.appendChild(overlayDiv);
+	this.overlayDiv.appendChild(this.score.domElement());
+	this.overlayDiv.appendChild(this.menu.domElement());
+	this.overlayDiv.appendChild(this.editorOverlay.domElement());
+	this.overlayDiv.appendChild(this.homeScreen.domElement());
+	this.overlayDiv.appendChild(this.endGameScreen.domElement());
+	document.body.appendChild(this.overlayDiv);
 	
-	this.overlayDiv = overlayDiv;
-	this.homeScreen = homeScreen;
-	this.score = score;
-	this.menu = menu;
-	this.editorOverlay = editorOverlay;
 }
 
 // class for the homescreen which holds song selections
@@ -88,6 +86,34 @@ function HomeSelection(id, name, artist, difficulty, duration){
 	this.div.appendChild(this.infoField);
 }
 
+// class for the homescreen which holds song selections
+function EndGameScreen(eventPropagator){
+	this.endScreenDiv;
+	this.eventPropagator;
+	this.textDiv;
+	this.textElement1;
+	this.textElement2;
+	this.scoreTextElement;
+	
+	this.endScreenDiv = document.createElement("div");
+	this.endScreenDiv.className = "end-game-screen";
+	this.endScreenDiv.style.display = "none";
+	
+	this.textDiv = document.createElement("div");
+	this.textDiv.className = "end-game-screen-text-div";
+	
+	this.textElement1 = document.createElement("p");
+	this.textElement2 = document.createElement("p");
+	this.scoreTextElement = document.createElement("p");
+	
+	this.textDiv.appendChild(this.textElement1);
+	this.textDiv.appendChild(this.textElement2);
+	this.textDiv.appendChild(this.scoreTextElement);
+	this.endScreenDiv.appendChild(this.textDiv);
+	
+	this.eventPropagator = eventPropagator;
+}
+
 // EditorOverlay class, contains the editor's guiding lines and the editor's controls
 function EditorOverlay(songData, eventPropagator){
 	this.div;
@@ -125,8 +151,8 @@ function EditorGuidingLines(songData, eventPropagator){
 	this.canvas.width = dims.x;
 	this.canvas.height = dims.y;
 	
-	this.beatInterval = songData.beatInterval;
-	this.beatPixelInterval = this.beatInterval * songData.brickSpeed;
+	this.beatInterval = songData.gameData.beat_interval;
+	this.beatPixelInterval = this.beatInterval * songData.gameData.brick_speed;
 	
 	this.onclick = evt => {
 		let x = evt.clientX - this.canvas.offsetLeft;
@@ -138,7 +164,7 @@ function EditorGuidingLines(songData, eventPropagator){
 	this.onwheel = evt => {
 		let time;
 		let getTime = game => {
-			return game.songData().songTime;
+			return game.getSongData().songTime;
 		}
 		let updateTime = game => {
 			game.seek(time);
@@ -165,8 +191,8 @@ function EditorControls(songData, eventPropagator){
 	this.songDuration;
 	this.beatInterval;
 	
-	this.songDuration = songData.duration;
-	this.beatInterval = songData.beatInterval;
+	this.songDuration = songData.gameData.duration;
+	this.beatInterval = songData.gameData.beat_interval;
 	
 	this.div = document.createElement("div");
 	this.div.className = "editor-controls";
@@ -571,6 +597,25 @@ HomeSelection.prototype.getSongID = function(){
 	return this.songID;
 }
 
+EndGameScreen.prototype.show = function(){
+	let songData = this.eventPropagator.runOnGame( game => {
+		return game.getSongData();
+	});
+	this.textElement1.innerHTML = songData.name + " - " + songData.artist;
+	this.textElement2.innerHTML = "Difficulty: "+ songData.difficulty + " --- time: " + songData.duration;
+	this.scoreTextElement.innerHTML = "Score: " + songData.gameData.score + " / " + songData.gameData.max_score;
+	
+	this.endScreenDiv.style.display = "block";
+}
+
+EndGameScreen.prototype.hide = function(){
+	this.endScreenDiv.style.display = "none";
+}
+
+EndGameScreen.prototype.domElement = function(){
+	return this.endScreenDiv;
+}
+
 EditorOverlay.prototype.show = function(){
 	this.div.style.display = "block";
 }
@@ -598,9 +643,9 @@ EditorGuidingLines.prototype.domElement = function(){
 	// However, if the game height is not the full screen height, lines would show outside the game's boundaries
 	// !!! range scroller isn't modified when the song is modified
 EditorGuidingLines.prototype.updateSongData = function(songData){
-	let time = songData.songTime;
-	let beatInterval = songData.beatInterval;
-	let beatPixelInterval = beatInterval * songData.brickSpeed;
+	let time = songData.gameData.time_running;
+	let beatInterval = songData.gameData.beat_interval;
+	let beatPixelInterval = beatInterval * songData.gameData.brick_speed;
 	
 	if(time < 0){
 		console.log("can't update to a negative time");
@@ -645,7 +690,7 @@ EditorControls.prototype.domElement = function(){
 }
 
 EditorControls.prototype.updateSongData = function(songData){
-	let time = songData.songTime;
+	let time = songData.gameData.time_running;
 	let prevT = parseFloat(this.broadRange.value) / 100 * this.songDuration 
 		+ parseFloat(this.preciseRange.value) * this.beatInterval;
 	if(time - prevT > 0.5 || prevT - time > 0.5){
@@ -845,11 +890,11 @@ function changeControlDialog(controlsMap, controlsMenu, inputID){
 function newSongDialog(eventPropagator){
 	
 	let songData = eventPropagator.runOnGame( game => {
-		return game.songData();
+		return game.getSongData();
 	})
-	let bpm = songData.bpm;
+	let bpm = songData.gameData.bpm;
 	let songStartOffset = songData.startOffset;
-	let brickSpeed = songData.brickSpeed;
+	let brickSpeed = songData.gameData.brickSpeed;
 	let duration = songData.duration;
 	
 	eventPropagator.runOnGame( game => {
@@ -892,7 +937,7 @@ function saveSongDialog(eventPropagator){
 	filenameLabel.innerHTML = "Song file name";
 	
 	let songData = eventPropagator.runOnGame(game => {
-		return game.songData();
+		return game.getSongData();
 	});
 	
 	nameField.type = "text";
@@ -902,9 +947,9 @@ function saveSongDialog(eventPropagator){
 	difficultyField.type = "text";
 	difficultyField.defaultValue = songData.difficulty;
 	bpmField.type = "text";
-	bpmField.defaultValue = songData.bpm;
+	bpmField.defaultValue = songData.gameData.bpm;
 	brickSpeedField.type = "text";
-	brickSpeedField.defaultValue = songData.brickSpeed;
+	brickSpeedField.defaultValue = songData.gameData.brick_speed;
 	durationField.type = "text";
 	durationField.defaultValue = songData.duration;
 	startOffsetField.type = "text";

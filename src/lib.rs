@@ -58,12 +58,22 @@ const FRAME_TIME: f32 = 0.015;
 
 const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -F32_ZERO and +F32_ZERO is essentially 0
 
+#[wasm_bindgen]
+#[derive(Clone, Copy)]
+pub struct GameData {
+	pub bpm: f32,
+	pub beat_interval: f32, // time in seconds of 1 beat
+	// !!! better location for brick speed? (inside brick struct so it isn't passed for every single brick? limitations?)
+	pub brick_speed: f32,
+	pub time_running: f32,
+	pub score: i32,
+	pub max_score: i32,
+	pub duration: f32,
+}
+
 struct Song {
 	notes: BTreeSet<UpcomingNote>,
-	bpm: u32,
-	// !!! better location for brick speed? (inside brick struct so it isn't passed for every single brick? limitations?)
-	brick_speed: f32,
-	duration: f32,
+	game_data: GameData
 }
 
 #[derive(Clone, Copy)]
@@ -71,35 +81,6 @@ pub struct UpcomingNote {
 	note_type: BrickType,
 	x: f32,
 	time: f32, // time the note is meant to be played
-}
-
-impl PartialEq for UpcomingNote {
-	fn eq(&self, other: &UpcomingNote) -> bool {
-		self.note_type == other.note_type
-		&& self.x == other.x
-		&& self.time - other.time < F32_ZERO
-		&& other.time - self.time < F32_ZERO
-	}
-}
-impl Eq for UpcomingNote {}
-
-impl PartialOrd for UpcomingNote {
-	fn partial_cmp(&self, other: &UpcomingNote) -> Option<Ordering> {
-		Some(self.cmp(other))
-	}
-}
-
-impl Ord for UpcomingNote {
-	fn cmp(&self, other: &UpcomingNote) -> Ordering {
-		if other.time - self.time > F32_ZERO      { Ordering::Less }
-		else if self.time - other.time > F32_ZERO { Ordering::Greater }
-		// arbitrary comparisons so that notes of the same time can exist within the same set
-		else if (self.note_type as u8) < (other.note_type as u8) { Ordering::Less }
-		else if (self.note_type as u8) > (other.note_type as u8) { Ordering::Greater }
-		else if self.x < other.x { Ordering::Less }
-		else if self.x > other.x { Ordering::Greater }
-		else { Ordering::Equal }
-	}
 }
 
 #[wasm_bindgen]
@@ -185,6 +166,37 @@ fn note_pos_from_x(x: f32) -> u8 {
 #[wasm_bindgen]
 pub fn num_possible_inputs() -> usize {
 	return Input::num_variants();
+}
+
+// --- trait implementations ---
+
+impl PartialEq for UpcomingNote {
+	fn eq(&self, other: &UpcomingNote) -> bool {
+		self.note_type == other.note_type
+		&& self.x == other.x
+		&& self.time - other.time < F32_ZERO
+		&& other.time - self.time < F32_ZERO
+	}
+}
+impl Eq for UpcomingNote {}
+
+impl PartialOrd for UpcomingNote {
+	fn partial_cmp(&self, other: &UpcomingNote) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for UpcomingNote {
+	fn cmp(&self, other: &UpcomingNote) -> Ordering {
+		if other.time - self.time > F32_ZERO      { Ordering::Less }
+		else if self.time - other.time > F32_ZERO { Ordering::Greater }
+		// arbitrary comparisons so that notes of the same time can exist within the same set
+		else if (self.note_type as u8) < (other.note_type as u8) { Ordering::Less }
+		else if (self.note_type as u8) > (other.note_type as u8) { Ordering::Greater }
+		else if self.x < other.x { Ordering::Less }
+		else if self.x > other.x { Ordering::Greater }
+		else { Ordering::Equal }
+	}
 }
 
 // !!! logging
