@@ -5,22 +5,22 @@ use crate::LEFT_BOUNDARY;
 use crate::RIGHT_BOUNDARY;
 
 pub const MAX_NOTES_PER_SCREEN_WIDTH: u8 = 32;
-pub const PLAYER_WIDTH: u32 = 50;
-pub const PLAYER_HEIGHT: u32 = 100; 
-pub const BRICK_WIDTH: u32 = (RIGHT_BOUNDARY - LEFT_BOUNDARY) as u32 / MAX_NOTES_PER_SCREEN_WIDTH as u32;
-pub const BRICK_HEIGHT: u32 = 100;
-pub const SLASH_WIDTH: u32 = 60;
-pub const SLASH_HEIGHT: u32 = PLAYER_HEIGHT * 9 / 10;
-pub const DASH_WIDTH: u32 = BRICK_WIDTH * 3; // >:< remove as constant
-pub const MIN_DASH_WIDTH: u32 = 50;
-pub const DASH_HEIGHT: u32 = SLASH_HEIGHT;
+pub const PLAYER_WIDTH: i32 = 50;
+pub const PLAYER_HEIGHT: i32 = 100; 
+pub const BRICK_WIDTH: i32 = (RIGHT_BOUNDARY - LEFT_BOUNDARY) as i32 / MAX_NOTES_PER_SCREEN_WIDTH as i32;
+pub const BRICK_HEIGHT: i32 = 100;
+pub const SLASH_WIDTH: i32 = 60;
+pub const SLASH_HEIGHT: i32 = PLAYER_HEIGHT * 9 / 10;
+pub const DASH_WIDTH: i32 = BRICK_WIDTH * 3; // >:< remove as constant
+pub const MIN_DASH_WIDTH: i32 = 50;
+pub const DASH_HEIGHT: i32 = SLASH_HEIGHT;
 pub const DASH_CD: f32 = 0.12;
 pub const NUM_MOVEMENT_FRAMES: u8 = 23;
 pub const BRICK_DATA_BUFFER_SIZE: usize = 4;
 
 
 pub trait Object {
-	fn bounds (&self) -> ObjectBounds; // TODO copying the full object bounds may be extra work in some instances
+	fn bounds (&self) -> ObjectBounds;
 }
 
 // storing all bounds rather than pos+size because more comparisons between objects are possible than updates of positions

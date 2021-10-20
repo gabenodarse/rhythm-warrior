@@ -33,8 +33,10 @@ use crate::objects::SLASH_WIDTH;
 const PRE_SLASH_TIME: f32 = 0.06; // delay dash/slash by a tiny amount so they can be pressed at the same time
 const SLASH_TIME: f32 = 0.1;
 const DASH_LINGER_TIME: f32 = 0.3; // how long the dash graphic lingers
-const BOOST_LINGER_TIME: f32 = 0.2;
-const BOOST_PRELINGER_TIME: f32 = 0.04;
+const BOOST_LINGER_TIME: f32 = 0.3;
+const BOOST_PRELINGER_TIME: f32 = 1.2;
+const MAX_BOOST_DISTANCE: f32 = 4.0 * PLAYER_WIDTH as f32;
+const BOOST_GRAPHIC_OFFSET: f32 = PLAYER_WIDTH as f32 / 2.0; // how close the boost graphics are to one another
 
 pub struct Player {
 	graphic_group: GraphicGroup,
@@ -153,23 +155,37 @@ impl Player {
 	fn boost(&mut self, time_running: f32) {
 		let target = if let Some(t) = &self.target { t } else { return; };
 		
-		let pos_difference = target.pos - self.bounds.left_x;
 		// if within range where boost is reasonable, then boost
-		if pos_difference < 4.0 * PLAYER_WIDTH as f32 && pos_difference > 0.0 {
-			self.lingering_graphics.push( LingeringGraphic {
-				positioned_graphic: self.rendering_instruction(),
-				start_t: time_running - BOOST_PRELINGER_TIME,
-				end_t: time_running + BOOST_LINGER_TIME
-			});
+		let pos_difference = target.pos - self.bounds.left_x;
+		if pos_difference < MAX_BOOST_DISTANCE && pos_difference > 0.0 {
+			let mut remaining_pos_difference = pos_difference;
+			let mut rendering_instruction = self.rendering_instruction();
+			while remaining_pos_difference > 0.0 {				
+				self.lingering_graphics.push( LingeringGraphic {
+					positioned_graphic: rendering_instruction.clone(),
+					start_t: time_running - BOOST_PRELINGER_TIME,
+					end_t: time_running + BOOST_LINGER_TIME
+				});
+				remaining_pos_difference -= BOOST_GRAPHIC_OFFSET;
+				rendering_instruction.x += BOOST_GRAPHIC_OFFSET;
+			}
+			
 			self.bounds.left_x = target.pos;
 			self.bounds.right_x = target.pos + PLAYER_WIDTH as f32;
 			self.hit_dir = target.hit_dir;
-		} else if pos_difference > -4.0 * PLAYER_WIDTH as f32 && pos_difference < 0.0 {
-			self.lingering_graphics.push( LingeringGraphic {
-				positioned_graphic: self.rendering_instruction(),
-				start_t: time_running - BOOST_PRELINGER_TIME,
-				end_t: time_running + BOOST_LINGER_TIME
-			});
+		} else if pos_difference > -MAX_BOOST_DISTANCE && pos_difference < 0.0 {
+			let mut remaining_pos_difference = -pos_difference;
+			let mut rendering_instruction = self.rendering_instruction();
+			while remaining_pos_difference > 0.0 {				
+				self.lingering_graphics.push( LingeringGraphic {
+					positioned_graphic: rendering_instruction.clone(),
+					start_t: time_running - BOOST_PRELINGER_TIME,
+					end_t: time_running + BOOST_LINGER_TIME
+				});
+				remaining_pos_difference -= BOOST_GRAPHIC_OFFSET;
+				rendering_instruction.x += BOOST_GRAPHIC_OFFSET;
+			}
+			
 			self.bounds.left_x = target.pos;
 			self.bounds.right_x = target.pos + PLAYER_WIDTH as f32;
 			self.hit_dir = target.hit_dir;

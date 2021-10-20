@@ -47,8 +47,8 @@ use macros::EnumVariantCount;
 use resources::GraphicGroup;
 use objects::BrickType;
 
-const GAME_WIDTH: u32 = 1920;
-const GAME_HEIGHT: u32 = 1080;
+const GAME_WIDTH: i32 = 1920;
+const GAME_HEIGHT: i32 = 1080;
 const LEFT_BOUNDARY: f32 = 0.0;
 const RIGHT_BOUNDARY: f32 = LEFT_BOUNDARY + GAME_WIDTH as f32;
 const TOP_BOUNDARY: f32 = 0.0;
@@ -144,7 +144,7 @@ fn note_pos_to_x(pos: u8) -> f32 {
 			false => pos
 		};
 		
-		return (objects::BRICK_WIDTH * pos as u32) as f32;
+		return (objects::BRICK_WIDTH * pos as i32) as f32;
 	}
 	
 // converts a note x to a note pos (discrete integer)
