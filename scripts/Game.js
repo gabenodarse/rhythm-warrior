@@ -20,6 +20,7 @@ export function Game () {
 	this.isLoaded = false;
 	
 	this.audioContext = new AudioContext();
+	this.popAudioBuffer;
 	this.audioSource;
 	this.audioBuffer;
 	this.audioTimeSafetyBuffer = 0.15;
@@ -40,11 +41,20 @@ Game.prototype.init = async function () {
 	
 	let loader = new load.Loader();
 	
-	// TODO add error handling
+	// initialize loader and load graphics
 	await loader.init()
 		.then( () => loader.loadGraphics("canvases", this.screenDiv)) // >:< canvases or webGL. Make just webGL
-		.then( res => this.graphics = res );
+		.then( res => this.graphics = res )
+		.catch( rej => { throw Error("Error initializing loader / loading assets: " + rej ) });
 		
+	// load sounds (not songs)
+		// !!! once there are more sound effects move to loader
+	await fetch("./assets/sounds/pop.wav")
+		.then(res => res.arrayBuffer())
+		.then(res => this.audioContext.decodeAudioData(res))
+		.then(res => this.popAudioBuffer = res)
+		.catch(rej => { throw Error("Error loading audio: " + rej) });
+
 	// !!! can happen same time as graphics are loading
 	this.database = await loader.loadDatabase();
 	
@@ -105,7 +115,8 @@ Game.prototype.start = async function (callback) {
 	
 	let switchTime = this.audioContext.currentTime + this.audioTimeSafetyBuffer;
 	this.audioSource.start(switchTime, this.gameObject.game_data().time_running + this.songData.startOffset); 
-	this.lastTick = new Date().getTime() + this.audioTimeSafetyBuffer * 1000; // set the last tick time to after the buffer
+	// set the last tick time to when the moment the game is set to restart
+	this.lastTick = new Date().getTime() + this.audioTimeSafetyBuffer * 1000; 
 	
 	// timeout to prevent negative ticks
 	setTimeout( () => {
@@ -133,6 +144,16 @@ Game.prototype.tick = function(){
 	
 	this.gameObject.tick(timePassed); 
 	this.songData.gameData = this.gameObject.game_data();
+	
+	let bricks_broken = this.gameObject.bricks_broken();
+	if(bricks_broken > 0){
+		// "An AudioBufferSourceNode can only be played once; after each call to start(),
+			// you have to create a new node if you want to play the same sound again ...
+			// you can use these nodes in a "fire and forget" manner" - MDN
+		let audioSource = new AudioBufferSourceNode(this.audioContext, {buffer: this.popAudioBuffer}); 
+		audioSource.connect(this.audioContext.destination);
+		audioSource.start();
+	}
 	
 	this.renderGame();
 }

@@ -175,13 +175,16 @@ EventPropagator.prototype.gameLoop = function(){
 		this.stopLoop();
 	} else {
 		this.game.tick();
+		
 		let songData = this.game.getSongData();
+		
 		this.overlay.updateScore(songData.gameData.score);
 		
 		if(songData.gameData.time_running > 60){
 			this.overlay.showElement("endGameScreen");
 			this.stopLoop();
 		}
+		
 		requestAnimationFrame(this.loop);
 	}
 }

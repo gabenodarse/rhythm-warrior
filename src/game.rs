@@ -40,7 +40,7 @@ impl Game {
 					brick_speed,
 					time_running: 0.0,
 					score: 0,
-					max_score: 0, // >:< 
+					max_score: 0,
 					duration,
 				}
 			},
