@@ -94,6 +94,7 @@ function EndGameScreen(eventPropagator){
 	this.textElement1;
 	this.textElement2;
 	this.scoreTextElement;
+	this.exitTextElement;
 	
 	this.endScreenDiv = document.createElement("div");
 	this.endScreenDiv.className = "end-game-screen";
@@ -105,10 +106,14 @@ function EndGameScreen(eventPropagator){
 	this.textElement1 = document.createElement("p");
 	this.textElement2 = document.createElement("p");
 	this.scoreTextElement = document.createElement("p");
+	this.exitTextElement = document.createElement("p");
+	
+	this.exitTextElement.innerHTML = "Enter to move on";
 	
 	this.textDiv.appendChild(this.textElement1);
 	this.textDiv.appendChild(this.textElement2);
 	this.textDiv.appendChild(this.scoreTextElement);
+	this.textDiv.appendChild(this.exitTextElement);
 	this.endScreenDiv.appendChild(this.textDiv);
 	
 	this.eventPropagator = eventPropagator;
@@ -597,6 +602,10 @@ HomeSelection.prototype.getSongID = function(){
 	return this.songID;
 }
 
+EndGameScreen.prototype.domElement = function(){
+	return this.endScreenDiv;
+}
+
 EndGameScreen.prototype.show = function(){
 	let songData = this.eventPropagator.runOnGame( game => {
 		return game.getSongData();
@@ -612,8 +621,10 @@ EndGameScreen.prototype.hide = function(){
 	this.endScreenDiv.style.display = "none";
 }
 
-EndGameScreen.prototype.domElement = function(){
-	return this.endScreenDiv;
+EndGameScreen.prototype.handleEvent = function(evt){
+	if(evt.keyCode == 13){ // enter
+		this.eventPropagator.exitToHomeScreen();
+	}
 }
 
 EditorOverlay.prototype.show = function(){

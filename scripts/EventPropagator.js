@@ -95,6 +95,7 @@ EventPropagator.prototype.exitToHomeScreen = function(){
 	this.overlay.hideElement("menu");
 	this.overlay.hideElement("score");
 	this.overlay.hideElement("editorOverlay");
+	this.overlay.hideElement("endGameScreen");
 	this.overlay.showElement("homeScreen");
 }
 
@@ -177,7 +178,9 @@ EventPropagator.prototype.handleKeyDown = function(evt){
 		}
 	} else if(this.overlay.isElementShowing("homeScreen")){
 		this.overlay.passEvent("homeScreen", evt);
-	} 
+	} else if(this.overlay.isElementShowing("endGameScreen")){
+		this.overlay.passEvent("endGameScreen", evt);
+	}
 	
 
 }
