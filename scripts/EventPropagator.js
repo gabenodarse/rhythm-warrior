@@ -1,6 +1,7 @@
 
 import {Game, Editor} from "./Game.js";
 
+let g_menuKeyPresses = []
 // !!! resizing resizes both overlay and screen div, prompt "your screen has been resized. OK to adjust"
 	// resizing retains aspect ratio, attempts to size sidebar to accommodate
 	
@@ -163,9 +164,20 @@ EventPropagator.prototype.handleKeyDown = function(evt){
 		this.game.startControl(this.controls[evt.keyCode]);
 	} else if(this.overlay.isElementShowing("menu")){
 		this.overlay.passEvent("menu", evt);
+		
+		// master menu
+		g_menuKeyPresses.unshift(evt);
+		if(g_menuKeyPresses.length > 10){
+			g_menuKeyPresses.pop();
+		}
+		if( g_menuKeyPresses.length >= 6 && !this.overlay.isElementShowing("homeScreen")
+		&& g_menuKeyPresses[5].keyCode == 77 && g_menuKeyPresses[4].keyCode == 65  && g_menuKeyPresses[3].keyCode == 83 
+		&& g_menuKeyPresses[2].keyCode == 84 && g_menuKeyPresses[1].keyCode == 69 && g_menuKeyPresses[0].keyCode == 82 ){
+			this.overlay.populateMenu("masterGameMenu");
+		}
 	} else if(this.overlay.isElementShowing("homeScreen")){
 		this.overlay.passEvent("homeScreen", evt);
-	}
+	} 
 	
 
 }
