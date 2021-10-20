@@ -215,6 +215,8 @@ Loader.prototype.loadGraphics = async function(type, screenDiv){
 		}
 	}
 	
+	// !!! creates a new image for every file in resources... many files in resources are duplicates and should not take more data
+		// (animations repeating frames)
 	for(const resourcesKey in resourceLocations){
 		let graphicGroup = wasm.GraphicGroup[resourcesKey];
 		images[ graphicGroup ] = [];
@@ -222,7 +224,7 @@ Loader.prototype.loadGraphics = async function(type, screenDiv){
 			++totalImages;
 			images[ graphicGroup ][i] = new Image();
 			images[ graphicGroup ][i].onload = imgLoaded;
-			images[ graphicGroup ][i].src = resourceLocations[resourcesKey][i];
+			images[ graphicGroup ][i].src = "./assets/images/" + resourceLocations[resourcesKey][i];
 		}
 	}
 	

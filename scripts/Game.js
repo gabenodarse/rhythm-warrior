@@ -42,6 +42,7 @@ Game.prototype.init = async function () {
 	let loader = new load.Loader();
 	
 	// initialize loader and load graphics
+	// TODO error handling when it takes too long
 	await loader.init()
 		.then( () => loader.loadGraphics("canvases", this.screenDiv)) // >:< canvases or webGL. Make just webGL
 		.then( res => this.graphics = res )
@@ -49,6 +50,7 @@ Game.prototype.init = async function () {
 		
 	// load sounds (not songs)
 		// !!! once there are more sound effects move to loader
+		// TODO error handling when it takes too long
 	await fetch("./assets/sounds/pop.wav")
 		.then(res => res.arrayBuffer())
 		.then(res => this.audioContext.decodeAudioData(res))
