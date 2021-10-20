@@ -54,7 +54,7 @@ const RIGHT_BOUNDARY: f32 = LEFT_BOUNDARY + GAME_WIDTH as f32;
 const TOP_BOUNDARY: f32 = 0.0;
 const GROUND_POS: f32 = TOP_BOUNDARY + 240.0; // !!! associate with the graphic for the ground
 const MAX_TIME_BETWEEN_TICKS: f32 = 0.025;
-const FRAME_TIME: f32 = 0.015;
+const FRAME_TIME: f32 = 0.00833; // 60 fps
 
 const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -F32_ZERO and +F32_ZERO is essentially 0
 
@@ -156,6 +156,10 @@ fn note_pos_from_x(x: f32) -> u8 {
 	};
 	
 	return pos;
+}
+
+fn frame_number(time_since_start: f32) -> u8 {
+	return ((time_since_start / FRAME_TIME) % 256.0) as u8;
 }
 
 #[wasm_bindgen]

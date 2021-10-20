@@ -4,6 +4,7 @@ use std::collections::vec_deque;
 use std::collections::btree_set::BTreeSet;
 
 use crate::log;
+use crate::frame_number;
 
 use crate::PositionedGraphic;
 use crate::resources::GraphicGroup;
@@ -19,7 +20,6 @@ use crate::objects::HitBox;
 
 use crate::brick::Brick;
 
-use crate::FRAME_TIME;
 use crate::GROUND_POS;
 use crate::GAME_WIDTH;
 use crate::F32_ZERO;
@@ -61,7 +61,7 @@ enum PlayerState {
 	PreSlash(f32), // init time of slash/dash, to insert short delay before becoming active
 	PreDash(f32),
 	PreSlashDash(f32),
-	Slash(f32), // init time so there can be a delay before becoming inactive
+	Slash(f32), // init time. so there can be a delay before becoming inactive and for animation frame calculation
 	Dash(f32),
 	SlashDash(f32),
 	PostSlash(f32),
@@ -480,7 +480,7 @@ impl Player {
 		match self.state {
 			PlayerState::Running => {
 				graphic_group = GraphicGroup::Running;
-				frame = ((time_running / FRAME_TIME) % 256.0) as u8;
+				frame = frame_number(time_running);
 			},
 			PlayerState::Slash(t) | PlayerState::SlashDash(t) | PlayerState::PostSlash(t) => {
 				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
@@ -489,7 +489,7 @@ impl Player {
 					BrickType::Type2 => GraphicGroup::Slashing2,
 					BrickType::Type3 => GraphicGroup::Slashing3
 				};
-				frame = (((time_running - t) / FRAME_TIME) % 256.0) as u8;
+				frame = frame_number(time_running - t);
 				match self.face_dir {
 					Direction::Right => (),
 					Direction::Left => x = self.bounds.left_x - SLASH_WIDTH as f32,
