@@ -31,14 +31,12 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	// >:< resizing window same as resizing game space?
 	let resizeRefresher = true;
 	let resize = () => {
-		const delay = 50; // minimum delay between screen size refreshes
 		if(resizeRefresher){
 			resizeRefresher = false;
-			let game = this.game;
-			setTimeout(async function(){
+			requestAnimationFrame(() => {
 				resizeRefresher = true;
-				game.resize();
-			},delay);
+				this.game.resize();
+			});
 		}
 	}
 	
