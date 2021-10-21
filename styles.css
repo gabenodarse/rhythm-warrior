@@ -11,7 +11,16 @@ canvas{
 	top: 0px;
 }
 
-#screen-div{
+#screen{
+	position: absolute;
+	top: 0;
+	left: 0;
+	margin: 0;
+	width: 100vw;
+	height: 100vh;
+}
+
+#game{
 	position: absolute;
 	top: 0;
 	left: 0;
@@ -20,8 +29,8 @@ canvas{
 	height: 100vh;
 }
 
-.overlay{
-	width: 100vw;
+#overlay{
+	width: 100%;
 	height: 100vh;
 	position: absolute;
 	left: 0;
@@ -33,8 +42,8 @@ canvas{
 	position: absolute;
 	top: 0;
 	left: 0;
+	width: 100%;
 	height: 100vh;
-	width: 100vw;
 	zIndex: 100;
 	background-color: #5577ff;
 	user-select: none;
@@ -42,23 +51,21 @@ canvas{
 
 .homescreen h1{
 	margin: 0 auto;
-	font-size: 6rem;
+	font-size: 6em;
 }
 
 .home-selection{
-	margin: 0.5rem 0 0 0;
-	height: 10vh;
-	width: 20vw;
-	min-width: 20rem;
-	font-size: 1rem;
+	margin: 2% 4% 0 0;
+	height: 25%;
+	width: 35%;
+	font-size: 1.3em;
 	background-color: #ffdd00;
 	text-align: center;
 	highlighted: false;
 }
 
 .home-selection p{
-	margin: 4px 0 0 0;
-	font-size: 1.2em;
+	margin: 1% 0 0 0;
 }
 
 .highlighted-home-selection{
@@ -70,8 +77,8 @@ canvas{
 	top: 0;
 	left: 0;
 	height: 100vh;
-	width: 100vw;
-	font-size: 3rem;
+	width: 100%;
+	font-size: 3em;
 	zIndex: 100;
 	background-color: #5577ff;
 	user-select: none;
@@ -79,7 +86,6 @@ canvas{
 
 .end-game-screen p{
 	margin: 16px 0 0 0;
-	font-size: 2rem;
 }
 
 .end-game-screen-text-div{
@@ -87,7 +93,7 @@ canvas{
 }
 
 .editor-overlay{
-	width: 100vw;
+	width: 100%;
 	height: 100vh;
 	display: none;
 }
@@ -127,8 +133,8 @@ canvas{
 	position: absolute;
 	top: 0;
 	right: 0;
-	height: 3vw;
-	width: 9vw;
+	height: 4%;
+	width: 10%;
 	font-size: 2em;
 	z-index: 200;
 	margin: 0;
@@ -137,10 +143,10 @@ canvas{
 
 .menu{
 	position: absolute;
-	top: 10vh;
-	left: 40vw;
-	height: 70vh;
-	width: 20vw;
+	top: 10%;
+	left: 40%;
+	height: 70%;
+	width: 30%;
 	font-size: 3em;
 	z-index: 200;
 	background-color: #9999ff;
@@ -167,10 +173,10 @@ canvas{
 
 .change-control-dialog{
 	position: absolute;
-	width: 20vw;
-	height: 12vw;
-	left: 40vw;
-	top: 20vh;
+	width: 20%;
+	height: 12%;
+	left: 40%;
+	top: 20%;
 	z-index: 300;
 }
 
@@ -181,4 +187,50 @@ canvas{
 	width: 20%;
 	background-color: #aaaaaa;
 	z-index: 300;
+}
+
+@media(max-aspect-ratio: 8/5){
+	#screen{
+		position: absolute;
+		top: 0;
+		left: 0;
+		margin: 0;
+		width: 100vw;
+		height: 62.5vw;
+	}
+	
+	#game{
+		width: 100vw;
+		height: 62.5vw;
+	}
+
+	#overlay{
+		width: 100vw;
+		height: 62.5vw;
+	}
+
+	.homescreen{
+		width: 100vw;
+		height: 62.5vw;
+	}
+	.end-game-screen{
+		height: 100vw;
+		width: 62.5vw;
+	}
+
+	.editor-overlay{
+		width: 100vw;
+		height: 62.5vw;
+	}
+}
+
+@media(min-aspect-ratio: 2.5){
+	#screen{
+		position: absolute;
+		top: 0;
+		left: 0;
+		margin: 0;
+		width: 250vh;
+		height: 100vh;
+	}
 }

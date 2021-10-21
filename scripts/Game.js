@@ -11,7 +11,7 @@ export function Game () {
 	this.xFactor;
 	this.yFactor;
 	
-	this.screenDiv;
+	this.div;
 	this.lastTick;
 	this.gameObject;
 	this.graphics; // !!! can be either canvases or webGL. Add way to choose between them.
@@ -26,14 +26,9 @@ export function Game () {
 	this.audioTimeSafetyBuffer = 0.15;
 	
 	//initialize screen div
-	this.screenDiv = document.createElement("div");
-	this.screenDiv.style.position = "absolute";
-	this.screenDiv.style.top = "0";
-	this.screenDiv.style.left = "0";
-	this.screenDiv.style.margin = "0";
-	this.screenDiv.style.width = "100vw";
-	this.screenDiv.style.height = "100vh";
-	document.body.appendChild(this.screenDiv);
+	this.div = document.createElement("div");
+	this.div.id = "game";
+	document.getElementById("screen").appendChild(this.div);
 }
 
 Game.prototype.init = async function () {
@@ -44,7 +39,7 @@ Game.prototype.init = async function () {
 	// initialize loader and load graphics
 	// TODO error handling when it takes too long
 	await loader.init()
-		.then( () => loader.loadGraphics("canvases", this.screenDiv)) // >:< canvases or webGL. Make just webGL
+		.then( () => loader.loadGraphics("canvases", this.div)) // >:< canvases or webGL. Make just webGL
 		.then( res => this.graphics = res )
 		.catch( rej => { throw Error("Error initializing loader / loading assets: " + rej ) });
 		
@@ -76,8 +71,8 @@ Game.prototype.init = async function () {
 }
 
 Game.prototype.resize = function(){
-	let width = this.screenDiv.clientWidth;
-	let height = this.screenDiv.clientHeight;
+	let width = this.div.clientWidth;
+	let height = this.div.clientHeight;
 	let gameDim = wasm.game_dimensions();
 	
 	this.width = width;

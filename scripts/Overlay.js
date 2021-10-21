@@ -26,14 +26,14 @@ export function Overlay(songData, eventPropagator, controlsMap){
 	this.menu = new Menu(eventPropagator, controlsMap);
 	this.editorOverlay = new EditorOverlay(songData, eventPropagator);
 	
-	this.overlayDiv.className = "overlay";
+	this.overlayDiv.id = "overlay";
 	
 	this.overlayDiv.appendChild(this.score.domElement());
 	this.overlayDiv.appendChild(this.menu.domElement());
 	this.overlayDiv.appendChild(this.editorOverlay.domElement());
 	this.overlayDiv.appendChild(this.homeScreen.domElement());
 	this.overlayDiv.appendChild(this.endGameScreen.domElement());
-	document.body.appendChild(this.overlayDiv);
+	document.getElementById("screen").appendChild(this.overlayDiv);
 	
 }
 
