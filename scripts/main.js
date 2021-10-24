@@ -13,7 +13,7 @@ export async function run(){
 	await game.init();
 	
 	if(Object.keys(controls).length == 0){
-		controls[32] = wasm.Input.Dash; // space
+		controls[13] = wasm.Input.Dash; // space
 		controls[81] = wasm.Input.Slash1; // q
 		controls[87] = wasm.Input.Slash2; // w
 		controls[69] = wasm.Input.Slash3; // e

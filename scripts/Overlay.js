@@ -3,6 +3,7 @@ import * as wasm from "../pkg/music_mercenary.js";
 
 let g_keyCodeNames = [];
 g_keyCodeNames[32] = "Space";
+g_keyCodeNames[13] = "Enter";
 
 // !!! does overlay ever have to be resized?
 // TODO having the editor overlay included in game.js Editor class might make more sense
