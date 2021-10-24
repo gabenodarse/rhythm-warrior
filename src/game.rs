@@ -191,30 +191,12 @@ impl Game {
 	
 	// takes an input command and passes it forward to be handled
 	pub fn input_command (&mut self, input: Input) {
-		match input {
-			Input::Dash => {
-				self.player.input_dash(self.song.game_data.time_running);
-			},
-			Input::Slash1 => {
-				self.player.input_slash(BrickType::Type1, self.song.game_data.time_running);
-			},
-			Input::Slash2 => {
-				self.player.input_slash(BrickType::Type2, self.song.game_data.time_running);
-			},
-			Input::Slash3 => {
-				self.player.input_slash(BrickType::Type3, self.song.game_data.time_running);
-			}
-		}
+		self.player.input(input, self.song.game_data.time_running);
 	}
 	
 	// takes key release command and passes it forward to be handled
-	pub fn stop_command (&mut self, key: Input) {
-		match key {
-			Input::Dash => {},
-			Input::Slash1 => {},
-			Input::Slash2 => {},
-			Input::Slash3 => {}
-		}
+	pub fn stop_command (&mut self, input: Input) {
+		self.player.end_input(input);
 	}
 	
 	// TODO create a method load_song (but can't pass normal arrays/vec, moved or borrowed, through wasm_bindgen)

@@ -8,17 +8,15 @@ let g_menuKeyPresses = []
 export function EventPropagator(){
 	this.game;
 	this.overlay;
-	
 	this.controls;
+	
+	this.resumeEvents; // events to fire once the game resumes
 	
 	this.isRunning;
 	this.isEditor;
 	this.stopFlag;
 	
 	this.loop;
-	
-	this.handleKeyDown;
-	this.handleKeyUp;
 	this.resize;
 }
 
@@ -27,6 +25,8 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	this.game = game;
 	this.overlay = overlay;
 	this.controls = controls;
+	
+	this.resumeEvents = [];
 	
 	// >:< resizing window same as resizing game space?
 	let resizeRefresher = true;
@@ -47,13 +47,9 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	this.isRunning = false;
 	this.isEditor = false;
 	
-	window.addEventListener("keydown", evt => {	this.handleKeyDown(evt) });
-	window.addEventListener("keyup", evt => {
-		if(typeof(this.controls[evt.keyCode]) === "number" && this.isRunning){
-			this.game.stopControl(this.controls[evt.keyCode]);
-		}
-	});
-	window.addEventListener("resize", resize);
+	document.addEventListener("keydown", evt => {	this.handleKeyDown(evt) });
+	document.addEventListener("keyup", evt => { this.handleKeyUp(evt) });
+	document.addEventListener("resize", resize);
 }
 
 EventPropagator.prototype.togglePlay = function(){
@@ -138,8 +134,28 @@ EventPropagator.prototype.runOnGame = function(functionToRun, updateEditor){
 	return ret;
 }
 
+EventPropagator.prototype.handleKeyUp = function(evt){
+	if(typeof(this.controls[evt.keyCode]) === "number"){
+		if(this.isRunning){
+			this.game.stopControl(this.controls[evt.keyCode]);
+		} else {
+			let controlID = this.controls[evt.keyCode];
+			this.resumeEvents[ controlID ] = new KeyboardEvent("keyup", { keyCode: evt.keyCode, });
+		}
+	}
+}
+
 EventPropagator.prototype.handleKeyDown = function(evt){
 	// branching if statements to handle events based on state of game and menus
+	if(typeof(this.controls[evt.keyCode]) === "number"){
+		if(this.isRunning){
+			this.game.startControl(this.controls[evt.keyCode]);
+		} else {
+			let controlID = this.controls[evt.keyCode];
+			this.resumeEvents[ controlID ] = null;			
+		}
+	}
+	
 	if(evt.keyCode === 27){ // escape key
 		// if the game is not in editor mode, pause/unpause
 		if(!this.overlay.isElementShowing("homeScreen") && this.overlay.isElementShowing("menu")){
@@ -159,8 +175,6 @@ EventPropagator.prototype.handleKeyDown = function(evt){
 			this.overlay.showElement("menu");
 			this.overlay.populateMenu("homeMenu");
 		}
-	} else if(typeof(this.controls[evt.keyCode]) === "number" && this.isRunning){
-		this.game.startControl(this.controls[evt.keyCode]);
 	} else if(this.overlay.isElementShowing("menu")){
 		this.overlay.passEvent("menu", evt);
 		
@@ -179,8 +193,6 @@ EventPropagator.prototype.handleKeyDown = function(evt){
 	} else if(this.overlay.isElementShowing("endGameScreen")){
 		this.overlay.passEvent("endGameScreen", evt);
 	}
-	
-
 }
 
 EventPropagator.prototype.gameLoop = function(){
@@ -217,6 +229,12 @@ EventPropagator.prototype.startLoop = function(){
 	this.isRunning = true;
 	this.stopFlag = false;
 	
+	for(let evt of this.resumeEvents) {
+		if(evt != null){
+			document.dispatchEvent(evt);
+		}
+	}
+	
 	this.game.start(this.loop);
 }
 
@@ -224,14 +242,6 @@ EventPropagator.prototype.startLoop = function(){
 EventPropagator.prototype.stopLoop = function(){
 	this.isRunning = false;
 	this.stopFlag = false;
-	
-	// !!! handle game key states on both pause/unpause (artificial key up / key down events?)
-	// for(const key in this.controls) {
-		// let evt = new KeyboardEvent("keyup", {
-			// keyCode: key,
-		// });
-		// this.handleKeyUp(evt);
-	// }
 	
 	this.game.pause();
 }

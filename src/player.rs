@@ -5,6 +5,7 @@ use std::collections::btree_set::BTreeSet;
 
 use crate::log;
 use crate::frame_number;
+use crate::Input;
 
 use crate::PositionedGraphic;
 use crate::resources::GraphicGroup;
@@ -44,9 +45,9 @@ pub struct Player {
 	graphic_group: GraphicGroup,
 	graphic: PositionedGraphic,
 	state: PlayerState,
-	
 	bounds: ObjectBounds,
 	
+	inputs_down: [bool; Input::Slash3 as usize + 1],
 	target: Option<TargetInfo>,
 	face_dir: Direction,
 	hit_dir: Direction,
@@ -94,7 +95,6 @@ impl Player {
 				y: GROUND_POS as f32 - PLAYER_HEIGHT as f32
 			},
 			state: PlayerState::Walking,
-			
 			bounds: ObjectBounds {
 				left_x: x,
 				top_y: GROUND_POS as f32 - PLAYER_HEIGHT as f32,
@@ -102,6 +102,7 @@ impl Player {
 				bottom_y: GROUND_POS as f32
 			},
 			
+			inputs_down: [false; Input::Slash3 as usize + 1],
 			face_dir: Direction::Right,
 			hit_dir: Direction::Right,
 			target: None,
@@ -119,6 +120,23 @@ impl Player {
 		self.regular_move(seconds_passed, game_data.time_running);
 		self.update_state(game_data.time_running);
 		self.update_graphics(game_data.time_running);
+	}
+	
+	// accept an input, handle it only if it isn't already down
+	pub fn input(&mut self, input: Input, time_running: f32) {
+		if self.inputs_down[input as usize] == false {
+			self.inputs_down[input as usize] = true;
+			match input {
+				Input::Dash => { self.input_dash(time_running); },
+				Input::Slash1 => { self.input_slash(BrickType::Type1, time_running); },
+				Input::Slash2 => { self.input_slash(BrickType::Type2, time_running); },
+				Input::Slash3 => { self.input_slash(BrickType::Type3, time_running); }
+			}
+		}
+	}
+	
+	pub fn end_input(&mut self, input: Input) {
+		self.inputs_down[input as usize] = false;		
 	}
 	
 	// inputs a slash command, updating player state
