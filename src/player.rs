@@ -66,6 +66,7 @@ enum PlayerState {
 	Dash,
 	SlashDash,
 	PostSlash,
+	Hold,
 }
 
 struct TaggedState {
@@ -77,7 +78,8 @@ struct TargetInfo {
 	time: f32,
 	pos: f32, // where the player left_x should be
 	hit_dir: Direction,
-	dash_distance: f32
+	dash_distance: f32,
+	target_centers: Vec<f32>
 }
 
 impl Object for Player {
@@ -113,7 +115,14 @@ impl Player {
 	
 	// tick the player's state
 	pub fn tick(&mut self, seconds_passed: f32, bricks_iter: vec_deque::Iter<Brick>, game_data: &GameData) {
-		self.update_target_info(bricks_iter, game_data.time_running, game_data.brick_speed);
+		match self.state.state {
+			PlayerState::PreSlash | PlayerState::PreSlashDash | PlayerState::PreDash | PlayerState::Slash 
+			| PlayerState::SlashDash | PlayerState::Dash | PlayerState::PostSlash | PlayerState::Hold => (),
+			PlayerState::Walking | PlayerState::Running => {
+				self.update_target_info(bricks_iter, game_data.time_running, game_data.brick_speed);
+			}
+		}
+		
 		self.regular_move(seconds_passed, game_data.time_running);
 		self.update_state(game_data.time_running);
 		
@@ -181,7 +190,8 @@ impl Player {
 			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running - self.state.time), flags: 0, arg: 0 };
 			let mut rendering_instruction = PositionedGraphic{ g: graphic, x: self.bounds.left_x, y: self.bounds.top_y };
 			let mut remaining_pos_difference = pos_difference;
-			while remaining_pos_difference > 0.0 { 
+			
+			while remaining_pos_difference > BOOST_GRAPHIC_OFFSET { 
 				let mut positioned_graphic = rendering_instruction.clone();
 				positioned_graphic.g.g = GraphicGroup::Running;
 				self.lingering_graphics.push( LingeringGraphic {
@@ -200,7 +210,8 @@ impl Player {
 			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running - self.state.time), flags: GraphicFlags::HorizontalFlip as u8, arg: 0 };
 			let mut rendering_instruction = PositionedGraphic{ g: graphic, x: self.bounds.left_x, y: self.bounds.top_y };
 			let mut remaining_pos_difference = -pos_difference;
-			while remaining_pos_difference > 0.0 { 
+			
+			while remaining_pos_difference > BOOST_GRAPHIC_OFFSET { 
 				let mut positioned_graphic = rendering_instruction.clone();
 				positioned_graphic.g.g = GraphicGroup::Running;
 				self.lingering_graphics.push( LingeringGraphic {
@@ -221,12 +232,14 @@ impl Player {
 	// updates target, face_dir, and hit_dir
 	fn update_target_info(&mut self, bricks_iter: vec_deque::Iter<Brick>, time_running: f32, brick_speed: f32) {
 		
-		const SAME_GROUP_TIME_BUFFER: f32 = 0.025; // maximum time difference between bricks in the same group
+		const SAME_GROUP_TIME_BUFFER: f32 = 0.025; // maximum time difference between bricks in the same group 
+			// (bricks in same group should have time difference of 0. can do validation checking of groups when loading song)
 		// maximum time player will wait before chasing next bricks
 			// !!! should be variable based on how fast bricks are travelling
 		let next_bricks_time_buffer:  f32 = PLAYER_HEIGHT as f32 / brick_speed;
 		
 		let mut bricks_info = None;
+		let mut target_centers = Vec::new();
 		
 		struct UpcomingBricks {
 			time: f32,
@@ -243,6 +256,7 @@ impl Player {
 			// get the group of UpcomingBricks
 			match &mut bricks_info {
 				None => {
+					target_centers.push(brick.bounds.left_x + BRICK_WIDTH as f32 / 2.0);
 					bricks_info = Some( UpcomingBricks {
 						time: brick.time,
 						left_brick: brick.bounds.left_x,
@@ -254,6 +268,7 @@ impl Player {
 						break; 
 					}
 					
+					target_centers.push(brick.bounds.left_x + BRICK_WIDTH as f32 / 2.0);
 					if brick.bounds.left_x < bi.left_brick {
 						bi.left_brick = brick.bounds.left_x;
 					} else if brick.bounds.left_x > bi.right_brick {
@@ -278,19 +293,19 @@ impl Player {
 				if left_target - self.bounds.left_x >= 0.0 {
 					self.face_dir = Direction::Right;
 					self.target = Some( 
-						TargetInfo { time: bi.time, pos: left_target, hit_dir: Direction::Right, dash_distance } );
+						TargetInfo { time: bi.time, pos: left_target, hit_dir: Direction::Right, dash_distance, target_centers } );
 				} else if self.bounds.left_x - right_target >= 0.0 {
 					self.face_dir = Direction::Left;
 					self.target = Some( 
-						TargetInfo { time: bi.time, pos: right_target, hit_dir: Direction::Left, dash_distance } );
+						TargetInfo { time: bi.time, pos: right_target, hit_dir: Direction::Left, dash_distance, target_centers } );
 				} else if left_target - self.bounds.left_x > self.bounds.left_x - right_target {
 					self.face_dir = Direction::Left;
 					self.target = Some ( 
-						TargetInfo { time: bi.time, pos: left_target, hit_dir: Direction::Right, dash_distance } );
+						TargetInfo { time: bi.time, pos: left_target, hit_dir: Direction::Right, dash_distance, target_centers } );
 				} else {
 					self.face_dir = Direction::Right;
 					self.target = Some ( 
-						TargetInfo { time: bi.time, pos: right_target, hit_dir: Direction::Left, dash_distance } );
+						TargetInfo { time: bi.time, pos: right_target, hit_dir: Direction::Left, dash_distance, target_centers } );
 				}
 				
 				self.hit_dir = self.face_dir;
@@ -473,7 +488,6 @@ impl Player {
 			},
 			PlayerState::Slash => {
 				self.state = TaggedState { state: PlayerState::PostSlash, time: time_running };
-				
 				self.hitbox = None;
 			},
 			PlayerState::Dash => {
@@ -489,7 +503,8 @@ impl Player {
 					self.state = TaggedState { state: PlayerState::Walking, time: time_running };
 					self.hit_type = None;
 				}
-			}
+			},
+			PlayerState::Hold => {}
 		}
 	}
 	
