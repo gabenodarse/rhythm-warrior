@@ -42,8 +42,6 @@ const MAX_BOOST_DISTANCE: f32 = 4.0 * PLAYER_WIDTH as f32;
 const BOOST_GRAPHIC_OFFSET: f32 = PLAYER_WIDTH as f32 / 2.0; // how close the boost graphics are to one another
 
 pub struct Player {
-	graphic_group: GraphicGroup,
-	graphic: PositionedGraphic,
 	state: PlayerState,
 	bounds: ObjectBounds,
 	
@@ -72,7 +70,7 @@ enum PlayerState {
 
 struct TargetInfo {
 	time: f32,
-	pos: f32,
+	pos: f32, // where the player left_x should be
 	hit_dir: Direction,
 	dash_distance: f32
 }
@@ -88,12 +86,6 @@ impl Player {
 	
 	pub fn new(x: f32) -> Player {
 		Player {
-			graphic_group: GraphicGroup::Walking,
-			graphic: PositionedGraphic {
-				g: Graphic { g: GraphicGroup::Walking, frame: 0, flags: 0, arg: 0 },
-				x,
-				y: GROUND_POS as f32 - PLAYER_HEIGHT as f32
-			},
 			state: PlayerState::Walking,
 			bounds: ObjectBounds {
 				left_x: x,
@@ -119,7 +111,10 @@ impl Player {
 		self.update_target_info(bricks_iter, game_data.time_running, game_data.brick_speed);
 		self.regular_move(seconds_passed, game_data.time_running);
 		self.update_state(game_data.time_running);
-		self.update_graphics(game_data.time_running);
+		
+		// TODO would prefer if cloning the lingering graphics before removing them was unnecessary
+		let new_set: Vec<LingeringGraphic> = self.lingering_graphics.iter().filter(|lg| lg.end_t > game_data.time_running).cloned().collect();
+		self.lingering_graphics = new_set;
 	}
 	
 	// accept an input, handle it only if it isn't already down
@@ -178,8 +173,9 @@ impl Player {
 		// if within range where boost is reasonable, then boost
 		let pos_difference = target.pos - self.bounds.left_x;
 		if pos_difference < MAX_BOOST_DISTANCE && pos_difference > 0.0 {
+			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running), flags: 0, arg: 0 };
+			let mut rendering_instruction = PositionedGraphic{ g: graphic, x: self.bounds.left_x, y: self.bounds.top_y };
 			let mut remaining_pos_difference = pos_difference;
-			let mut rendering_instruction = self.rendering_instruction();
 			while remaining_pos_difference > 0.0 { 
 				let mut positioned_graphic = rendering_instruction.clone();
 				positioned_graphic.g.g = GraphicGroup::Running;
@@ -196,8 +192,9 @@ impl Player {
 			self.bounds.right_x = target.pos + PLAYER_WIDTH as f32;
 			self.hit_dir = target.hit_dir;
 		} else if pos_difference > -MAX_BOOST_DISTANCE && pos_difference < 0.0 {
+			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running), flags: GraphicFlags::HorizontalFlip as u8, arg: 0 };
+			let mut rendering_instruction = PositionedGraphic{ g: graphic, x: self.bounds.left_x, y: self.bounds.top_y };
 			let mut remaining_pos_difference = -pos_difference;
-			let mut rendering_instruction = self.rendering_instruction();
 			while remaining_pos_difference > 0.0 { 
 				let mut positioned_graphic = rendering_instruction.clone();
 				positioned_graphic.g.g = GraphicGroup::Running;
@@ -207,7 +204,7 @@ impl Player {
 					end_t: time_running + BOOST_LINGER_TIME
 				});
 				remaining_pos_difference -= BOOST_GRAPHIC_OFFSET;
-				rendering_instruction.x += BOOST_GRAPHIC_OFFSET;
+				rendering_instruction.x -= BOOST_GRAPHIC_OFFSET;
 			}
 			
 			self.bounds.left_x = target.pos;
@@ -493,8 +490,8 @@ impl Player {
 		}
 	}
 	
-	// updates the player graphic and gets rid of old lingering graphics
-	fn update_graphics(&mut self, time_running: f32) {
+	// rendering instruction for the player
+	pub fn rendering_instructions(&self, time_running: f32) -> Vec<PositionedGraphic> {
 		let graphic_group;
 		let frame;
 		let flags;
@@ -545,16 +542,10 @@ impl Player {
 		
 		let graphic = Graphic { g: graphic_group, frame, flags, arg };
 		
-		self.graphic = PositionedGraphic { g: graphic, x, y: self.bounds.top_y };
+		let mut positioned_graphics = Vec::with_capacity(32);
+		positioned_graphics.push( PositionedGraphic { g: graphic, x, y: self.bounds.top_y } );
 		
-		// TODO would prefer if cloning the lingering graphics before removing them was unnecessary
-		let new_set: Vec<LingeringGraphic> = self.lingering_graphics.iter().filter(|lg| lg.end_t > time_running).cloned().collect();
-		self.lingering_graphics = new_set;
-	}
-	
-	// rendering instruction for the player
-	pub fn rendering_instruction(&self) -> PositionedGraphic {
-		self.graphic.clone()
+		return positioned_graphics;
 	}
 	
 	// rendering instruction for any lingering graphics

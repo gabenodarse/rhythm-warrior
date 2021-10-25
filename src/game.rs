@@ -146,7 +146,7 @@ impl Game {
 			},
 		);
 		
-		graphics.push(self.player.rendering_instruction());
+		graphics.append(&mut self.player.rendering_instructions(self.song.game_data.time_running));
 		
 		for brick in &self.bricks {
 			graphics.push(brick.rendering_instruction());
