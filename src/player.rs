@@ -42,7 +42,7 @@ const MAX_BOOST_DISTANCE: f32 = 4.0 * PLAYER_WIDTH as f32;
 const BOOST_GRAPHIC_OFFSET: f32 = PLAYER_WIDTH as f32 / 2.0; // how close the boost graphics are to one another
 
 pub struct Player {
-	state: PlayerState,
+	state: TaggedState,
 	bounds: ObjectBounds,
 	
 	inputs_down: [bool; Input::Slash3 as usize + 1],
@@ -59,13 +59,18 @@ pub struct Player {
 enum PlayerState {
 	Running,
 	Walking,
-	PreSlash(f32), // init time of slash/dash, to insert short delay before becoming active
-	PreDash(f32),
-	PreSlashDash(f32),
-	Slash(f32), // init time. so there can be a delay before becoming inactive and for animation frame calculation
-	Dash(f32),
-	SlashDash(f32),
-	PostSlash(f32),
+	PreSlash, // init time of slash/dash, to insert short delay before becoming active
+	PreDash,
+	PreSlashDash,
+	Slash, // init time. so there can be a delay before becoming inactive and for animation frame calculation
+	Dash,
+	SlashDash,
+	PostSlash,
+}
+
+struct TaggedState {
+	time: f32,
+	state: PlayerState
 }
 
 struct TargetInfo {
@@ -86,7 +91,7 @@ impl Player {
 	
 	pub fn new(x: f32) -> Player {
 		Player {
-			state: PlayerState::Walking,
+			state: TaggedState { time: 0.0, state: PlayerState::Walking },
 			bounds: ObjectBounds {
 				left_x: x,
 				top_y: GROUND_POS as f32 - PLAYER_HEIGHT as f32,
@@ -136,14 +141,14 @@ impl Player {
 	
 	// inputs a slash command, updating player state
 	pub fn input_slash (&mut self, brick_type: BrickType, time_running: f32) {
-		match self.state {
-			PlayerState::PreSlash(_) => (),
-			PlayerState::PreDash(t) => {
-				self.state = PlayerState::PreSlashDash(t);
+		match self.state.state {
+			PlayerState::PreSlash => (),
+			PlayerState::PreDash => {
+				self.state = TaggedState { time: self.state.time, state: PlayerState::PreSlashDash };
 				self.hit_type = Some(brick_type);
 			},
 			_ => {
-				self.state = PlayerState::PreSlash(time_running);
+				self.state = TaggedState {time: time_running, state: PlayerState::PreSlash};
 				self.hit_type = Some(brick_type);
 			}
 		}
@@ -151,13 +156,13 @@ impl Player {
 	
 	// inputs a dash command, updating player state
 	pub fn input_dash (&mut self, time_running: f32) {
-		match self.state {
-			PlayerState::PreDash(_) => (),
-			PlayerState::PreSlash(t) => {
-				self.state = PlayerState::PreSlashDash(t);
+		match self.state.state {
+			PlayerState::PreDash => (),
+			PlayerState::PreSlash => {
+				self.state = TaggedState {time: self.state.time, state: PlayerState::PreSlashDash};
 			}
 			_ => {
-				self.state = PlayerState::PreDash(time_running);
+				self.state = TaggedState {time: time_running, state: PlayerState::PreDash};
 			}
 		}
 	}
@@ -173,7 +178,7 @@ impl Player {
 		// if within range where boost is reasonable, then boost
 		let pos_difference = target.pos - self.bounds.left_x;
 		if pos_difference < MAX_BOOST_DISTANCE && pos_difference > 0.0 {
-			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running), flags: 0, arg: 0 };
+			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running - self.state.time), flags: 0, arg: 0 };
 			let mut rendering_instruction = PositionedGraphic{ g: graphic, x: self.bounds.left_x, y: self.bounds.top_y };
 			let mut remaining_pos_difference = pos_difference;
 			while remaining_pos_difference > 0.0 { 
@@ -192,7 +197,7 @@ impl Player {
 			self.bounds.right_x = target.pos + PLAYER_WIDTH as f32;
 			self.hit_dir = target.hit_dir;
 		} else if pos_difference > -MAX_BOOST_DISTANCE && pos_difference < 0.0 {
-			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running), flags: GraphicFlags::HorizontalFlip as u8, arg: 0 };
+			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running - self.state.time), flags: GraphicFlags::HorizontalFlip as u8, arg: 0 };
 			let mut rendering_instruction = PositionedGraphic{ g: graphic, x: self.bounds.left_x, y: self.bounds.top_y };
 			let mut remaining_pos_difference = -pos_difference;
 			while remaining_pos_difference > 0.0 { 
@@ -322,32 +327,29 @@ impl Player {
 	
 	// updates the state and performs any other consequent updates
 	fn update_state(&mut self, time_running: f32) {
-		match self.state {
+		let t = self.state.time;
+		match self.state.state {
 			PlayerState::Running => {
 				match &self.target {
-					None => self.state = PlayerState::Walking,
+					None => self.state = TaggedState { state: PlayerState::Walking, time: time_running },
 					Some(ti) => {
 						if ti.pos - self.bounds.left_x < F32_ZERO && ti.pos - self.bounds.left_x > -F32_ZERO {
-							self.state = PlayerState::Walking;
-						} else {
-							self.state = PlayerState::Running;
-						}
+							self.state = TaggedState { state: PlayerState::Walking, time: time_running };
+						} 
 					}
 				}
 			},
 			PlayerState::Walking => {
 				match &self.target {
-					None => self.state = PlayerState::Walking,
+					None => (),
 					Some(ti) => {
-						if ti.pos - self.bounds.left_x < F32_ZERO && ti.pos - self.bounds.left_x > -F32_ZERO {
-							self.state = PlayerState::Walking;
-						} else {
-							self.state = PlayerState::Running;
+						if ti.pos - self.bounds.left_x > F32_ZERO || ti.pos - self.bounds.left_x < -F32_ZERO {
+							self.state = TaggedState { state: PlayerState::Running, time: time_running };
 						}
 					}
 				}
 			},
-			PlayerState::PreSlash(t) => {
+			PlayerState::PreSlash => {
 				if time_running - t > PRE_SLASH_TIME {
 					self.boost(time_running);
 					
@@ -372,10 +374,10 @@ impl Player {
 					hitbox.bounds.left_x = hitbox_x;
 					hitbox.bounds.right_x = hitbox_x + PLAYER_WIDTH as f32 + SLASH_WIDTH as f32;
 					self.hitbox = Some(hitbox);
-					self.state = PlayerState::Slash(time_running);
+					self.state = TaggedState { state: PlayerState::Slash, time: time_running };
 				}
 			},
-			PlayerState::PreDash(t) => {
+			PlayerState::PreDash => {
 				if time_running - t > PRE_SLASH_TIME {
 					self.boost(time_running);
 					
@@ -411,10 +413,10 @@ impl Player {
 					}
 					
 					self.hitbox = None;
-					self.state = PlayerState::Dash(time_running);
+					self.state = TaggedState { state: PlayerState::Dash, time: time_running };
 				}
 			},
-			PlayerState::PreSlashDash(t) => {
+			PlayerState::PreSlashDash => {
 				if time_running - t > PRE_SLASH_TIME {
 					self.boost(time_running);
 					
@@ -466,24 +468,25 @@ impl Player {
 					hitbox.bounds.left_x = hitbox_x;
 					hitbox.bounds.right_x = hitbox_x + PLAYER_WIDTH as f32 + SLASH_WIDTH as f32 + dash_distance as f32;
 					self.hitbox = Some(hitbox);
-					self.state = PlayerState::SlashDash(time_running);
+					self.state = TaggedState { state: PlayerState::SlashDash, time: time_running };
 				}
 			},
-			PlayerState::Slash(t) => {
-				self.state = PlayerState::PostSlash(t);
+			PlayerState::Slash => {
+				self.state = TaggedState { state: PlayerState::PostSlash, time: time_running };
+				
 				self.hitbox = None;
 			},
-			PlayerState::Dash(t) => {
-				self.state = PlayerState::Walking;
+			PlayerState::Dash => {
+				TaggedState { state: PlayerState::Walking, time: time_running };
 				self.hitbox = None;
 			},
-			PlayerState::SlashDash(t) => {
-				self.state = PlayerState::PostSlash(t);
+			PlayerState::SlashDash => {
+				self.state = TaggedState { state: PlayerState::PostSlash, time: time_running };
 				self.hitbox = None;
 			},
-			PlayerState::PostSlash(t) => {
+			PlayerState::PostSlash => {
 				if time_running - t > POST_SLASH_TIME {
-					self.state = PlayerState::Walking;
+					self.state = TaggedState { state: PlayerState::Walking, time: time_running };
 					self.hit_type = None;
 				}
 			}
@@ -498,12 +501,13 @@ impl Player {
 		let arg = 0;
 		let mut x = self.bounds.left_x;
 		
-		match self.state {
+		let t = self.state.time;
+		match self.state.state {
 			PlayerState::Running => {
 				graphic_group = GraphicGroup::Running;
-				frame = frame_number(time_running);
+				frame = frame_number(time_running - t);
 			},
-			PlayerState::PreSlash(t) | PlayerState::PreSlashDash(t) => {
+			PlayerState::PreSlash | PlayerState::PreSlashDash => {
 				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
 				graphic_group = match brick_type {
 					BrickType::Type1 => GraphicGroup::Slashing1,
@@ -516,7 +520,7 @@ impl Player {
 					Direction::Left => x = self.bounds.left_x - SLASH_WIDTH as f32,
 				};
 			},
-			PlayerState::Slash(t) | PlayerState::SlashDash(t) | PlayerState::PostSlash(t) => {
+			PlayerState::Slash | PlayerState::SlashDash | PlayerState::PostSlash => {
 				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
 				graphic_group = match brick_type {
 					BrickType::Type1 => GraphicGroup::Slashing1,
