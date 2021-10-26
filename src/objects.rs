@@ -5,15 +5,19 @@ use crate::LEFT_BOUNDARY;
 use crate::RIGHT_BOUNDARY;
 
 pub const MAX_NOTES_PER_SCREEN_WIDTH: u8 = 32;
+
 pub const PLAYER_WIDTH: i32 = 50;
 pub const PLAYER_HEIGHT: i32 = 100; 
 pub const BRICK_WIDTH: i32 = (RIGHT_BOUNDARY - LEFT_BOUNDARY) as i32 / MAX_NOTES_PER_SCREEN_WIDTH as i32;
 pub const BRICK_HEIGHT: i32 = 100;
 pub const SLASH_WIDTH: i32 = 60;
-pub const SLASH_HEIGHT: i32 = PLAYER_HEIGHT * 9 / 10;
+pub const SLASH_HEIGHT: i32 = PLAYER_HEIGHT;
 pub const DASH_WIDTH: i32 = BRICK_WIDTH * 3; // >:< remove as constant
 pub const MIN_DASH_WIDTH: i32 = 50;
-pub const DASH_HEIGHT: i32 = SLASH_HEIGHT;
+pub const DASH_HEIGHT: i32 = PLAYER_HEIGHT * 9 / 10;
+pub const HOLD_HITBOX_WIDTH: i32 = 20;
+pub const HOLD_HITBOX_HEIGHT: i32 = PLAYER_HEIGHT;
+
 pub const DASH_CD: f32 = 0.12;
 pub const NUM_MOVEMENT_FRAMES: u8 = 23;
 pub const BRICK_DATA_BUFFER_SIZE: usize = 4;
@@ -63,3 +67,12 @@ pub fn intersect(obj1: &ObjectBounds, obj2: &ObjectBounds) -> bool {
 	return true;
 }
 
+impl BrickType {
+	pub fn to_input(bt: BrickType) -> crate::Input {
+		return match bt {
+			BrickType::Type1 => crate::Input::Slash1,
+			BrickType::Type2 => crate::Input::Slash2,
+			BrickType::Type3 => crate::Input::Slash3
+		};
+	}
+}

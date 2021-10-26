@@ -14,5 +14,8 @@
   "Dash0": ["dash0.png"],
   "Dash1": ["dash.png"],
   "Dash2": ["dash2.png"],
-  "Dash3": ["dash3.png"]
+  "Dash3": ["dash3.png"],
+  "Hold1": ["hold-hit1.png"],
+  "Hold2": ["hold-hit2.png"],
+  "Hold3": ["hold-hit3.png"]
 }

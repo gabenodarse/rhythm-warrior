@@ -70,7 +70,8 @@ then, modify resources.rs such that:
 animation frames are cycled through at 120 fps
 
 graphics are displayed by passing the graphic id and frame number (along with transformation flags) to js
-when the frame number is passed to js, the script does a modulus with the total number of frames to determine which frame to present
+when the frame number is passed to js, the script does a modulus with the 
+	total number of frames in the animation to determine which frame to present
 
 render() functions within graphics.js:
 graphic instructions are accessed by the script through a direct pointer to memory (may cause bugs later, but is performant)

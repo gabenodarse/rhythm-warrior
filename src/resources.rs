@@ -29,6 +29,9 @@ pub enum GraphicGroup {
 	Dash1,
 	Dash2,
 	Dash3,
+	Hold1,
+	Hold2,
+	Hold3
 }
 
 // the maximum amount of the graphic that can appear on screen
@@ -41,7 +44,8 @@ pub fn max_graphics(g: GraphicGroup) -> u32 {
 		GraphicGroup::Slashing1 | GraphicGroup::Slashing2 | GraphicGroup::Slashing3 => 1,
 		GraphicGroup::Brick1 | GraphicGroup::Brick2 | GraphicGroup::Brick3 => 32,
 		GraphicGroup::Slash1 | GraphicGroup::Slash2 | GraphicGroup::Slash3 => 1,
-		GraphicGroup::Dash0  | GraphicGroup::Dash1 | GraphicGroup::Dash2 | GraphicGroup::Dash3 => 10,
+		GraphicGroup::Dash0 | GraphicGroup::Dash1 | GraphicGroup::Dash2 | GraphicGroup::Dash3 => 10,
+		GraphicGroup::Hold1 | GraphicGroup::Hold2 | GraphicGroup::Hold3 => 32
 		
 	}
 }
@@ -80,6 +84,10 @@ pub fn graphic_size(g: GraphicGroup) -> Position {
 			x: objects::MIN_DASH_WIDTH as f32,
 			y: objects::DASH_HEIGHT as f32
 		}},
+		GraphicGroup::Hold1 | GraphicGroup::Hold2 | GraphicGroup::Hold3 => { Position {
+			x: objects::HOLD_HITBOX_WIDTH as f32,
+			y: objects::HOLD_HITBOX_HEIGHT as f32
+		}}
 	};
 }
 
