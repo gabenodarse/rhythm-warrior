@@ -41,8 +41,10 @@ const POST_SLASH_TIME: f32 = 0.06;
 const DASH_LINGER_TIME: f32 = 0.3; // how long the dash graphic lingers
 const BOOST_LINGER_TIME: f32 = 0.3;
 const BOOST_PRELINGER_TIME: f32 = 1.2;
+
 const MAX_BOOST_DISTANCE: f32 = 4.0 * PLAYER_WIDTH as f32;
 const BOOST_GRAPHIC_OFFSET: f32 = PLAYER_WIDTH as f32 / 2.0; // how close the boost graphics are to one another
+const HITBOX_FORGIVENESS_MARGIN: f32 = 10.0;
 
 pub struct Player {
 	state: TaggedState,
@@ -193,8 +195,8 @@ impl Player {
 				let bounds = ObjectBounds { 
 					left_x: hitbox_x, 
 					right_x: hitbox_x + SLASH_WIDTH as f32, 
-					top_y: self.bounds.top_y,
-					bottom_y: self.bounds.bottom_y
+					top_y: self.bounds.top_y - HITBOX_FORGIVENESS_MARGIN,
+					bottom_y: self.bounds.bottom_y + HITBOX_FORGIVENESS_MARGIN
 				};
 				return Some(HitBox { bounds, brick_type });
 			},
@@ -209,8 +211,8 @@ impl Player {
 				let bounds = ObjectBounds { 
 					left_x: hitbox_x, 
 					right_x: hitbox_x + PLAYER_WIDTH as f32 + SLASH_WIDTH as f32 + dash_distance as f32,
-					top_y: self.bounds.top_y,
-					bottom_y: self.bounds.bottom_y
+					top_y: self.bounds.top_y - HITBOX_FORGIVENESS_MARGIN,
+					bottom_y: self.bounds.bottom_y + HITBOX_FORGIVENESS_MARGIN
 				};
 				return Some(HitBox { bounds, brick_type });
 			}
@@ -554,6 +556,7 @@ impl Player {
 						if time_running - t > PRE_HOLD_TIME {
 							self.state = TaggedState { state: PlayerState::Hold(multi), time: time_running };
 						}
+						
 						return;
 					}
 				} 
