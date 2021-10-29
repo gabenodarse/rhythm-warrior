@@ -22,13 +22,16 @@ pub enum GraphicGroup {
 	Brick1,
 	Brick2,
 	Brick3,
-	Slash1,
-	Slash2,
-	Slash3,
 	Dash0,
 	Dash1,
 	Dash2,
 	Dash3,
+	PreHolding1,
+	PreHolding2,
+	PreHolding3,
+	Holding1,
+	Holding2,
+	Holding3,
 	Hold1,
 	Hold2,
 	Hold3
@@ -43,8 +46,9 @@ pub fn max_graphics(g: GraphicGroup) -> u32 {
 		GraphicGroup::Running => 24,
 		GraphicGroup::Slashing1 | GraphicGroup::Slashing2 | GraphicGroup::Slashing3 => 1,
 		GraphicGroup::Brick1 | GraphicGroup::Brick2 | GraphicGroup::Brick3 => 32,
-		GraphicGroup::Slash1 | GraphicGroup::Slash2 | GraphicGroup::Slash3 => 1,
 		GraphicGroup::Dash0 | GraphicGroup::Dash1 | GraphicGroup::Dash2 | GraphicGroup::Dash3 => 10,
+		GraphicGroup::PreHolding1 | GraphicGroup::PreHolding2 | GraphicGroup::PreHolding3
+		| GraphicGroup::Holding1 | GraphicGroup::Holding2 | GraphicGroup::Holding3 => 1,
 		GraphicGroup::Hold1 | GraphicGroup::Hold2 | GraphicGroup::Hold3 => 32
 		
 	}
@@ -74,12 +78,6 @@ pub fn graphic_size(g: GraphicGroup) -> Position {
 			x: objects::BRICK_WIDTH as f32,
 			y: objects::BRICK_HEIGHT as f32,
 		}},
-		GraphicGroup::Slash1 | GraphicGroup::Slash2 | GraphicGroup::Slash3 => { 
-			Position {
-				x: objects::SLASH_WIDTH as f32,
-				y: objects::SLASH_HEIGHT as f32
-			}
-		},
 		GraphicGroup::Dash0 | GraphicGroup::Dash1 | GraphicGroup::Dash2 | GraphicGroup::Dash3 => { Position {
 			x: objects::MIN_DASH_WIDTH as f32,
 			y: objects::DASH_HEIGHT as f32
@@ -87,6 +85,11 @@ pub fn graphic_size(g: GraphicGroup) -> Position {
 		GraphicGroup::Hold1 | GraphicGroup::Hold2 | GraphicGroup::Hold3 => { Position {
 			x: objects::HOLD_HITBOX_WIDTH as f32,
 			y: objects::HOLD_HITBOX_HEIGHT as f32
+		}},
+		GraphicGroup::PreHolding1 | GraphicGroup::PreHolding2 | GraphicGroup::PreHolding3
+		| GraphicGroup::Holding1 | GraphicGroup::Holding2 | GraphicGroup::Holding3 => { Position {
+			x: objects::PLAYER_WIDTH as f32 + objects::SLASH_WIDTH as f32,
+			y: objects::PLAYER_HEIGHT as f32 + objects::SLASH_WIDTH as f32,
 		}}
 	};
 }

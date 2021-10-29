@@ -35,9 +35,9 @@ use crate::objects::HOLD_HITBOX_HEIGHT;
 
 // delays dash/slash by a tiny amount so they can be pressed at the same time. starts snimation during delay
 const PRE_SLASH_TIME: f32 = 0.06; 
-const PRE_HOLD_TIME: f32 = 0.06;
+const PRE_HOLD_TIME: f32 = 0.16;
 // so slash animation can finish
-const POST_SLASH_TIME: f32 = 0.06;
+const POST_SLASH_TIME: f32 = 0.12;
 const DASH_LINGER_TIME: f32 = 0.3; // how long the dash graphic lingers
 const BOOST_LINGER_TIME: f32 = 0.3;
 const BOOST_PRELINGER_TIME: f32 = 1.2;
@@ -57,6 +57,13 @@ pub struct Player {
 	
 	hit_type: Option<BrickType>,
 	
+	// flag indicating whether to go into a hold (false) or end the slash regularly without holding (true)
+		// set to false when the slash input is taken, set to true when the key up end input is received
+	stop_hold: bool, 
+	// flag indicating whether the hold hitbox should hit multiple bricks or just the immediate. set to true after a slashdash
+	multi_note_hold: bool,
+	hold_target_info: Option<TargetInfo>,
+	
 	lingering_graphics: Vec<LingeringGraphic>
 }
 
@@ -70,16 +77,16 @@ enum PlayerState {
 	Dash,
 	SlashDash,
 	PostSlash,
-	PreHold(bool), // bool stating whether it's a single or multiple hold
-	Hold(bool), 
+	Hold, 
 }
 
 struct TaggedState {
-	// init time. so there can be a delay before becoming active/inactive and for animation frame calculation
+	// init time of the state. so there can be a delay before becoming active/inactive and for animation frame calculation
 	time: f32,
 	state: PlayerState
 }
 
+#[derive(Clone)]
 struct TargetInfo {
 	time: f32,
 	pos: f32, // where the player left_x should be
@@ -113,6 +120,10 @@ impl Player {
 			
 			hit_type: None,
 			
+			stop_hold: false,
+			multi_note_hold: false,
+			hold_target_info: None, 
+			
 			lingering_graphics: Vec::new() // graphics for objects no longer present but still showing, e.g. slashes/dashes that have executed
 		}
 	}
@@ -120,13 +131,11 @@ impl Player {
 	// tick the player's state
 	pub fn tick(&mut self, seconds_passed: f32, bricks_iter: vec_deque::Iter<Brick>, game_data: &GameData) {
 		self.update_state(game_data.time_running);
-		// update target info if not holding
+		self.update_target_info(bricks_iter, game_data.time_running, game_data.brick_speed);
+		
 		match self.state.state {
-			PlayerState::PreHold(_) | PlayerState::Hold(_) => (),
-			_ => {
-				self.update_target_info(bricks_iter, game_data.time_running, game_data.brick_speed);
-				self.move_player(seconds_passed, game_data.time_running);
-			}
+			PlayerState::Hold => (),
+			_ => { self.move_player(seconds_passed, game_data.time_running); }
 		}
 		
 		// TODO would prefer if cloning the lingering graphics before removing them was unnecessary
@@ -148,6 +157,7 @@ impl Player {
 	}
 	
 	pub fn end_input(&mut self, input: Input) {
+		self.stop_hold = true; // >:< stop hold on any key up?
 		self.inputs_down[input as usize] = false;		
 	}
 	
@@ -156,10 +166,12 @@ impl Player {
 		match self.state.state {
 			PlayerState::PreSlash => (),
 			PlayerState::PreDash => {
+				self.stop_hold = false;
 				self.state = TaggedState { time: self.state.time, state: PlayerState::PreSlashDash };
 				self.hit_type = Some(brick_type);
 			},
 			_ => {
+				self.stop_hold = false;
 				self.state = TaggedState {time: time_running, state: PlayerState::PreSlash};
 				self.hit_type = Some(brick_type);
 			}
@@ -182,7 +194,7 @@ impl Player {
 	pub fn hitbox (&self) -> Option<HitBox> {
 		match self.state.state {
 			PlayerState::Walking | PlayerState::Running | PlayerState::PreSlash | PlayerState::PreSlashDash
-			| PlayerState::PreDash | PlayerState::Dash | PlayerState::PostSlash | PlayerState::PreHold(_) => {
+			| PlayerState::PreDash | PlayerState::Dash | PlayerState::PostSlash => {
 				return None;
 			},
 			PlayerState::Slash => {
@@ -216,7 +228,7 @@ impl Player {
 				};
 				return Some(HitBox { bounds, brick_type });
 			}
-			PlayerState::Hold(multi) => {
+			PlayerState::Hold => {
 				let brick_type = if let Some(bt) = self.hit_type {bt} else {panic!()};
 				let hitbox_x = match self.hit_dir {
 					Direction::Left => {self.bounds.left_x - BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0},
@@ -520,12 +532,8 @@ impl Player {
 				return;
 			},
 			PlayerState::Slash => {
-				if let Some(ht) = self.hit_type {
-					if self.inputs_down[BrickType::to_input(ht) as usize] {
-						self.state = TaggedState {state:PlayerState::PreHold(false), time: time_running};
-						return;
-					}
-				}
+				self.multi_note_hold = false;
+				self.hold_target_info = self.target.clone();
 				self.state = TaggedState { state: PlayerState::PostSlash, time: time_running };
 				return;
 			},
@@ -534,36 +542,27 @@ impl Player {
 				return;
 			},
 			PlayerState::SlashDash => {
-				if let Some(ht) = self.hit_type {
-					if self.inputs_down[BrickType::to_input(ht) as usize] {
-						self.state = TaggedState {state:PlayerState::PreHold(true), time: time_running};
-						return;
-					}
-				}
+				self.multi_note_hold = true;
+				self.hold_target_info = self.target.clone();
 				self.state = TaggedState { state: PlayerState::PostSlash, time: time_running };
 				return;
 			},
 			PlayerState::PostSlash => {
 				if time_running - t > POST_SLASH_TIME {
+					if !self.stop_hold {
+						// >:< to hold if holding past post slash time. this is not the hardest of barriers, and post slash time should
+							// not be too long. Could also look to see if target is a hold note, and switch to hold state earlier if so
+							// and remain in postslash if not
+						self.state = TaggedState {state:PlayerState::Hold, time: time_running};
+						return;
+					}
+					
 					self.state = TaggedState { state: PlayerState::Walking, time: time_running };
 					self.hit_type = None;
 				}
 				return;
 			},
-			PlayerState::PreHold(multi) => {
-				if let Some(ht) = self.hit_type {
-					if self.inputs_down[BrickType::to_input(ht) as usize] {
-						if time_running - t > PRE_HOLD_TIME {
-							self.state = TaggedState { state: PlayerState::Hold(multi), time: time_running };
-						}
-						
-						return;
-					}
-				} 
-				self.state = TaggedState { state: PlayerState::Walking, time: time_running };
-				return;
-			},
-			PlayerState::Hold(_) => {
+			PlayerState::Hold => {
 				if let Some(ht) = self.hit_type {
 					if self.inputs_down[BrickType::to_input(ht) as usize] {
 						return;
@@ -577,50 +576,70 @@ impl Player {
 	
 	// rendering instruction for the player
 	pub fn rendering_instructions(&self, time_running: f32) -> Vec<PositionedGraphic> {
-		let graphic_group;
-		let frame;
-		let flags;
+		let flags = match self.face_dir {
+			Direction::Right => 0,
+			Direction::Left => GraphicFlags::HorizontalFlip as u8
+		};
 		let arg = 0;
-		let mut x = self.bounds.left_x;
 		let mut positioned_graphics = Vec::with_capacity(32);
 		
 		let t = self.state.time;
 		match self.state.state {
 			PlayerState::Running => {
-				graphic_group = GraphicGroup::Running;
-				frame = frame_number(time_running - t);
+				let graphic_group = GraphicGroup::Running;
+				let frame = frame_number(time_running - t);
+				let graphic = Graphic { g: graphic_group, frame, flags, arg };
+				positioned_graphics.push( PositionedGraphic { g: graphic, x: self.bounds.left_x, y: self.bounds.top_y } );
 			},
 			PlayerState::PreSlash | PlayerState::PreSlashDash => {
 				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
-				graphic_group = match brick_type {
+				let graphic_group = match brick_type {
 					BrickType::Type1 => GraphicGroup::Slashing1,
 					BrickType::Type2 => GraphicGroup::Slashing2,
 					BrickType::Type3 => GraphicGroup::Slashing3
 				};
-				frame = frame_number(time_running - t);
-				match self.face_dir {
-					Direction::Right => (),
-					Direction::Left => x = self.bounds.left_x - SLASH_WIDTH as f32,
+				let frame = frame_number(time_running - t);
+				let x = match self.face_dir {
+					Direction::Right => self.bounds.left_x,
+					Direction::Left => self.bounds.left_x - SLASH_WIDTH as f32,
 				};
+				
+				let graphic = Graphic { g: graphic_group, frame, flags, arg };
+				positioned_graphics.push( PositionedGraphic { g: graphic, x, y: self.bounds.top_y } );
 			},
 			PlayerState::Slash | PlayerState::SlashDash | PlayerState::PostSlash => {
 				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
-				graphic_group = match brick_type {
+				let graphic_group = match brick_type {
 					BrickType::Type1 => GraphicGroup::Slashing1,
 					BrickType::Type2 => GraphicGroup::Slashing2,
 					BrickType::Type3 => GraphicGroup::Slashing3
 				};
-				frame = frame_number(time_running - t + PRE_SLASH_TIME);
-				match self.face_dir {
-					Direction::Right => (),
-					Direction::Left => x = self.bounds.left_x - SLASH_WIDTH as f32,
+				let frame = frame_number(time_running - t + PRE_SLASH_TIME);
+				let x = match self.face_dir {
+					Direction::Right => self.bounds.left_x,
+					Direction::Left => self.bounds.left_x - SLASH_WIDTH as f32,
 				};
-			},
-			PlayerState::Hold(multi) => {
-				graphic_group = GraphicGroup::Walking;
-				frame = 0;
 				
-				let brick_type = if let Some(bt) = self.hit_type {bt} else {panic!()};
+				let graphic = Graphic { g: graphic_group, frame, flags, arg };
+				positioned_graphics.push( PositionedGraphic { g: graphic, x, y: self.bounds.top_y } );
+			},
+			PlayerState::Hold => {
+				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
+				
+				// push player graphic
+				let graphic_group = match brick_type {
+					BrickType::Type1 => GraphicGroup::Holding1,
+					BrickType::Type2 => GraphicGroup::Holding2,
+					BrickType::Type3 => GraphicGroup::Holding3
+				};
+				let x = match self.face_dir {
+					Direction::Right => self.bounds.left_x,
+					Direction::Left => self.bounds.left_x - SLASH_WIDTH as f32,
+				};
+				let graphic = Graphic { g: graphic_group, frame: 0, flags, arg };
+				positioned_graphics.push( PositionedGraphic { g: graphic, x, y: self.bounds.top_y } );
+				
+				// push hold hitbox graphics
 				let hitbox_graphic_group = match brick_type {
 					BrickType::Type1 => GraphicGroup::Hold1,
 					BrickType::Type2 => GraphicGroup::Hold2,
@@ -632,21 +651,13 @@ impl Player {
 				};
 				let hitbox_graphic = Graphic {g: hitbox_graphic_group, frame: 0, flags: 0, arg: 0};
 				positioned_graphics.push(PositionedGraphic {g: hitbox_graphic, x: hitbox_graphic_x, y: self.bounds.bottom_y});
-			}
+			},
 			_ => {
-				graphic_group = GraphicGroup::Walking;
-				frame = 0;
+				let graphic_group = GraphicGroup::Walking;
+				let graphic = Graphic { g: graphic_group, frame: 0, flags, arg };
+				positioned_graphics.push( PositionedGraphic { g: graphic, x: self.bounds.left_x, y: self.bounds.top_y } );
 			}
 		}
-		
-		flags = match self.face_dir {
-			Direction::Right => 0,
-			Direction::Left => GraphicFlags::HorizontalFlip as u8
-		};
-		
-		let graphic = Graphic { g: graphic_group, frame, flags, arg };
-		
-		positioned_graphics.push( PositionedGraphic { g: graphic, x, y: self.bounds.top_y } );
 		
 		return positioned_graphics;
 	}
