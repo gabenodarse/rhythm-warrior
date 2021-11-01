@@ -80,15 +80,16 @@ pub struct UpcomingBrick {
 
 // >:< initialize struc with wasm bindgen, need new constructor?
 #[wasm_bindgen]
+#[derive(Clone)]
 pub struct BrickData {
-	brick_type: BrickType,
-	beat_pos: i32,
-	end_beat_pos: i32,
-	x_pos: i32,
-	is_triplet: bool, // is a logic error if more than one of is_triplet, is_trailing, or is_leading is true
-	is_trailing: bool,
-	is_leading: bool,
-	is_hold_note: bool
+	pub brick_type: BrickType,
+	pub beat_pos: i32,
+	pub end_beat_pos: i32,
+	pub x_pos: i32,
+	pub is_triplet: bool, // is a logic error if more than one of is_triplet, is_trailing, or is_leading is true
+	pub is_trailing: bool,
+	pub is_leading: bool,
+	pub is_hold_note: bool
 }
 
 #[wasm_bindgen]
@@ -130,7 +131,12 @@ impl BrickData {
 		return (self.x_pos * objects::BRICK_WIDTH) as f32;
 	}
 	
-	// pub fn approx_time >:<
+	pub fn approx_time(&self, bpm: f32) -> f32 {
+		let minutes_per_beat = 1.0 / bpm;
+		let seconds_per_beat = 60.0 * minutes_per_beat;
+		let beats_passed = self.beat_pos as f32 / 4.0;
+		return seconds_per_beat * beats_passed;
+	}
 }
 
 // equality and order are determined solely on the start position of the note and its x pos, 

@@ -276,7 +276,7 @@ Game.prototype.loadSong = function(songID){
 		startOffset: startOffset,
 		timeCreated: timeCreated,
 		timeModified: timeModified,
-		filename: "",
+		filename: filename,
 		gameData: this.gameObject.game_data()
 	}
 	
@@ -294,7 +294,13 @@ Game.prototype.loadMP3 = async function(file){
 }
 
 Game.prototype.saveSong = function(songData, overwrite){
-	let notes = JSON.parse(this.gameObject.song_notes_json());
+	let notes = this.gameObject.bricks();
+	notes.forEach( note => {
+		note.approx_time = note.approx_time(this.songData.bpm);
+		console.log(note.approx_time);
+	});
+	
+	
 	if(overwrite === true && this.songData.songID !== null){
 		this.database.overwriteSong(songData, notes);
 	}
@@ -323,7 +329,6 @@ export function Editor () {
 
 Object.setPrototypeOf(Editor.prototype, Game.prototype);
 
-// >:<
 Editor.prototype.seek = function(time){
 	this.gameObject.seek(time);
 	this.renderGame();
@@ -360,56 +365,4 @@ Editor.prototype.toGame = function(){
 	Object.setPrototypeOf(this, Game.prototype);
 	
 	return this;
-}
-	
-	
-	
-	
-	
-	
-	
-// >:< 
-Game.prototype.foo = function(){
-	let songs = this.songs();
-	
-	let idIDX;
-	let bpmIDX;
-	let songID;
-	let song;
-	
-	if(songs.length != 0){
-		songs[0]["columns"].forEach( (columnName, idx) => {
-			if(columnName.toUpperCase() === "SONGID"){
-				idIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "BPM"){
-				bpmIDX = idx;
-			}
-		});
-		songs[0]["values"].forEach( (song, idx) => {
-			let songID = song[idIDX];
-			let sql = "SELECT * FROM NOTES WHERE SongID=" + songID +";";
-			let bpm = song[bpmIDX];
-			let notes = this.database.database.exec(sql);
-			
-			if(notes[0]){
-				notes[0]["values"].forEach( note => {
-					let brickType = note[2];
-					let time = note[3];
-					let xPos = note[4];
-					
-					let timeMinutes = time / 60;
-					let beatsPassed = timeMinutes * bpm;
-					let beatPos = Math.floor(beatsPassed * 4 + 0.001);
-					
-					let sql = `INSERT INTO BRICKS \
-					(SongID, BrickType, BeatPos, EndBeatPos, XPos, IsTriplet, IsTrailing, IsLeading, IsHoldNote, ApproxTime) VALUES \
-					(${songID}, ${brickType}, ${beatPos}, ${beatPos}, ${xPos}, false, false, false, false, ${time})`;
-					this.database.database.run(sql);
-				});
-			}
-		});
-	}
-	
-	this.database.exportDatabase();
 }

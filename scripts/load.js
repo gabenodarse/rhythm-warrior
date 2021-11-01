@@ -49,11 +49,11 @@ MMDatabase.prototype.saveSong = function(songData, notes){
 	
 	// TODO combine insertion of all notes into 1 large query?
 	notes.forEach( note => {
-		let {brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote, approxTime} = note;
+		let {brick_type, beat_pos, end_beat_pos, x_pos, is_triplet, is_trailing, is_leading, is_hold_note, approx_time} = note;
 		let sql = `INSERT INTO BRICKS \
 			(SongID, BrickType, BeatPos, EndBeatPos, XPos, IsTriplet, IsTrailing, IsLeading, IsHoldNote, ApproxTime) VALUES \
-			(${newSongID}, ${brickType}, ${beatPos}, ${endBeatPos}, ${xPos}, ${isTriplet}, ${isTrailing}, ${isLeading}, \
-			${isHoldNote}, ${approxTime})`;
+			(${newSongID}, ${brick_type}, ${beat_pos}, ${end_beat_pos}, ${x_pos}, ${is_triplet}, ${is_trailing}, ${is_leading}, \
+			${is_hold_note}, ${approx_time});`;
 		
 		this.database.run(sql);
 	});
@@ -88,11 +88,11 @@ MMDatabase.prototype.overwriteSong = function(songData, notes){
 	
 	// TODO combine insertion of all notes into 1 large query?
 	notes.forEach( note => {
-		let {brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote, approxTime} = note;
+		let {brick_type, beat_pos, end_beat_pos, x_pos, is_triplet, is_trailing, is_leading, is_hold_note, approx_time} = note;
 		let sql = `INSERT INTO BRICKS \
 			(SongID, BrickType, BeatPos, EndBeatPos, XPos, IsTriplet, IsTrailing, IsLeading, IsHoldNote, ApproxTime) VALUES \
-			(${newSongID}, ${brickType}, ${beatPos}, ${endBeatPos}, ${xPos}, ${isTriplet}, ${isTrailing}, ${isLeading}, \
-			${isHoldNote}, ${approxTime})`;
+			(${newSongID}, ${brick_type}, ${beat_pos}, ${end_beat_pos}, ${x_pos}, ${is_triplet}, ${is_trailing}, ${is_leading}, \
+			${is_hold_note}, ${approx_time});`;
 		
 		this.database.run(sql);
 	});
@@ -100,11 +100,11 @@ MMDatabase.prototype.overwriteSong = function(songData, notes){
 	// After everything has been inserted, delete old values set the songID of the new values to the old songID
 	sql = `DELETE FROM SONGS WHERE SONGID=${songID}`;
 	this.database.run(sql);
-	sql = `DELETE FROM NOTES WHERE SONGID=${songID}`;
+	sql = `DELETE FROM BRICKS WHERE SONGID=${songID}`;
 	this.database.run(sql);
 	sql = `UPDATE SONGS SET SONGID=${songID} WHERE SONGID=${newSongID}`;
 	this.database.run(sql);
-	sql = `UPDATE NOTES SET SONGID=${songID} WHERE SONGID=${newSongID}`;
+	sql = `UPDATE BRICKS SET SONGID=${songID} WHERE SONGID=${newSongID}`;
 	this.database.run(sql);
 	
 	this.exportDatabase();

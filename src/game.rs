@@ -6,6 +6,7 @@ use brick::Brick;
 use objects::Object;
 use objects::BrickType;
 use objects::BRICK_HEIGHT;
+use js_sys::Array;
 
 // >:< need a Song struct or just separate into brick data and game data?
 struct Song {
@@ -175,27 +176,21 @@ impl Game {
 		return bb;
 	}
 	
+	// returns the songs game data
 	pub fn game_data(&self) -> GameData {
 		return self.song.game_data;
 	}
 	
-	// !!! THIS NEEDS TO BE RELIABLE, OR ELSE USER CREATED SONG DATA MAY BE LOST
-	// returns the song in json format
-	pub fn song_notes_json(&self) -> String {
-		let mut res = String::new();
+	// returns all bricks of the song
+	pub fn bricks(&self) -> Array {
+		let array = Array::new_with_length(self.song.notes.len() as u32);
 		
-		// >:<
-		/* res.push_str("[");
-		for note in self.song.notes.iter() {
-			res.push_str(&format!("{{\"brickType\": {}, \"time\": {}, \"xPos\": {}}},", 
-				note.note_type as u8, 
-				note.time, 
-				note_pos_from_x(note.x) ));
+		let mut i = 0;
+		for brick in &self.song.notes {
+			array.set(i, JsValue::from(brick.clone()));
+			i += 1;
 		}
-		res.pop(); // pop trailing comma
-		res.push_str("]"); */
-		
-		return res; 
+		return array;
 	}
 	
 	// takes an input command and passes it forward to be handled
@@ -208,16 +203,9 @@ impl Game {
 		self.player.end_input(input);
 	}
 	
-	// >:< 
-	// TODO create a method load_song (but can't pass normal arrays/vec, moved or borrowed, through wasm_bindgen)
-	// TODO separate toggling/rotating through brick types and strictly adding bricks
 	// toggles a brick at the position and time specified. If a brick is already there it will toggle the note of the brick
-	/* pub fn toggle_brick (&mut self, bt: BrickType, time: f32, pos: u8) {
-		if time > self.song.game_data.duration {
-			return;
-		}
-		
-		let brick = UpcomingNote{
+	pub fn toggle_brick (&mut self, brick_data: BrickData) {
+		/* let brick = UpcomingNote{
 			note_type: BrickType::Type1,
 			x: note_pos_to_x(pos),
 			time
@@ -252,9 +240,10 @@ impl Game {
 			});	
 		}
 		
-		self.song.game_data.max_score = 100 * self.song.notes.len() as i32;
-	} */
+		self.song.game_data.max_score = 100 * self.song.notes.len() as i32; */
+	}
 	
+	// adds a brick according to the brick's brick data
 	pub fn add_brick(&mut self, brick_data: BrickData) {
 		self.song.notes.insert( brick_data ); // TODO alert/log when a value was already there and the brick wasn't updated
 		
