@@ -5,22 +5,23 @@ use player::Player;
 use brick::Brick;
 use objects::Object;
 use objects::BrickType;
+use objects::BRICK_HEIGHT;
 
-
+// >:< need a Song struct or just separate into brick data and game data?
 struct Song {
-	notes: BTreeSet<UpcomingNote>,
+	notes: BTreeSet<BrickData>,
 	game_data: GameData
 }
 
 #[wasm_bindgen]
 pub struct Game {
-	// !!! create a copy of the reference to player and bricks in a data structure for ordering objects
-		// the objects either point to subsequently positioned objects or not (Option type)
 	player: Player,
-	bricks: VecDeque<Brick>,
-	// !!! create a song type to hold song notes and meta data
+	bricks: VecDeque<UpcomingBrick>, // all bricks of the song, ordered
+	current_bricks: VecDeque<Brick>, // current bricks that are on screen or about to appear on screen, ordered
+	upcoming_brick_idx: usize,
+	scrolled_y: f32,
+	end_appearance_y: f32,
 	song: Song, 
-	upcoming_note: Option<UpcomingNote>,
 	graphics: Vec<PositionedGraphic>,
 	bricks_broken: u8
 }
@@ -32,6 +33,10 @@ impl Game {
 		return Game {
 			player: Player::new((GAME_WIDTH / 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0),
 			bricks: VecDeque::new(), // bricks on screen, ordered by time they are meant to be played
+			current_bricks: VecDeque::new(),
+			upcoming_brick_idx: 0,
+			scrolled_y: 0.0,
+			end_appearance_y: Game::end_appearance_y(0.0, brick_speed),
 			song: Song { 
 				notes: BTreeSet::new(),
 				game_data: GameData {
@@ -44,10 +49,13 @@ impl Game {
 					duration,
 				}
 			},
-			upcoming_note: None,
 			graphics: Vec::with_capacity(512), // TODO what should the upper limit be? Make it a hard limit
 			bricks_broken: 0
 		};
+	}
+	
+	fn end_appearance_y(scrolled_y: f32, brick_speed: f32) -> f32 {
+		return scrolled_y + GAME_HEIGHT as f32 + brick_speed * 2.0; // 2 second window after bricks are off the screen
 	}
 			
 	// tick the game state by the given amount of time
@@ -59,29 +67,31 @@ impl Game {
 			seconds_passed = MAX_TIME_BETWEEN_TICKS;
 		}
 		
+		let delta_y = seconds_passed * self.song.game_data.brick_speed;
 		self.song.game_data.time_running += seconds_passed;
+		self.scrolled_y += delta_y;
+		self.end_appearance_y += delta_y;
 		
 		// retrieve necessary data from the next bricks to hit: 
 			// the time of the upcoming bricks, the leftmost x of those bricks and the rightmost x
-		let bricks_iter = self.bricks.iter();
+		let bricks_iter = self.current_bricks.iter();
 		self.player.tick(seconds_passed, bricks_iter, &self.song.game_data);
 		
-		// tick bricks while discarding any bricks off screen 
-		// TODO might not need to check on screen for all notes
-		let len = self.bricks.len();
-		let mut del = 0;
-		for i in 0..len {
-			if self.bricks[i].bounds().bottom_y < 0.0 {
-				del += 1;
+		
+		// discard any bricks that are offscreen
+		loop {
+			if self.current_bricks.len() > 0 && self.current_bricks[0].bounds().bottom_y < 0.0 {
+				self.current_bricks.pop_front();
+				continue;
 			} else {
-				self.bricks[i].tick(self.song.game_data.brick_speed, seconds_passed);
-				if del > 0 {
-					self.bricks.swap(i - del, i);
-				}
+				break;
 			}
 		}
-		if del > 0 {
-			self.bricks.truncate(len - del);
+		
+		// tick all current bricks
+		for brick in &mut self.current_bricks {
+			brick.bounds.top_y -= delta_y;
+			brick.bounds.bottom_y -= delta_y;
 		}
 		
 		// get the destruction bounds for slashing or dashing
@@ -101,13 +111,11 @@ impl Game {
 			},
 		];
 		
-		
 		// check for brick destruction 
-		// TODO: might be a little faster to do as bricks are updated
-		// TODO more efficient way than checking ALL bricks
-		let t = self.song.game_data.time_running;
+		// TODO might be a little faster to do as bricks are updated
+		// TODO more efficient way than checking all bricks
 		let score = &mut self.song.game_data.score;
-		let bricks = &mut self.bricks;
+		let bricks = &mut self.current_bricks;
 		let bricks_broken = &mut self.bricks_broken;
 		if let Some(destruction_type) = destruction_type {
 			for bounds in destruction_bounds.iter() {
@@ -129,7 +137,7 @@ impl Game {
 		}
 		
 		// !!! detecting end of song?
-		self.add_upcoming_notes();
+		self.add_upcoming_bricks();
 	}
 	
 	// updates the displayed graphics and returns rendering instructions in the form of a pointer
@@ -148,7 +156,7 @@ impl Game {
 		
 		graphics.append(&mut self.player.rendering_instructions(self.song.game_data.time_running));
 		
-		for brick in &self.bricks {
+		for brick in &self.current_bricks {
 			graphics.push(brick.rendering_instruction());
 		}
 		
@@ -176,7 +184,8 @@ impl Game {
 	pub fn song_notes_json(&self) -> String {
 		let mut res = String::new();
 		
-		res.push_str("[");
+		// >:<
+		/* res.push_str("[");
 		for note in self.song.notes.iter() {
 			res.push_str(&format!("{{\"brickType\": {}, \"time\": {}, \"xPos\": {}}},", 
 				note.note_type as u8, 
@@ -184,9 +193,9 @@ impl Game {
 				note_pos_from_x(note.x) ));
 		}
 		res.pop(); // pop trailing comma
-		res.push_str("]");
+		res.push_str("]"); */
 		
-		return res;
+		return res; 
 	}
 	
 	// takes an input command and passes it forward to be handled
@@ -199,10 +208,11 @@ impl Game {
 		self.player.end_input(input);
 	}
 	
+	// >:< 
 	// TODO create a method load_song (but can't pass normal arrays/vec, moved or borrowed, through wasm_bindgen)
 	// TODO separate toggling/rotating through brick types and strictly adding bricks
 	// toggles a brick at the position and time specified. If a brick is already there it will toggle the note of the brick
-	pub fn toggle_brick (&mut self, bt: BrickType, time: f32, pos: u8) {
+	/* pub fn toggle_brick (&mut self, bt: BrickType, time: f32, pos: u8) {
 		if time > self.song.game_data.duration {
 			return;
 		}
@@ -242,78 +252,68 @@ impl Game {
 			});	
 		}
 		
-		match self.song.notes.iter().next() {
-			Some(note) => self.upcoming_note = Some(*note),
-			None => self.upcoming_note = None
+		self.song.game_data.max_score = 100 * self.song.notes.len() as i32;
+	} */
+	
+	pub fn add_brick(&mut self, brick_data: BrickData) {
+		self.song.notes.insert( brick_data ); // TODO alert/log when a value was already there and the brick wasn't updated
+		
+		self.bricks = VecDeque::new();
+		for brick_data in &self.song.notes {
+			self.bricks.push_back( UpcomingBrick {
+				brick_type: brick_data.brick_type, 
+				x: brick_data.x(),
+				appearance_y: brick_data.appearance_y(self.song.game_data.bpm, self.song.game_data.brick_speed)
+			});
 		}
 		
-		self.song.game_data.max_score = 100 * self.song.notes.len() as i32;
+		self.song.game_data.max_score = self.song.notes.len() as i32 * 100;
+		self.seek(self.song.game_data.time_running);
 	}
 	
-	// add any bricks from song that have reached the time to appear
-		// uses range weirdness because seeking through a B-tree of non-primitives is weird
-	fn add_upcoming_notes(&mut self) {
-		if let Some(upcoming_note) = &self.upcoming_note {
-			// time that notes should be played plus a buffer time where they travel up the screen
-			let appearance_buffer = self.song.game_data.time_running + GAME_HEIGHT as f32 / self.song.game_data.brick_speed;
-			if upcoming_note.time < appearance_buffer {
-				
-				let upcoming_notes = self.song.notes.range(*upcoming_note..); // !!! range bounds with a float possible?
-				
-				for upcoming_note in upcoming_notes {
-					if upcoming_note.time > appearance_buffer {
-						self.upcoming_note = Some(*upcoming_note);
-						return;
-					}
-					
-					let time_difference = appearance_buffer - upcoming_note.time;
-					
-					let mut brick = Brick::new(
-						upcoming_note.note_type,
-						upcoming_note.x,
-						GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32,
-						upcoming_note.time );
-					brick.tick(self.song.game_data.brick_speed, time_difference);
-					self.bricks.push_back(brick);
-				}
-				
-				self.upcoming_note = None;
+	// add bricks to current_bricks
+	fn add_upcoming_bricks(&mut self) {
+		while(self.upcoming_brick_idx < self.bricks.len()) {
+			let idx = self.upcoming_brick_idx;
+			if self.bricks[idx].appearance_y < self.end_appearance_y {
+				let brick_type = self.bricks[idx].brick_type;
+				let x = self.bricks[idx].x;
+				let y = self.bricks[idx].appearance_y - self.scrolled_y;
+				self.current_bricks.push_back( Brick::new(brick_type, x, y) );
+				self.upcoming_brick_idx += 1;
+			} else {
+				break;
 			}
-			
 		}
 	}
 	
 	// seeks (changes the song time) to the time specified. resets song
-		// !!! resetting song uses duplicate code from add_upcoming_notes
 	pub fn seek(&mut self, time: f32) {
-		self.song.game_data.time_running = time;
-		self.bricks = VecDeque::new();
-		self.song.game_data.score = 0;
 		self.player = Player::new((GAME_WIDTH / 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0);
+		self.scrolled_y = self.song.game_data.brick_speed * time;
+		self.end_appearance_y = Game::end_appearance_y(self.scrolled_y, self.song.game_data.brick_speed);
+		self.song.game_data.time_running = time;
+		self.song.game_data.score = 0;
+		self.bricks_broken = 0;
 		
-		let min_time = time - (GROUND_POS / self.song.game_data.brick_speed);
-		let appearance_buffer = time + GAME_HEIGHT as f32 / self.song.game_data.brick_speed;
-		
-		for note in self.song.notes.iter() {
-			if note.time > min_time {
-				if note.time > appearance_buffer {
-					self.upcoming_note = Some(*note);
-					return;
+		self.current_bricks = VecDeque::new();
+		self.upcoming_brick_idx = 0;
+		let mut i = 0;
+		while(i < self.bricks.len()) {
+			if self.bricks[i].appearance_y - self.scrolled_y > -BRICK_HEIGHT as f32 {
+				if self.bricks[i].appearance_y < self.end_appearance_y {
+					let brick_type = self.bricks[i].brick_type;
+					let x = self.bricks[i].x;
+					let y = self.bricks[i].appearance_y - self.scrolled_y;
+					self.current_bricks.push_back( Brick::new(brick_type, x, y) );
+				} else {
+					break;
 				}
-				
-				let time_difference = appearance_buffer - note.time;
-				
-				let mut brick = Brick::new(
-					note.note_type,
-					note.x,
-					GAME_HEIGHT as f32 + GROUND_POS - objects::BRICK_HEIGHT as f32,
-					note.time);
-				brick.tick(self.song.game_data.brick_speed, time_difference);
-				self.bricks.push_back(brick);
 			}
+			
+			i += 1;
+			self.upcoming_brick_idx = i;
 		}
-		
-		self.upcoming_note = None;
 	}
 }
 

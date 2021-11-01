@@ -208,7 +208,7 @@ Game.prototype.loadSong = function(songID){
 	// !!! check if current song has been saved (modified flag?) 
 		// No need to show a check for regular game usage where songs aren't edited
 	// !!! creating a new game to load a new song? Or create a load_song method? wasm garbage collected?
-	let {notes, song} = this.database.loadSong(songID);
+	let {bricks, song} = this.database.loadSong(songID);
 	
 	let name, artist, difficulty, bpm, brickSpeed, duration, startOffset, timeCreated, timeModified, filename;
 	song[0]["columns"].forEach( (columnName, idx) => {
@@ -237,10 +237,31 @@ Game.prototype.loadSong = function(songID){
 	
 	this.gameObject = wasm.Game.new(bpm, brickSpeed, duration);
 	
-	// TODO flimsy way of indexing into notes to retrieve correct values
-	if(notes[0]){
-		notes[0]["values"].forEach( note => {
-			this.gameObject.toggle_brick(note[2], note[3], note[4]); 
+	let brickTypeIDX, beatPosIDX, endBeatPosIDX, xPosIDX, isTripletIDX, isTrailingIDX, isLeadingIDX, isHoldNoteIDX;
+	bricks[0]["columns"].forEach( (columnName, idx) => {
+		if(columnName.toUpperCase() === "BRICKTYPE"){
+			brickTypeIDX = idx;
+		} else if(columnName.toUpperCase() === "BEATPOS"){
+			beatPosIDX = idx;
+		} else if(columnName.toUpperCase() === "ENDBEATPOS"){
+			endBeatPosIDX = idx;
+		} else if(columnName.toUpperCase() === "XPOS"){
+			xPosIDX = idx;
+		} else if(columnName.toUpperCase() === "ISTRIPLET"){
+			isTripletIDX = idx;
+		} else if(columnName.toUpperCase() === "ISTRAILING"){
+			isTrailingIDX = idx;
+		} else if(columnName.toUpperCase() === "ISLEADING"){
+			isLeadingIDX = idx;
+		} else if(columnName.toUpperCase() === "ISHOLDNOTE"){
+			isHoldNoteIDX = idx;
+		}
+	});
+	if(bricks[0]){
+		bricks[0]["values"].forEach( brick => {
+			this.gameObject.add_brick(wasm.BrickData.new( 
+				brick[brickTypeIDX], brick[beatPosIDX], brick[endBeatPosIDX], brick[xPosIDX],
+				brick[isTripletIDX], brick[isTrailingIDX], brick[isLeadingIDX], brick[isHoldNoteIDX])); 
 		});
 	}
 	
@@ -302,11 +323,13 @@ export function Editor () {
 
 Object.setPrototypeOf(Editor.prototype, Game.prototype);
 
+// >:<
 Editor.prototype.seek = function(time){
 	this.gameObject.seek(time);
 	this.renderGame();
 }
 
+// >:<
 Editor.prototype.createNote = function(x, y){
 	// !!! support for third, sixth, twelfth notes
 	let sixteenthNoteTime = this.gameObject.beat_interval() / 4;
@@ -339,3 +362,54 @@ Editor.prototype.toGame = function(){
 	return this;
 }
 	
+	
+	
+	
+	
+	
+	
+// >:< 
+Game.prototype.foo = function(){
+	let songs = this.songs();
+	
+	let idIDX;
+	let bpmIDX;
+	let songID;
+	let song;
+	
+	if(songs.length != 0){
+		songs[0]["columns"].forEach( (columnName, idx) => {
+			if(columnName.toUpperCase() === "SONGID"){
+				idIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "BPM"){
+				bpmIDX = idx;
+			}
+		});
+		songs[0]["values"].forEach( (song, idx) => {
+			let songID = song[idIDX];
+			let sql = "SELECT * FROM NOTES WHERE SongID=" + songID +";";
+			let bpm = song[bpmIDX];
+			let notes = this.database.database.exec(sql);
+			
+			if(notes[0]){
+				notes[0]["values"].forEach( note => {
+					let brickType = note[2];
+					let time = note[3];
+					let xPos = note[4];
+					
+					let timeMinutes = time / 60;
+					let beatsPassed = timeMinutes * bpm;
+					let beatPos = Math.floor(beatsPassed * 4 + 0.001);
+					
+					let sql = `INSERT INTO BRICKS \
+					(SongID, BrickType, BeatPos, EndBeatPos, XPos, IsTriplet, IsTrailing, IsLeading, IsHoldNote, ApproxTime) VALUES \
+					(${songID}, ${brickType}, ${beatPos}, ${beatPos}, ${xPos}, false, false, false, false, ${time})`;
+					this.database.database.run(sql);
+				});
+			}
+		});
+	}
+	
+	this.database.exportDatabase();
+}

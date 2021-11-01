@@ -13,12 +13,12 @@ MMDatabase.prototype.loadSong = function(songID){
 		throw Error("invalid song ID");
 	}
 	
-	let sql = "SELECT * FROM NOTES WHERE SongID=" + songID +";";
-	let notes = this.database.exec(sql);
+	let sql = "SELECT * FROM BRICKS WHERE SongID=" + songID +";";
+	let bricks = this.database.exec(sql);
 	sql = "SELECT * FROM SONGS WHERE SongID=" + songID +";";
 	let song = this.database.exec(sql);
 	
-	return {song: song, notes: notes};
+	return {song: song, bricks: bricks};
 }
 
 // !!! error handling on save and overwrite. Don't want to lose data
@@ -49,15 +49,11 @@ MMDatabase.prototype.saveSong = function(songData, notes){
 	
 	// TODO combine insertion of all notes into 1 large query?
 	notes.forEach( note => {
-		let {brickType, time, xPos} = note;
-		let sql = "INSERT INTO NOTES \
-			(SongID, BrickType, Time, XPos) \
-			VALUES (" 
-			+ newSongID + ", "
-			+ brickType + ", "
-			+ time + ", " 
-			+ xPos + ");"
-		;
+		let {brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote, approxTime} = note;
+		let sql = `INSERT INTO BRICKS \
+			(SongID, BrickType, BeatPos, EndBeatPos, XPos, IsTriplet, IsTrailing, IsLeading, IsHoldNote, ApproxTime) VALUES \
+			(${newSongID}, ${brickType}, ${beatPos}, ${endBeatPos}, ${xPos}, ${isTriplet}, ${isTrailing}, ${isLeading}, \
+			${isHoldNote}, ${approxTime})`;
 		
 		this.database.run(sql);
 	});
@@ -92,15 +88,11 @@ MMDatabase.prototype.overwriteSong = function(songData, notes){
 	
 	// TODO combine insertion of all notes into 1 large query?
 	notes.forEach( note => {
-		let {brickType, time, xPos} = note;
-		let sql = "INSERT INTO NOTES \
-			(SongID, BrickType, Time, XPos) \
-			VALUES (" 
-			+ newSongID + ", "
-			+ brickType + ", "
-			+ time + ", " 
-			+ xPos + ");"
-		;
+		let {brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote, approxTime} = note;
+		let sql = `INSERT INTO BRICKS \
+			(SongID, BrickType, BeatPos, EndBeatPos, XPos, IsTriplet, IsTrailing, IsLeading, IsHoldNote, ApproxTime) VALUES \
+			(${newSongID}, ${brickType}, ${beatPos}, ${endBeatPos}, ${xPos}, ${isTriplet}, ${isTrailing}, ${isLeading}, \
+			${isHoldNote}, ${approxTime})`;
 		
 		this.database.run(sql);
 	});

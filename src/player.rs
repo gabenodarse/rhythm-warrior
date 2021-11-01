@@ -88,8 +88,9 @@ struct TaggedState {
 
 #[derive(Clone)]
 struct TargetInfo {
-	time: f32,
-	pos: f32, // where the player left_x should be
+	top_y: f32,
+	bottom_y: f32,
+	pos: f32, // where the player left_x should be (>:< rename to left_x_pos)
 	hit_dir: Direction,
 	dash_distance: f32,
 	target_centers: Vec<f32>,
@@ -131,7 +132,7 @@ impl Player {
 	// tick the player's state
 	pub fn tick(&mut self, seconds_passed: f32, bricks_iter: vec_deque::Iter<Brick>, game_data: &GameData) {
 		self.update_state(game_data.time_running);
-		self.update_target_info(bricks_iter, game_data.time_running, game_data.brick_speed);
+		self.update_target_info(bricks_iter);
 		
 		match self.state.state {
 			PlayerState::Hold => (),
@@ -295,26 +296,21 @@ impl Player {
 	}
 	
 	// updates target, face_dir, and hit_dir
-	fn update_target_info(&mut self, bricks_iter: vec_deque::Iter<Brick>, time_running: f32, brick_speed: f32) {
-		
-		const SAME_GROUP_TIME_BUFFER: f32 = 0.025; // maximum time difference between bricks in the same group 
-			// (bricks in same group should have time difference of 0. can do validation checking of groups when loading song)
-		// maximum time player will wait before chasing next bricks
-			// !!! should be variable based on how fast bricks are travelling
-		let next_bricks_time_buffer:  f32 = PLAYER_HEIGHT as f32 / brick_speed;
+	fn update_target_info(&mut self, bricks_iter: vec_deque::Iter<Brick>) {
 		
 		let mut bricks_info = None;
 		let mut target_centers = Vec::new();
 		
 		struct UpcomingBricks {
-			time: f32,
+			top_y: f32,
+			bottom_y: f32,
 			left_brick: f32,
 			right_brick: f32
 		}
 		
 		for brick in bricks_iter {
 			// iterate over the bricks that are already passed
-			if brick.time + next_bricks_time_buffer < time_running {
+			if brick.bounds.bottom_y < GROUND_POS - PLAYER_HEIGHT as f32 {
 				continue;
 			} 
 			
@@ -323,13 +319,14 @@ impl Player {
 				None => {
 					target_centers.push(brick.bounds.left_x + BRICK_WIDTH as f32 / 2.0);
 					bricks_info = Some( UpcomingBricks {
-						time: brick.time,
+						top_y: brick.bounds.top_y,
+						bottom_y: brick.bounds.bottom_y,
 						left_brick: brick.bounds.left_x,
 						right_brick: brick.bounds.left_x
 					});
 				},
 				Some(bi) => {
-					if bi.time + SAME_GROUP_TIME_BUFFER < brick.time {
+					if bi.top_y != brick.bounds.top_y {
 						break; 
 					}
 					
@@ -375,7 +372,7 @@ impl Player {
 						hit_dir = Direction::Left;
 				}
 				
-				self.target = Some( TargetInfo { time: bi.time, pos, hit_dir, dash_distance, target_centers } );
+				self.target = Some( TargetInfo { top_y: bi.top_y, bottom_y: bi.bottom_y, pos, hit_dir, dash_distance, target_centers } );
 				self.hit_dir = self.face_dir;
 			}
 		}

@@ -16,7 +16,6 @@ use crate::objects::BRICK_WIDTH;
 pub struct Brick {
 	graphic: Graphic,
 	pub brick_type: BrickType,
-	pub time: f32,
 	pub bounds: ObjectBounds,
 }
 
@@ -50,7 +49,7 @@ impl Object for Brick {
 }
 
 impl Brick {
-	pub fn new (brick_type: BrickType, x: f32, y: f32, t: f32) -> Brick {
+	pub fn new (brick_type: BrickType, x: f32, y: f32) -> Brick {
 		let frame = 0;
 		let flags = 0;
 		let arg = 0;
@@ -62,7 +61,6 @@ impl Brick {
 		
 		return Brick {
 			brick_type,
-			time: t,
 			graphic,
 			bounds: ObjectBounds {
 				left_x: x,
@@ -71,15 +69,6 @@ impl Brick {
 				bottom_y: y + BRICK_HEIGHT as f32,
 			}
 		};
-	}
-	
-	pub fn tick(&mut self, brick_speed: f32, seconds_passed: f32) {
-		self.bounds.top_y -= brick_speed * seconds_passed;
-		self.bounds.bottom_y -= brick_speed * seconds_passed;
-	}
-	
-	pub fn time(&self) -> f32 {
-		return self.time;
 	}
 	
 	pub fn brick_type(&self) -> BrickType {

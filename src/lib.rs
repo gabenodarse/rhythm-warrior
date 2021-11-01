@@ -72,11 +72,102 @@ pub struct GameData {
 }
 
 #[derive(Clone, Copy)]
-pub struct UpcomingNote {
-	note_type: BrickType,
+pub struct UpcomingBrick {
+	brick_type: BrickType,
 	x: f32,
-	time: f32, // time the note is meant to be played
+	appearance_y: f32,
 }
+
+// >:< initialize struc with wasm bindgen, need new constructor?
+#[wasm_bindgen]
+pub struct BrickData {
+	brick_type: BrickType,
+	beat_pos: i32,
+	end_beat_pos: i32,
+	x_pos: i32,
+	is_triplet: bool, // is a logic error if more than one of is_triplet, is_trailing, or is_leading is true
+	is_trailing: bool,
+	is_leading: bool,
+	is_hold_note: bool
+}
+
+#[wasm_bindgen]
+impl BrickData {
+	pub fn new(brick_type: BrickType, beat_pos: i32, end_beat_pos: i32, x_pos: i32, is_triplet: bool,
+	is_trailing: bool, is_leading: bool, is_hold_note: bool) -> BrickData {
+		
+		return BrickData {
+			brick_type,
+			beat_pos,
+			end_beat_pos,
+			x_pos,
+			is_triplet,
+			is_trailing,
+			is_leading,
+			is_hold_note
+		};
+	}
+	
+	pub fn appearance_y(&self, bpm: f32, brick_speed: f32) -> f32 {
+		let minutes_per_beat = 1.0 / bpm;
+		let seconds_per_beat = 60.0 * minutes_per_beat;
+		let pixels_per_beat = brick_speed * seconds_per_beat;
+		let beats_passed = self.beat_pos as f32 / 4.0;
+		
+		let mut pixels_passed = pixels_per_beat * beats_passed;
+		if self.is_leading {
+			pixels_passed -= pixels_per_beat / 8.0;
+		} else if self.is_trailing {
+			pixels_passed += pixels_per_beat / 8.0;
+		} else if self.is_triplet {
+			// >:< 
+		}
+		
+		return pixels_passed + GROUND_POS - objects::BRICK_HEIGHT as f32;
+	}
+	
+	pub fn x(&self) -> f32 {
+		return (self.x_pos * objects::BRICK_WIDTH) as f32;
+	}
+	
+	// pub fn approx_time >:<
+}
+
+// equality and order are determined solely on the start position of the note and its x pos, 
+	// not the brick type or whether it's a hold note or approximate time
+impl PartialEq for BrickData {
+	fn eq(&self, other: &BrickData) -> bool {
+		return self.beat_pos == other.beat_pos && self.x_pos == other.x_pos
+		&& self.is_triplet == other.is_triplet && self.is_trailing == other.is_trailing && self.is_leading == other.is_leading;
+	}
+}
+impl Eq for BrickData {}
+
+impl PartialOrd for BrickData {
+	fn partial_cmp(&self, other: &BrickData) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for BrickData {
+	fn cmp(&self, other: &BrickData) -> Ordering {
+		let self_top_y = self.appearance_y(60.0, 100.0); // >:< dummy bpm and brick speed values
+		let other_top_y = other.appearance_y(60.0, 100.0);
+		if self_top_y < other_top_y { Ordering::Less }
+		else if self_top_y > other_top_y { Ordering::Greater }
+		else if self.x_pos < other.x_pos { Ordering::Less }
+		else if self.x_pos > other.x_pos { Ordering::Greater }
+		else { Ordering::Equal }
+	}
+}
+
+
+
+
+
+
+
+
 
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
@@ -169,34 +260,7 @@ pub fn num_possible_inputs() -> usize {
 
 // --- trait implementations ---
 
-impl PartialEq for UpcomingNote {
-	fn eq(&self, other: &UpcomingNote) -> bool {
-		self.note_type == other.note_type
-		&& self.x == other.x
-		&& self.time - other.time < F32_ZERO
-		&& other.time - self.time < F32_ZERO
-	}
-}
-impl Eq for UpcomingNote {}
-
-impl PartialOrd for UpcomingNote {
-	fn partial_cmp(&self, other: &UpcomingNote) -> Option<Ordering> {
-		Some(self.cmp(other))
-	}
-}
-
-impl Ord for UpcomingNote {
-	fn cmp(&self, other: &UpcomingNote) -> Ordering {
-		if other.time - self.time > F32_ZERO      { Ordering::Less }
-		else if self.time - other.time > F32_ZERO { Ordering::Greater }
-		// arbitrary comparisons so that notes of the same time can exist within the same set
-		else if (self.note_type as u8) < (other.note_type as u8) { Ordering::Less }
-		else if (self.note_type as u8) > (other.note_type as u8) { Ordering::Greater }
-		else if self.x < other.x { Ordering::Less }
-		else if self.x > other.x { Ordering::Greater }
-		else { Ordering::Equal }
-	}
-}
+// >:< move stuff here
 
 // !!! logging
 #[wasm_bindgen]
