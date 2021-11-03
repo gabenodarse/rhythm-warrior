@@ -10,6 +10,7 @@ pub const PLAYER_WIDTH: i32 = 50;
 pub const PLAYER_HEIGHT: i32 = 100; 
 pub const BRICK_WIDTH: i32 = (RIGHT_BOUNDARY - LEFT_BOUNDARY) as i32 / MAX_NOTES_PER_SCREEN_WIDTH as i32;
 pub const BRICK_HEIGHT: i32 = 100;
+pub const BRICK_SEGMENT_HEIGHT: i32 = 50;
 pub const SLASH_WIDTH: i32 = 60;
 pub const SLASH_HEIGHT: i32 = PLAYER_HEIGHT;
 pub const DASH_WIDTH: i32 = BRICK_WIDTH * 3; // >:< remove as constant

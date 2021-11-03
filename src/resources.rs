@@ -22,6 +22,9 @@ pub enum GraphicGroup {
 	Brick1,
 	Brick2,
 	Brick3,
+	Brick1Segment,
+	Brick2Segment,
+	Brick3Segment,
 	Dash0,
 	Dash1,
 	Dash2,
@@ -46,6 +49,7 @@ pub fn max_graphics(g: GraphicGroup) -> u32 {
 		GraphicGroup::Running => 24,
 		GraphicGroup::Slashing1 | GraphicGroup::Slashing2 | GraphicGroup::Slashing3 => 1,
 		GraphicGroup::Brick1 | GraphicGroup::Brick2 | GraphicGroup::Brick3 => 32,
+		GraphicGroup::Brick1Segment | GraphicGroup::Brick2Segment | GraphicGroup::Brick3Segment => 128,
 		GraphicGroup::Dash0 | GraphicGroup::Dash1 | GraphicGroup::Dash2 | GraphicGroup::Dash3 => 10,
 		GraphicGroup::PreHolding1 | GraphicGroup::PreHolding2 | GraphicGroup::PreHolding3
 		| GraphicGroup::Holding1 | GraphicGroup::Holding2 | GraphicGroup::Holding3 => 1,
@@ -77,6 +81,10 @@ pub fn graphic_size(g: GraphicGroup) -> Position {
 		GraphicGroup::Brick1 | GraphicGroup::Brick2 | GraphicGroup::Brick3 => { Position {
 			x: objects::BRICK_WIDTH as f32,
 			y: objects::BRICK_HEIGHT as f32,
+		}},
+		GraphicGroup::Brick1Segment | GraphicGroup::Brick2Segment | GraphicGroup::Brick3Segment => { Position {
+			x: objects::BRICK_WIDTH as f32,
+			y: objects::BRICK_SEGMENT_HEIGHT as f32,
 		}},
 		GraphicGroup::Dash0 | GraphicGroup::Dash1 | GraphicGroup::Dash2 | GraphicGroup::Dash3 => { Position {
 			x: objects::MIN_DASH_WIDTH as f32,

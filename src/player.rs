@@ -91,6 +91,7 @@ struct TargetInfo {
 	top_y: f32,
 	bottom_y: f32,
 	pos: f32, // where the player left_x should be (>:< rename to left_x_pos)
+	is_hold_note: bool,
 	hit_dir: Direction,
 	dash_distance: f32,
 	target_centers: Vec<f32>,
@@ -238,7 +239,7 @@ impl Player {
 				let bounds = ObjectBounds { 
 					left_x: hitbox_x, 
 					right_x: hitbox_x + HOLD_HITBOX_WIDTH as f32, 
-					top_y: self.bounds.bottom_y,
+					top_y: self.bounds.top_y,
 					bottom_y: self.bounds.bottom_y + HOLD_HITBOX_HEIGHT as f32
 				};
 				return Some(HitBox { bounds, brick_type });
@@ -300,6 +301,7 @@ impl Player {
 		
 		let mut bricks_info = None;
 		let mut target_centers = Vec::new();
+		let mut is_hold_note = false;
 		
 		struct UpcomingBricks {
 			top_y: f32,
@@ -314,10 +316,12 @@ impl Player {
 				continue;
 			} 
 			
+			
 			// get the group of UpcomingBricks
 			match &mut bricks_info {
 				None => {
 					target_centers.push(brick.bounds.left_x + BRICK_WIDTH as f32 / 2.0);
+					if brick.is_hold_note { is_hold_note = true; };
 					bricks_info = Some( UpcomingBricks {
 						top_y: brick.bounds.top_y,
 						bottom_y: brick.bounds.bottom_y,
@@ -330,6 +334,7 @@ impl Player {
 						break; 
 					}
 					
+					if brick.is_hold_note { is_hold_note = true; };
 					target_centers.push(brick.bounds.left_x + BRICK_WIDTH as f32 / 2.0);
 					if brick.bounds.left_x < bi.left_brick {
 						bi.left_brick = brick.bounds.left_x;
@@ -372,7 +377,7 @@ impl Player {
 						hit_dir = Direction::Left;
 				}
 				
-				self.target = Some( TargetInfo { top_y: bi.top_y, bottom_y: bi.bottom_y, pos, hit_dir, dash_distance, target_centers } );
+				self.target = Some( TargetInfo { top_y: bi.top_y, bottom_y: bi.bottom_y, pos, is_hold_note, hit_dir, dash_distance, target_centers } );
 				self.hit_dir = self.face_dir;
 			}
 		}
@@ -545,6 +550,16 @@ impl Player {
 				return;
 			},
 			PlayerState::PostSlash => {
+				if let Some(ti) = &self.hold_target_info {
+					if ti.is_hold_note && !self.stop_hold {
+						// >:< to hold if holding past post slash time. this is not the hardest of barriers, and post slash time should
+							// not be too long. Could also look to see if target is a hold note, and switch to hold state earlier if so
+							// and remain in postslash if not
+						self.state = TaggedState {state:PlayerState::Hold, time: time_running};
+						return;
+					}
+				}
+				
 				if time_running - t > POST_SLASH_TIME {
 					if !self.stop_hold {
 						// >:< to hold if holding past post slash time. this is not the hardest of barriers, and post slash time should

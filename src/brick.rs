@@ -17,6 +17,7 @@ pub struct Brick {
 	graphic: Graphic,
 	pub brick_type: BrickType,
 	pub bounds: ObjectBounds,
+	pub is_hold_note: bool
 }
 
 impl PartialEq for Brick {
@@ -49,25 +50,17 @@ impl Object for Brick {
 }
 
 impl Brick {
-	pub fn new (brick_type: BrickType, x: f32, y: f32) -> Brick {
+	pub fn new (graphic_group: GraphicGroup, brick_type: BrickType, bounds: ObjectBounds, is_hold_note: bool) -> Brick {
 		let frame = 0;
 		let flags = 0;
 		let arg = 0;
-		let graphic = match brick_type {
-			BrickType::Type1 => Graphic{ g: GraphicGroup::Brick1, frame, flags, arg },
-			BrickType::Type2 => Graphic{ g: GraphicGroup::Brick2, frame, flags, arg },
-			BrickType::Type3 => Graphic{ g: GraphicGroup::Brick3, frame, flags, arg }
-		};
+		let graphic = Graphic{ g: graphic_group, frame, flags, arg };
 		
 		return Brick {
-			brick_type,
 			graphic,
-			bounds: ObjectBounds {
-				left_x: x,
-				top_y: y,
-				right_x: x + BRICK_WIDTH as f32,
-				bottom_y: y + BRICK_HEIGHT as f32,
-			}
+			brick_type,
+			bounds,
+			is_hold_note
 		};
 	}
 	

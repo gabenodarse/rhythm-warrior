@@ -645,14 +645,14 @@ EditorCanvas.prototype.domElement = function(){
 
 // >:< don't need to pass in brick speed and current time since they are now members
 EditorCanvas.prototype.timeToY = function(timeDifference, brickSpeed){
-	let currentY = wasm.ground_pos() - wasm.player_height() / 2;
+	let currentY = wasm.ground_pos() - wasm.player_dimensions().y / 2;
 	let newY = currentY + timeDifference * brickSpeed;
 	return newY;
 	
 }
 
 EditorCanvas.prototype.yToTime = function(y, brickSpeed, currentTime){
-	let currentY = wasm.ground_pos() - wasm.player_height() / 2;
+	let currentY = wasm.ground_pos() - wasm.player_dimensions().y / 2;
 	let yDifference = y - currentY;
 	let timeDifference = yDifference / brickSpeed;
 	

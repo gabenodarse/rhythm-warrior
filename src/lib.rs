@@ -73,9 +73,15 @@ pub struct GameData {
 
 #[derive(Clone, Copy)]
 pub struct UpcomingBrick {
+	graphic_group: GraphicGroup,
 	brick_type: BrickType,
 	x: f32,
-	appearance_y: f32,
+	// the y value at which the note should appear. At time = 0 the top of the screen is y = 0
+		// and a note that should be hit at time = 0 has appearance_y of GROUND_POS - BRICK_HEIGHT
+		// notes off the bottom of the screen have appearance_y's corresponding to how much has to be scrolled before they show up
+	appearance_y: f32, 
+	height: f32,
+	is_hold_note: bool
 }
 
 // >:< initialize struc with wasm bindgen, need new constructor?
@@ -90,90 +96,6 @@ pub struct BrickData {
 	pub is_trailing: bool,
 	pub is_leading: bool,
 	pub is_hold_note: bool
-}
-
-#[wasm_bindgen]
-impl BrickData {
-	pub fn new(brick_type: BrickType, beat_pos: i32, end_beat_pos: i32, x_pos: i32, is_triplet: bool,
-	is_trailing: bool, is_leading: bool, is_hold_note: bool) -> BrickData {
-		
-		return BrickData {
-			brick_type,
-			beat_pos,
-			end_beat_pos,
-			x_pos,
-			is_triplet,
-			is_trailing,
-			is_leading,
-			is_hold_note
-		};
-	}
-	
-	pub fn appearance_y(&self, bpm: f32, brick_speed: f32) -> f32 {
-		let minutes_per_beat = 1.0 / bpm;
-		let seconds_per_beat = 60.0 * minutes_per_beat;
-		let pixels_per_beat = brick_speed * seconds_per_beat;
-		let beats_passed = self.beat_pos as f32 / 4.0;
-		
-		let mut pixels_passed = pixels_per_beat * beats_passed;
-		if self.is_leading {
-			pixels_passed -= pixels_per_beat / 8.0;
-		} else if self.is_trailing {
-			pixels_passed += pixels_per_beat / 8.0;
-		} else if self.is_triplet {
-			// >:< 
-		}
-		
-		return pixels_passed + GROUND_POS - objects::BRICK_HEIGHT as f32;
-	}
-	
-	pub fn x(&self) -> f32 {
-		return (self.x_pos * objects::BRICK_WIDTH) as f32;
-	}
-	
-	pub fn approx_time(beat_pos: i32, bpm: f32) -> f32 {
-		let minutes_per_beat = 1.0 / bpm;
-		let seconds_per_beat = 60.0 * minutes_per_beat;
-		let beats_passed = beat_pos as f32 / 4.0;
-		return seconds_per_beat * beats_passed;
-	}
-	
-	pub fn closest_beat_pos(time: f32, bpm: f32) -> i32 {
-		let minutes_per_beat = 1.0 / bpm;
-		let seconds_per_beat = 60.0 * minutes_per_beat;
-		
-		let num_beats_passed = time / seconds_per_beat;
-		let beat_pos_passed = num_beats_passed * 4.0;
-		return (beat_pos_passed + 0.5).floor() as i32;
-	}
-}
-
-// equality and order are determined solely on the start position of the note and its x pos, 
-	// not the brick type or whether it's a hold note or approximate time
-impl PartialEq for BrickData {
-	fn eq(&self, other: &BrickData) -> bool {
-		return self.beat_pos == other.beat_pos && self.x_pos == other.x_pos
-		&& self.is_triplet == other.is_triplet && self.is_trailing == other.is_trailing && self.is_leading == other.is_leading;
-	}
-}
-impl Eq for BrickData {}
-
-impl PartialOrd for BrickData {
-	fn partial_cmp(&self, other: &BrickData) -> Option<Ordering> {
-		Some(self.cmp(other))
-	}
-}
-
-impl Ord for BrickData {
-	fn cmp(&self, other: &BrickData) -> Ordering {
-		let self_top_y = self.appearance_y(60.0, 100.0); // >:< dummy bpm and brick speed values
-		let other_top_y = other.appearance_y(60.0, 100.0);
-		if self_top_y < other_top_y { Ordering::Less }
-		else if self_top_y > other_top_y { Ordering::Greater }
-		else if self.x_pos < other.x_pos { Ordering::Less }
-		else if self.x_pos > other.x_pos { Ordering::Greater }
-		else { Ordering::Equal }
-	}
 }
 
 #[wasm_bindgen]
@@ -236,8 +158,11 @@ pub fn ground_pos() -> i32 {
 }
 
 #[wasm_bindgen]
-pub fn player_height() -> i32 {
-	return objects::PLAYER_HEIGHT;
+pub fn player_dimensions() -> Position {
+	return Position {
+		x: objects::PLAYER_WIDTH as f32,
+		y: objects::PLAYER_HEIGHT as f32
+	}
 }
 
 #[wasm_bindgen]
@@ -278,9 +203,105 @@ pub fn num_possible_inputs() -> usize {
 	return Input::num_variants();
 }
 
-// --- trait implementations ---
+// --- methods and trait implementation ---
 
-// >:< move stuff here
+// equality and order are determined solely on the start position of the note and its x pos, 
+	// not the brick type or whether it's a hold note or approximate time
+impl PartialEq for BrickData {
+	fn eq(&self, other: &BrickData) -> bool {
+		return self.beat_pos == other.beat_pos && self.x_pos == other.x_pos
+		&& self.is_triplet == other.is_triplet && self.is_trailing == other.is_trailing && self.is_leading == other.is_leading;
+	}
+}
+impl Eq for BrickData {}
+
+impl PartialOrd for BrickData {
+	fn partial_cmp(&self, other: &BrickData) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for BrickData {
+	fn cmp(&self, other: &BrickData) -> Ordering {
+		let self_top_y = self.appearance_y(60.0, 100.0); // >:< dummy bpm and brick speed values
+		let other_top_y = other.appearance_y(60.0, 100.0);
+		if self_top_y < other_top_y { Ordering::Less }
+		else if self_top_y > other_top_y { Ordering::Greater }
+		else if self.x_pos < other.x_pos { Ordering::Less }
+		else if self.x_pos > other.x_pos { Ordering::Greater }
+		else { Ordering::Equal }
+	}
+}
+
+#[wasm_bindgen]
+impl BrickData {
+	pub fn new(brick_type: BrickType, beat_pos: i32, end_beat_pos: i32, x_pos: i32, is_triplet: bool,
+	is_trailing: bool, is_leading: bool, is_hold_note: bool) -> BrickData {
+		
+		return BrickData {
+			brick_type,
+			beat_pos,
+			end_beat_pos,
+			x_pos,
+			is_triplet,
+			is_trailing,
+			is_leading,
+			is_hold_note
+		};
+	}
+	
+	// the y value at which the note should appear. At time = 0 the top of the screen is y = 0
+		// and a note that should be hit at time = 0 has appearance_y of GROUND_POS - BRICK_HEIGHT
+		// notes off the bottom of the screen have appearance_y's corresponding to how much has to be scrolled before they show up
+	pub fn appearance_y(&self, bpm: f32, brick_speed: f32) -> f32 {
+		let minutes_per_beat = 1.0 / bpm;
+		let seconds_per_beat = 60.0 * minutes_per_beat;
+		let pixels_per_beat = brick_speed * seconds_per_beat;
+		let beats_passed = self.beat_pos as f32 / 4.0;
+		
+		let mut pixels_passed = pixels_per_beat * beats_passed;
+		if self.is_leading {
+			pixels_passed -= pixels_per_beat / 8.0;
+		} else if self.is_trailing {
+			pixels_passed += pixels_per_beat / 8.0;
+		} else if self.is_triplet {
+			// >:< 
+		}
+		
+		return pixels_passed + GROUND_POS - objects::BRICK_HEIGHT as f32;
+	}
+	
+	pub fn end_appearance_y(&self, bpm: f32, brick_speed: f32) -> f32 {
+		let minutes_per_beat = 1.0 / bpm;
+		let seconds_per_beat = 60.0 * minutes_per_beat;
+		let pixels_per_beat = brick_speed * seconds_per_beat;
+		let beats_passed = self.end_beat_pos as f32 / 4.0;
+		
+		let pixels_passed = pixels_per_beat * beats_passed;
+		
+		return pixels_passed + GROUND_POS - objects::BRICK_HEIGHT as f32;
+	}
+	
+	pub fn x(&self) -> f32 {
+		return (self.x_pos * objects::BRICK_WIDTH) as f32;
+	}
+	
+	pub fn approx_time(beat_pos: i32, bpm: f32) -> f32 {
+		let minutes_per_beat = 1.0 / bpm;
+		let seconds_per_beat = 60.0 * minutes_per_beat;
+		let beats_passed = beat_pos as f32 / 4.0;
+		return seconds_per_beat * beats_passed;
+	}
+	
+	pub fn closest_beat_pos(time: f32, bpm: f32) -> i32 {
+		let minutes_per_beat = 1.0 / bpm;
+		let seconds_per_beat = 60.0 * minutes_per_beat;
+		
+		let num_beats_passed = time / seconds_per_beat;
+		let beat_pos_passed = num_beats_passed * 4.0;
+		return (beat_pos_passed + 0.5).floor() as i32;
+	}
+}
 
 // !!! logging
 #[wasm_bindgen]

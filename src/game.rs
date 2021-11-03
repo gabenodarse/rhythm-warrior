@@ -1,11 +1,14 @@
 
-use crate::*;
+use crate::*; // >:< import specific items
 use std::collections::VecDeque;
 use player::Player;
 use brick::Brick;
 use objects::Object;
 use objects::BrickType;
 use objects::BRICK_HEIGHT;
+use objects::BRICK_SEGMENT_HEIGHT;
+use objects::BRICK_WIDTH;
+use objects::ObjectBounds;
 use js_sys::Array;
 
 // >:< need a Song struct or just separate into brick data and game data?
@@ -239,12 +242,50 @@ impl Game {
 	
 	fn prepare_song(&mut self) {
 		self.bricks = VecDeque::new();
+		
 		for brick_data in &self.song.notes {
+			let appearance_y = brick_data.appearance_y(self.song.game_data.bpm, self.song.game_data.brick_speed);
+			let (graphic_group, hold_graphic_group) = match brick_data.brick_type {
+				BrickType::Type1 => (GraphicGroup::Brick1, GraphicGroup::Brick1Segment),
+				BrickType::Type2 => (GraphicGroup::Brick2, GraphicGroup::Brick2Segment),
+				BrickType::Type3 => (GraphicGroup::Brick3, GraphicGroup::Brick3Segment)
+			};
+			
 			self.bricks.push_back( UpcomingBrick {
+				graphic_group,
 				brick_type: brick_data.brick_type, 
 				x: brick_data.x(),
-				appearance_y: brick_data.appearance_y(self.song.game_data.bpm, self.song.game_data.brick_speed)
+				appearance_y,
+				height: BRICK_HEIGHT as f32,
+				is_hold_note: brick_data.is_hold_note
 			});
+			
+			if brick_data.is_hold_note && brick_data.end_beat_pos > brick_data.beat_pos {
+				let end_appearance_y = brick_data.end_appearance_y(self.song.game_data.bpm, self.song.game_data.brick_speed);
+				let end_y = end_appearance_y + BRICK_HEIGHT as f32 - BRICK_SEGMENT_HEIGHT as f32;
+				let mut appearance_y = appearance_y + BRICK_HEIGHT as f32;
+				
+				while(appearance_y < end_y) {
+					self.bricks.push_back( UpcomingBrick {
+						graphic_group: hold_graphic_group,
+						brick_type: brick_data.brick_type, 
+						x: brick_data.x(),
+						appearance_y,
+						height: BRICK_SEGMENT_HEIGHT as f32,
+						is_hold_note: true
+					});
+					appearance_y += 50.0;
+				}
+				
+				self.bricks.push_back( UpcomingBrick {
+					graphic_group: hold_graphic_group,
+					brick_type: brick_data.brick_type, 
+					x: brick_data.x(),
+					appearance_y: end_y,
+					height: BRICK_SEGMENT_HEIGHT as f32,
+					is_hold_note: true
+				});
+			}
 		}
 		
 		self.song.game_data.max_score = self.song.notes.len() as i32 * 100;
@@ -255,10 +296,16 @@ impl Game {
 		while(self.upcoming_brick_idx < self.bricks.len()) {
 			let idx = self.upcoming_brick_idx;
 			if self.bricks[idx].appearance_y < self.end_appearance_y {
+				let graphic_group = self.bricks[idx].graphic_group;
 				let brick_type = self.bricks[idx].brick_type;
+
 				let x = self.bricks[idx].x;
 				let y = self.bricks[idx].appearance_y - self.scrolled_y;
-				self.current_bricks.push_back( Brick::new(brick_type, x, y) );
+				let bounds = ObjectBounds { left_x: x, top_y: y, right_x: x + BRICK_WIDTH as f32, bottom_y: y + self.bricks[idx].height };
+				
+				let is_hold_note = self.bricks[idx].is_hold_note;
+				
+				self.current_bricks.push_back( Brick::new(graphic_group, brick_type, bounds, is_hold_note) );
 				self.upcoming_brick_idx += 1;
 			} else {
 				break;
@@ -279,15 +326,10 @@ impl Game {
 		self.upcoming_brick_idx = 0;
 		let mut i = 0;
 		while(i < self.bricks.len()) {
+			// if the appearance y is greater than the scrolled y, with -BRICK_HEIGHT buffer for notes off the top of the screen
 			if self.bricks[i].appearance_y - self.scrolled_y > -BRICK_HEIGHT as f32 {
-				if self.bricks[i].appearance_y < self.end_appearance_y {
-					let brick_type = self.bricks[i].brick_type;
-					let x = self.bricks[i].x;
-					let y = self.bricks[i].appearance_y - self.scrolled_y;
-					self.current_bricks.push_back( Brick::new(brick_type, x, y) );
-				} else {
-					break;
-				}
+				self.add_to_current_bricks();
+				break;
 			}
 			
 			i += 1;
