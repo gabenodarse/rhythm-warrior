@@ -19,8 +19,9 @@ export async function run(){
 		controls[69] = wasm.Input.Slash3; // e
 	}
 	
-	// !!! order kinda janky because keys have to be set before overlay creation
+	// order kinda janky because keys have to be set before overlay creation
 		// and overlay creation needs to happen before propagator init
+		// TODO event propagator would do well as a global so it's not passed around overlay everywhere
 	overlay = new Overlay(game.getSongData(), propagator, controls);
 	propagator.init(game, overlay, controls);
 	

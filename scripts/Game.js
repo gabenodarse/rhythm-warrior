@@ -175,6 +175,10 @@ Game.prototype.score = function(){
 	return this.gameObject.score();
 }
 
+Game.prototype.dimensionFactors = function(){
+	return {xFactor: this.xFactor, yFactor: this.yFactor};
+}
+
 Game.prototype.getSongData = function(){
 	return this.songData;
 }
@@ -296,7 +300,7 @@ Game.prototype.loadMP3 = async function(file){
 Game.prototype.saveSong = function(songData, overwrite){
 	let notes = this.gameObject.bricks();
 	notes.forEach( note => {
-		note.approx_time = note.approx_time(this.songData.bpm);
+		note.approx_time = wasm.BrickData.approx_time(note.beat_pos, this.songData.bpm);
 		console.log(note.approx_time);
 	});
 	
@@ -331,30 +335,25 @@ Object.setPrototypeOf(Editor.prototype, Game.prototype);
 
 Editor.prototype.seek = function(time){
 	this.gameObject.seek(time);
+	this.songData.gameData = this.gameObject.game_data()
 	this.renderGame();
 }
 
-// >:<
-Editor.prototype.createNote = function(x, y){
-	// !!! support for third, sixth, twelfth notes
-	let sixteenthNoteTime = this.gameObject.beat_interval() / 4;
-	let t = this.gameObject.song_time();
-	
-	// set brickT to the time of the song plus an offset accounting for the y position
-	y -= wasm.ground_pos() * this.yFactor;
-	let brickT = t + y / (this.gameObject.brick_speed() * this.yFactor);
-	// round to a sixteenth note 
-		// (by adding the difference to the next sixteenthNoteTime, i.e. adding sixteenthNoteTime - positive modulus)
-	brickT += sixteenthNoteTime - (brickT % sixteenthNoteTime + sixteenthNoteTime) % sixteenthNoteTime; 
-	
-	let brickWidth = wasm.graphic_size(wasm.GraphicGroup.Brick1).x * this.xFactor
-	let pos = Math.floor(x / brickWidth);
-	
-	this.gameObject.toggle_brick(0, brickT, pos);
-	
-	// to have the game add the note. 
-	// TODO, more robust way would be to add the note to on screen notes in toggle_brick, then just rerender with renderGame()
-	this.seek(t); 
+Editor.prototype.createDefaultBrick = function(beatPos, xPos){
+	this.gameObject.add_brick(wasm.BrickData.new(0, beatPos, beatPos, xPos, false, false, false, false));
+}
+
+Editor.prototype.createBrick = function(brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote){
+	this.gameObject.add_brick(wasm.BrickData.new(brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote));
+}
+
+Editor.prototype.removeBrick = function(brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote){
+	this.gameObject.remove_brick(wasm.BrickData.new(brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote));
+}
+
+// TODO does not accound for is_trailing is_leading or is_triplet. Ambiguities in the brick selected can lead to bugs.
+Editor.prototype.selectBrick = function(beatPos, xPos){
+	return this.gameObject.select_brick(beatPos, xPos);
 }
 
 Editor.prototype.toGame = function(){

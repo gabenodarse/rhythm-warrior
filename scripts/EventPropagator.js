@@ -192,6 +192,8 @@ EventPropagator.prototype.handleKeyDown = function(evt){
 		this.overlay.passEvent("homeScreen", evt);
 	} else if(this.overlay.isElementShowing("endGameScreen")){
 		this.overlay.passEvent("endGameScreen", evt);
+	} else if(this.overlay.isElementShowing("editorOverlay")){
+		this.overlay.passEvent("editorOverlay", evt);
 	}
 }
 

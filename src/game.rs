@@ -18,6 +18,7 @@ struct Song {
 pub struct Game {
 	player: Player,
 	bricks: VecDeque<UpcomingBrick>, // all bricks of the song, ordered
+	// uses a vec instead of a btree because btrees in rust are somehow unindexable
 	current_bricks: VecDeque<Brick>, // current bricks that are on screen or about to appear on screen, ordered
 	upcoming_brick_idx: usize,
 	scrolled_y: f32,
@@ -53,10 +54,6 @@ impl Game {
 			graphics: Vec::with_capacity(512), // TODO what should the upper limit be? Make it a hard limit
 			bricks_broken: 0
 		};
-	}
-	
-	fn end_appearance_y(scrolled_y: f32, brick_speed: f32) -> f32 {
-		return scrolled_y + GAME_HEIGHT as f32 + brick_speed * 2.0; // 2 second window after bricks are off the screen
 	}
 			
 	// tick the game state by the given amount of time
@@ -138,7 +135,7 @@ impl Game {
 		}
 		
 		// !!! detecting end of song?
-		self.add_upcoming_bricks();
+		self.add_to_current_bricks();
 	}
 	
 	// updates the displayed graphics and returns rendering instructions in the form of a pointer
@@ -203,50 +200,44 @@ impl Game {
 		self.player.end_input(input);
 	}
 	
-	// toggles a brick at the position and time specified. If a brick is already there it will toggle the note of the brick
-	pub fn toggle_brick (&mut self, brick_data: BrickData) {
-		/* let brick = UpcomingNote{
-			note_type: BrickType::Type1,
-			x: note_pos_to_x(pos),
-			time
-		};
-		let brick2 = UpcomingNote{
-			note_type: BrickType::Type2,
-			x: note_pos_to_x(pos),
-			time
-		};
-		let brick3 = UpcomingNote{
-			note_type: BrickType::Type3,
-			x: note_pos_to_x(pos),
-			time
-		};
-		
-		if self.song.notes.contains( &brick ) == true {
-			self.song.notes.remove( &brick );
-			self.song.notes.insert( brick2 );
-		}
-		else if self.song.notes.contains( &brick2 ) == true {
-			self.song.notes.remove( &brick2 );
-			self.song.notes.insert( brick3 );
-		}
-		else if self.song.notes.contains( &brick3 ) == true {
-			self.song.notes.remove( &brick3 );
-		}
-		else {
-			self.song.notes.insert( UpcomingNote{
-				note_type: bt,
-				x: note_pos_to_x(pos),
-				time
-			});	
+	// select the brick which overlaps with the given brick pos and x pos
+	pub fn select_brick(&self, beat_pos: i32, x_pos: i32) -> Option<BrickData> {
+		for brick_data in &self.song.notes {
+			if x_pos == brick_data.x_pos {
+				if beat_pos == brick_data.beat_pos || (beat_pos > brick_data.beat_pos && beat_pos <= brick_data.end_beat_pos) {
+					return Some(brick_data.clone());
+				}
+			}
+			
+			if beat_pos < brick_data.beat_pos {
+				break;
+			}
 		}
 		
-		self.song.game_data.max_score = 100 * self.song.notes.len() as i32; */
+		return None;
 	}
 	
+	// TODO return true/false on success/failure add_brick and remove_brick
 	// adds a brick according to the brick's brick data
 	pub fn add_brick(&mut self, brick_data: BrickData) {
-		self.song.notes.insert( brick_data ); // TODO alert/log when a value was already there and the brick wasn't updated
+		self.song.notes.insert( brick_data );
 		
+		// !!! alternative data structure to avoid flushing and repopulating vec on each removed note
+		// >:< expensive to do this on initial load for each brick
+		self.prepare_song();
+		self.seek(self.song.game_data.time_running);
+	}
+	
+	// removes the brick equal to brick_data
+	pub fn remove_brick(&mut self, brick_data: BrickData) {
+		self.song.notes.remove( &brick_data ); // TODO alert/log when a value was already there and the brick wasn't updated
+		
+		// !!! alternative data structure to avoid flushing and repopulating vec on each removed note
+		self.prepare_song();
+		self.seek(self.song.game_data.time_running);
+	}
+	
+	fn prepare_song(&mut self) {
 		self.bricks = VecDeque::new();
 		for brick_data in &self.song.notes {
 			self.bricks.push_back( UpcomingBrick {
@@ -257,11 +248,10 @@ impl Game {
 		}
 		
 		self.song.game_data.max_score = self.song.notes.len() as i32 * 100;
-		self.seek(self.song.game_data.time_running);
 	}
 	
 	// add bricks to current_bricks
-	fn add_upcoming_bricks(&mut self) {
+	fn add_to_current_bricks(&mut self) {
 		while(self.upcoming_brick_idx < self.bricks.len()) {
 			let idx = self.upcoming_brick_idx;
 			if self.bricks[idx].appearance_y < self.end_appearance_y {
@@ -303,6 +293,10 @@ impl Game {
 			i += 1;
 			self.upcoming_brick_idx = i;
 		}
+	}
+	
+	fn end_appearance_y(scrolled_y: f32, brick_speed: f32) -> f32 {
+		return scrolled_y + GAME_HEIGHT as f32 + brick_speed * 2.0; // 2 second window after bricks are off the screen
 	}
 }
 

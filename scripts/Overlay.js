@@ -121,9 +121,10 @@ function EndGameScreen(eventPropagator){
 }
 
 // EditorOverlay class, contains the editor's guiding lines and the editor's controls
+// !!! range scroller isn't modified when the song is modified
 function EditorOverlay(songData, eventPropagator){
 	this.div;
-	this.guidingLines;
+	this.editorCanvas;
 	this.scroller;
 	this.controls;
 	
@@ -131,62 +132,46 @@ function EditorOverlay(songData, eventPropagator){
 	this.div.className = "editor-overlay";
 	this.div.style.display = "none";
 	
-	this.guidingLines = new EditorGuidingLines(songData, eventPropagator);
+	this.editorCanvas = new EditorCanvas(songData, eventPropagator);
 	this.controls = new EditorControls(songData, eventPropagator);
 	
-	this.div.appendChild(this.guidingLines.domElement());
+	this.div.appendChild(this.editorCanvas.domElement());
 	this.div.appendChild(this.controls.domElement());
 }
 
-// EditorGuidingLines class, displays lines that (should) represent beat breakpoints in a song
+// EditorCanvas class, displays lines that (should) represent beat breakpoints in a song
 	// clicking on the canvas adds notes, wheel scrolling changes the song time
-function EditorGuidingLines(songData, eventPropagator){
+function EditorCanvas(songData, eventPropagator){
 	this.canvas;
 	this.beatInterval; // how long between beats in seconds // !!! get from game every time or store as state?
-	this.beatPixelInterval; // how many pixels between beats
 	this.groundPosOffset = wasm.ground_pos();
-	this.onclick;
+	this.mouseDown;
+	this.selectedBrick;
+	this.songData;
+	this.eventPropagator;
 	
-	this.canvas = document.createElement("canvas");
-	this.canvas.width;
-	this.canvas.height;
-	this.canvas.style.width = "100%";
-	this.canvas.style.height = "100%";
+	this.mouseDown = false;
+	this.selectedBrick = null;
+	this.songData = songData;
+	this.eventPropagator = eventPropagator;
 	
 	let dims = wasm.game_dimensions();
+	this.canvas = document.createElement("canvas");
 	this.canvas.width = dims.x;
 	this.canvas.height = dims.y;
+	this.canvas.style.width = "100%"; // >:< style should be in stylesheet
+	this.canvas.style.height = "100%";
 	
-	this.beatInterval = songData.gameData.beat_interval;
-	this.beatPixelInterval = this.beatInterval * songData.gameData.brick_speed;
-	
-	this.onclick = evt => {
-		let x = evt.clientX - this.canvas.offsetLeft;
-		let y = evt.clientY - this.canvas.offsetTop;
-		let fn = game => { game.createNote(x, y); }
-		eventPropagator.runOnGame(fn);
-	}
-	
-	this.onwheel = evt => {
-		let time;
-		let getTime = game => {
-			return game.getSongData().songTime;
-		}
-		let updateTime = game => {
-			game.seek(time);
-		}
-		
-		time = eventPropagator.runOnGame(getTime);
-		time += evt.deltaY / 32;
-		eventPropagator.runOnGame(updateTime, true);
-	}
-	
-	this.canvas.addEventListener("click", this.onclick);
-	this.canvas.addEventListener("wheel", this.onwheel);
+	this.updateSongData(songData);
+	this.canvas.addEventListener("mousedown", evt => { this.handleMouseDown(evt); });
+	this.canvas.addEventListener("mouseup", evt => { this.handleMouseUp(evt); });
+	this.canvas.addEventListener("mousemove", evt => { this.handleMouseMove(evt); });
+	this.canvas.addEventListener("wheel", evt => { this.handleWheel(evt); });
 	
 }
 
-// EditorControls class, contains controls which can control EditorGuidingLines scrolling and game playing/pausing
+// EditorControls class, contains controls which can control EditorCanvas scrolling and game playing/pausing
+// TODO add triplet note button to convert editor canvas's selected brick to triplet note
 function EditorControls(songData, eventPropagator){
 	this.div;
 	this.rangesDiv;
@@ -238,7 +223,10 @@ function EditorControls(songData, eventPropagator){
     });
 	
 	this.playPauseButton.addEventListener("click", evt => {
-		eventPropagator.togglePlay();
+		// prevent artificial clicks
+		if(evt.clientX != 0 || evt.clientY != 0) {
+			eventPropagator.togglePlay();
+		}
 	});
 	
 	this.rangesDiv.appendChild(this.preciseRange);
@@ -638,7 +626,7 @@ EditorOverlay.prototype.hide = function(){
 
 EditorOverlay.prototype.updateSongData = function(songData){
 	if(this.div.style.display != "none"){
-		this.guidingLines.updateSongData(songData);
+		this.editorCanvas.updateSongData(songData);
 		this.controls.updateSongData(songData);
 	}
 }
@@ -647,54 +635,248 @@ EditorOverlay.prototype.domElement = function(){
 	return this.div;
 }
 
-EditorGuidingLines.prototype.domElement = function(){
+EditorOverlay.prototype.handleEvent = function(evt){
+	this.editorCanvas.handleKeyDown(evt);
+}
+
+EditorCanvas.prototype.domElement = function(){
 	return this.canvas;
 }
 
-// TODO faster if the canvas stays the same and is just repositioned on time changes. 
-	// However, if the game height is not the full screen height, lines would show outside the game's boundaries
-	// !!! range scroller isn't modified when the song is modified
-EditorGuidingLines.prototype.updateSongData = function(songData){
-	let time = songData.gameData.time_running;
-	let beatInterval = songData.gameData.beat_interval;
-	let beatPixelInterval = beatInterval * songData.gameData.brick_speed;
+// >:< don't need to pass in brick speed and current time since they are now members
+EditorCanvas.prototype.timeToY = function(timeDifference, brickSpeed){
+	let currentY = wasm.ground_pos() - wasm.player_height() / 2;
+	let newY = currentY + timeDifference * brickSpeed;
+	return newY;
 	
-	if(time < 0){
-		console.log("can't update to a negative time");
-		return;
-	}
+}
+
+EditorCanvas.prototype.yToTime = function(y, brickSpeed, currentTime){
+	let currentY = wasm.ground_pos() - wasm.player_height() / 2;
+	let yDifference = y - currentY;
+	let timeDifference = yDifference / brickSpeed;
 	
+	return currentTime + timeDifference;
+}
+
+EditorCanvas.prototype.xToNotePos = function(x){
+	return Math.floor(x / wasm.brick_dimensions().x);
+}
+
+EditorCanvas.prototype.notePosToX = function(notePos){
+	return x * wasm.brick_dimensions().x;
+}
+
+EditorCanvas.prototype.updateSongData = function(songData){
+	this.songData = songData;
+	
+	this.draw();
+}
+
+EditorCanvas.prototype.draw = function(){
+	let songData = this.songData;
 	let ctx = this.canvas.getContext("2d");
 	ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 	
-	let quarterBeatInterval = beatInterval / 4;
-	let quarterBeatPixelInterval = beatPixelInterval / 4;
-	let timeIntoBeat = time % beatInterval;
-	let timeIntoQuarterBeat = time % quarterBeatInterval;
+	let time = songData.gameData.time_running;
 	
-	let posOffset = this.groundPosOffset;
-	// account for timeIntoQuarterBeat,
-		// e.g. if halfway into a quarter beat, display beat bar halfway into a quarter beat higher
-	posOffset -= timeIntoQuarterBeat / quarterBeatInterval * quarterBeatPixelInterval;
+	// get the beat positions that mark when lines should start and stop being drawn
+	let topScreenTime = time - (wasm.ground_pos() / songData.gameData.brick_speed);
+	let bottomScreenTime = time + (wasm.game_dimensions().y / songData.gameData.brick_speed);
+	let beginningBeatPos = wasm.BrickData.closest_beat_pos(topScreenTime, songData.gameData.bpm);
+	let endBeatPos = wasm.BrickData.closest_beat_pos(bottomScreenTime, songData.gameData.bpm);
+	let screenWidth = wasm.game_dimensions().x;
 	
-	// draw lines to match beats
-	let quarterBeatCounter = Math.floor(timeIntoBeat / quarterBeatInterval);
-	for(let y = posOffset; y < this.canvas.height; y += quarterBeatPixelInterval){
-		if(quarterBeatCounter % 4 == 0){ // beat line
-			ctx.fillRect(0, y, this.canvas.width, 3);
-		}
-		else if(quarterBeatCounter % 4 == 2){ // half beat line
+	// draw lines at the specified beat positions
+	for(let i = beginningBeatPos; i < endBeatPos; ++i) {
+		let beatTime = wasm.BrickData.approx_time(i, songData.gameData.bpm);
+		let y = this.timeToY(beatTime - time, songData.gameData.brick_speed);
+		if(i % 4 == 0){
+			ctx.fillRect(0, y-1, this.canvas.width, 3);
+			for(let x = 0; x <= screenWidth; x+=wasm.brick_dimensions().x){
+				ctx.fillRect(x-1, y-4, 3, 8);
+			}
+		} else if(i % 2 == 0){
 			ctx.fillRect(0, y, this.canvas.width, 1);
-		}
-		else{ // quarter beat line
+		} else {
 			ctx.beginPath();
 			ctx.setLineDash([6, 16]);
 			ctx.moveTo(0, y);
 			ctx.lineTo(this.canvas.width, y);
 			ctx.stroke();
 		}
-		++quarterBeatCounter;
 	}
+	
+	// draw a highlight box around the selected brick
+	if(this.selectedBrick){
+		let brickDims = wasm.brick_dimensions();
+		let startX = this.selectedBrick.x_pos * brickDims.x;
+		let startTimeDifference = wasm.BrickData.approx_time(this.selectedBrick.beat_pos, songData.gameData.bpm)
+			- songData.gameData.time_running;
+		let endTimeDifference = wasm.BrickData.approx_time(this.selectedBrick.end_beat_pos, songData.gameData.bpm)
+			- songData.gameData.time_running;
+		let startY = this.timeToY(startTimeDifference, songData.gameData.brick_speed) - brickDims.y / 2;
+		let endY = this.timeToY(endTimeDifference, songData.gameData.brick_speed) + brickDims.y / 2;
+		
+		ctx.setLineDash([]);
+		ctx.strokeRect(startX, startY, brickDims.x, endY - startY);
+	}
+}
+
+EditorCanvas.prototype.handleKeyDown = function(evt){
+	if(evt.keyCode == 32){ // space
+		this.eventPropagator.togglePlay();
+	}
+	
+	if(this.selectedBrick){
+		let brick = this.selectedBrick;
+		
+		if(evt.keyCode == 46 || evt.keyCode == 8) { // delete or backspace
+			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			this.selectedBrick = null;
+		}
+		
+		if(evt.keyCode == 38){ // up arrow. delete the old brick, move the brick up and recreate
+			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			
+			if(brick.is_trailing){
+				brick.is_trailing = false;
+			} else if(brick.is_leading){
+				brick.is_leading = false;
+				brick.beat_pos -= 1;
+				brick.end_beat_pos -= 1;
+			} else {
+				brick.is_leading = true;
+			}
+			
+			this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); });
+		}
+		
+		if(evt.keyCode == 40){ // down arrow. delete the old brick, move the brick down and recreate
+			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+				
+			if(brick.is_leading){
+				brick.is_leading = false;
+			} else if(brick.is_trailing){
+				brick.is_trailing = false;
+				brick.beat_pos += 1;
+				brick.end_beat_pos += 1;
+			} else {
+				brick.is_trailing = true;
+			}
+			
+			this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); });
+		}
+	}
+	
+	this.draw();
+}
+
+EditorCanvas.prototype.handleMouseDown = function(evt){
+	let x = evt.clientX - this.canvas.offsetLeft;
+	let y = evt.clientY - this.canvas.offsetTop;
+	
+	let dimFactors = this.eventPropagator.runOnGame( game => { return game.dimensionFactors(); } );
+	x = x / dimFactors.xFactor;
+	y = y / dimFactors.yFactor;
+	let approxTime = this.yToTime(y, this.songData.gameData.brick_speed, this.songData.gameData.time_running);
+	let xPos = this.xToNotePos(x);
+	let beatPos = wasm.BrickData.closest_beat_pos(approxTime, this.songData.gameData.bpm);
+	
+	let brick = this.eventPropagator.runOnGame( game => { return game.selectBrick(beatPos, xPos); } );
+	
+	if(brick){
+		// if clicking on the selected brick, remove the selected brick and recreate it with new brick type
+		if(this.selectedBrick && this.selectedBrick.beat_pos == brick.beat_pos && this.selectedBrick.x_pos == brick.x_pos
+		&& this.selectedBrick.is_leading == brick.is_leading && this.selectedBrick.is_trailing == brick.is_trailing
+		&& this.selectedBrick.is_triplet == brick.is_triplet){
+			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			
+			if(brick.brick_type < 2){
+				brick.brick_type += 1;
+			} else {
+				brick.brick_type = 0;
+			}
+			
+			this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			brick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); } );
+		}
+	} else {
+		this.eventPropagator.runOnGame( game => { game.createDefaultBrick(beatPos, xPos); } );
+		brick = this.eventPropagator.runOnGame( game => { return game.selectBrick(beatPos, xPos); } );
+	}
+	
+	this.selectedBrick = brick;
+	
+	this.mouseDown = true;
+	this.draw();
+}
+
+EditorCanvas.prototype.handleMouseUp = function(evt){
+	this.mouseDown = false;
+	this.draw();
+}
+	
+EditorCanvas.prototype.handleMouseMove = function(evt){
+	if(this.mouseDown && this.selectedBrick){
+		let x = evt.clientX - this.canvas.offsetLeft;
+		let y = evt.clientY - this.canvas.offsetTop;
+		
+		let dimFactors = this.eventPropagator.runOnGame( game => { return game.dimensionFactors(); } );
+		x = x / dimFactors.xFactor;
+		y = y / dimFactors.yFactor;
+		let approxTime = this.yToTime(y, this.songData.gameData.brick_speed, this.songData.gameData.time_running);
+		let xPos = this.xToNotePos(x);
+		let beatPos = wasm.BrickData.closest_beat_pos(approxTime, this.songData.gameData.bpm);
+		
+		if(beatPos != this.selectedBrick.end_beat_pos || xPos != this.selectedBrick.x_pos){
+			let brick = this.selectedBrick;
+			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			
+			if(beatPos > brick.beat_pos){
+				brick.is_hold_note = true;
+				brick.end_beat_pos = beatPos;
+			} else {
+				brick.is_hold_note = false;
+				brick.end_beat_pos = brick.beat_pos;
+			}
+			
+			if(xPos != brick.x_pos){
+				brick.x_pos = xPos;
+			}
+			
+			this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+				
+			this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(beatPos, xPos); });
+		}
+	}
+	this.draw();
+}
+
+EditorCanvas.prototype.handleWheel = function(evt){
+	let time;
+	let getTime = game => {
+		return game.getSongData().gameData.time_running;
+	}
+	let updateTime = game => {
+		game.seek(time);
+	}
+	
+	time = this.eventPropagator.runOnGame(getTime);
+	time += evt.deltaY / 256;
+	
+	this.eventPropagator.runOnGame(updateTime, true);
 }
 
 EditorControls.prototype.domElement = function(){

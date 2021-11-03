@@ -131,11 +131,20 @@ impl BrickData {
 		return (self.x_pos * objects::BRICK_WIDTH) as f32;
 	}
 	
-	pub fn approx_time(&self, bpm: f32) -> f32 {
+	pub fn approx_time(beat_pos: i32, bpm: f32) -> f32 {
 		let minutes_per_beat = 1.0 / bpm;
 		let seconds_per_beat = 60.0 * minutes_per_beat;
-		let beats_passed = self.beat_pos as f32 / 4.0;
+		let beats_passed = beat_pos as f32 / 4.0;
 		return seconds_per_beat * beats_passed;
+	}
+	
+	pub fn closest_beat_pos(time: f32, bpm: f32) -> i32 {
+		let minutes_per_beat = 1.0 / bpm;
+		let seconds_per_beat = 60.0 * minutes_per_beat;
+		
+		let num_beats_passed = time / seconds_per_beat;
+		let beat_pos_passed = num_beats_passed * 4.0;
+		return (beat_pos_passed + 0.5).floor() as i32;
 	}
 }
 
@@ -166,14 +175,6 @@ impl Ord for BrickData {
 		else { Ordering::Equal }
 	}
 }
-
-
-
-
-
-
-
-
 
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
@@ -230,8 +231,21 @@ pub enum Input {
 }
 
 #[wasm_bindgen]
-pub fn ground_pos() -> f32 {
-	return GROUND_POS as f32;
+pub fn ground_pos() -> i32 {
+	return GROUND_POS as i32;
+}
+
+#[wasm_bindgen]
+pub fn player_height() -> i32 {
+	return objects::PLAYER_HEIGHT;
+}
+
+#[wasm_bindgen]
+pub fn brick_dimensions() -> Position {
+	return Position {
+		x: objects::BRICK_WIDTH as f32,
+		y: objects::BRICK_HEIGHT as f32,
+	};
 }
 
 // converts a note pos (discrete integer) to an x valued float
