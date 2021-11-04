@@ -28,7 +28,6 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	
 	this.resumeEvents = [];
 	
-	// >:< resizing window same as resizing game space?
 	let resizeRefresher = true;
 	let resize = () => {
 		if(resizeRefresher){

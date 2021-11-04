@@ -37,7 +37,7 @@ use crate::objects::HOLD_HITBOX_HEIGHT;
 const PRE_SLASH_TIME: f32 = 0.06; 
 const PRE_HOLD_TIME: f32 = 0.16;
 // so slash animation can finish
-const POST_SLASH_TIME: f32 = 0.12;
+const POST_SLASH_TIME: f32 = 0.08;
 const DASH_LINGER_TIME: f32 = 0.3; // how long the dash graphic lingers
 const BOOST_LINGER_TIME: f32 = 0.3;
 const BOOST_PRELINGER_TIME: f32 = 1.2;
@@ -536,6 +536,14 @@ impl Player {
 			PlayerState::Slash => {
 				self.multi_note_hold = false;
 				self.hold_target_info = self.target.clone();
+				
+				if let Some(ti) = &self.hold_target_info {
+					if ti.is_hold_note && !self.stop_hold {
+						self.state = TaggedState {state:PlayerState::Hold, time: time_running};
+						return;
+					}
+				}
+				
 				self.state = TaggedState { state: PlayerState::PostSlash, time: time_running };
 				return;
 			},
@@ -546,31 +554,35 @@ impl Player {
 			PlayerState::SlashDash => {
 				self.multi_note_hold = true;
 				self.hold_target_info = self.target.clone();
+				
+				if let Some(ti) = &self.hold_target_info {
+					if ti.is_hold_note && !self.stop_hold {
+						self.state = TaggedState {state:PlayerState::Hold, time: time_running};
+						return;
+					}
+				}
+				
 				self.state = TaggedState { state: PlayerState::PostSlash, time: time_running };
 				return;
 			},
 			PlayerState::PostSlash => {
 				if let Some(ti) = &self.hold_target_info {
 					if ti.is_hold_note && !self.stop_hold {
-						// >:< to hold if holding past post slash time. this is not the hardest of barriers, and post slash time should
-							// not be too long. Could also look to see if target is a hold note, and switch to hold state earlier if so
-							// and remain in postslash if not
 						self.state = TaggedState {state:PlayerState::Hold, time: time_running};
 						return;
 					}
 				}
 				
-				if time_running - t > POST_SLASH_TIME {
-					if !self.stop_hold {
-						// >:< to hold if holding past post slash time. this is not the hardest of barriers, and post slash time should
-							// not be too long. Could also look to see if target is a hold note, and switch to hold state earlier if so
-							// and remain in postslash if not
+				let time_difference = time_running - t;
+				if time_difference > POST_SLASH_TIME {
+					if !self.stop_hold  && time_difference > 2.0 * POST_SLASH_TIME{
 						self.state = TaggedState {state:PlayerState::Hold, time: time_running};
 						return;
+					} else if self.stop_hold {
+						self.state = TaggedState { state: PlayerState::Walking, time: time_running };
+						self.hit_type = None;						
 					}
 					
-					self.state = TaggedState { state: PlayerState::Walking, time: time_running };
-					self.hit_type = None;
 				}
 				return;
 			},
@@ -619,7 +631,7 @@ impl Player {
 				let graphic = Graphic { g: graphic_group, frame, flags, arg };
 				positioned_graphics.push( PositionedGraphic { g: graphic, x, y: self.bounds.top_y } );
 			},
-			PlayerState::Slash | PlayerState::SlashDash | PlayerState::PostSlash => {
+			PlayerState::Slash | PlayerState::SlashDash => {
 				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
 				let graphic_group = match brick_type {
 					BrickType::Type1 => GraphicGroup::Slashing1,
@@ -634,6 +646,28 @@ impl Player {
 				
 				let graphic = Graphic { g: graphic_group, frame, flags, arg };
 				positioned_graphics.push( PositionedGraphic { g: graphic, x, y: self.bounds.top_y } );
+			},
+			PlayerState::PostSlash => {
+				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
+				let graphic_group = match brick_type {
+					BrickType::Type1 => GraphicGroup::Slashing1,
+					BrickType::Type2 => GraphicGroup::Slashing2,
+					BrickType::Type3 => GraphicGroup::Slashing3
+				};
+				let x = match self.face_dir {
+					Direction::Right => self.bounds.left_x,
+					Direction::Left => self.bounds.left_x - SLASH_WIDTH as f32,
+				};
+				
+				if time_running - t < POST_SLASH_TIME {
+					let frame = frame_number(time_running - t + PRE_SLASH_TIME);
+					let graphic = Graphic { g: graphic_group, frame, flags, arg };
+					positioned_graphics.push( PositionedGraphic { g: graphic, x, y: self.bounds.top_y } );
+				} else {
+					let frame = frame_number(POST_SLASH_TIME + PRE_SLASH_TIME);
+					let graphic = Graphic { g: graphic_group, frame, flags, arg };
+					positioned_graphics.push( PositionedGraphic { g: graphic, x, y: self.bounds.top_y } );
+				}
 			},
 			PlayerState::Hold => {
 				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };

@@ -161,8 +161,7 @@ function EditorCanvas(songData, eventPropagator){
 	this.canvas = document.createElement("canvas");
 	this.canvas.width = dims.x;
 	this.canvas.height = dims.y;
-	this.canvas.style.width = "100%"; // >:< style should be in stylesheet
-	this.canvas.style.height = "100%";
+	this.canvas.className = "full-sized";
 	
 	this.updateSongData(songData);
 	this.canvas.addEventListener("mousedown", evt => { this.handleMouseDown(evt); });
@@ -645,20 +644,19 @@ EditorCanvas.prototype.domElement = function(){
 	return this.canvas;
 }
 
-// >:< don't need to pass in brick speed and current time since they are now members
-EditorCanvas.prototype.timeToY = function(timeDifference, brickSpeed){
+EditorCanvas.prototype.timeToY = function(time){
+	let timeDifference = time - this.songData.gameData.time_running;
 	let currentY = wasm.ground_pos() - wasm.player_dimensions().y / 2;
-	let newY = currentY + timeDifference * brickSpeed;
+	let newY = currentY + timeDifference * this.songData.gameData.brick_speed;
 	return newY;
-	
 }
 
-EditorCanvas.prototype.yToTime = function(y, brickSpeed, currentTime){
+EditorCanvas.prototype.yToTime = function(y){
 	let currentY = wasm.ground_pos() - wasm.player_dimensions().y / 2;
 	let yDifference = y - currentY;
-	let timeDifference = yDifference / brickSpeed;
+	let timeDifference = yDifference / this.songData.gameData.brick_speed;
 	
-	return currentTime + timeDifference;
+	return this.songData.gameData.time_running + timeDifference;
 }
 
 EditorCanvas.prototype.xToNotePos = function(x){
@@ -692,7 +690,7 @@ EditorCanvas.prototype.draw = function(){
 	// draw lines at the specified beat positions
 	for(let i = beginningBeatPos; i < endBeatPos; ++i) {
 		let beatTime = wasm.BrickData.approx_time(i, songData.gameData.bpm);
-		let y = this.timeToY(beatTime - time, songData.gameData.brick_speed);
+		let y = this.timeToY(beatTime);
 		if(i % 4 == 0){
 			ctx.fillRect(0, y-1, this.canvas.width, 3);
 			for(let x = 0; x <= screenWidth; x+=wasm.brick_dimensions().x){
@@ -714,12 +712,10 @@ EditorCanvas.prototype.draw = function(){
 	if(this.selectedBrick){
 		let brickDims = wasm.brick_dimensions();
 		let startX = this.selectedBrick.x_pos * brickDims.x;
-		let startTimeDifference = wasm.BrickData.approx_time(this.selectedBrick.beat_pos, songData.gameData.bpm)
-			- songData.gameData.time_running;
-		let endTimeDifference = wasm.BrickData.approx_time(this.selectedBrick.end_beat_pos, songData.gameData.bpm)
-			- songData.gameData.time_running;
-		let startY = this.timeToY(startTimeDifference, songData.gameData.brick_speed) - brickDims.y / 2;
-		let endY = this.timeToY(endTimeDifference, songData.gameData.brick_speed) + brickDims.y / 2;
+		let startTime = wasm.BrickData.approx_time(this.selectedBrick.beat_pos, songData.gameData.bpm);
+		let endTime = wasm.BrickData.approx_time(this.selectedBrick.end_beat_pos, songData.gameData.bpm);
+		let startY = this.timeToY(startTime) - brickDims.y / 2;
+		let endY = this.timeToY(endTime) + brickDims.y / 2;
 		if(this.selectedBrick.is_leading || this.selectedBrick.is_trailing){
 			let minutesPerBeat = 1 / songData.gameData.bpm;
 			let secondsPerBeat = 60 * minutesPerBeat;
@@ -798,7 +794,27 @@ EditorCanvas.prototype.handleKeyDown = function(evt){
 			this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); });
 		}
 		
-		// >:< left arrow right arrow
+		if(evt.keyCode == 37){ // left arrow. delete the old brick, move the brick to the left and recreate
+			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+				
+			brick.x_pos -= brick.x_pos > 0 ? 1 : 0;
+			
+			this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); });
+		}
+		
+		if(evt.keyCode == 39){ // right arrow. delete the old brick, move the brick to the right and recreate
+			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+				
+			brick.x_pos += brick.x_pos + 1 < wasm.max_notes_per_screen_width() ? 1 : 0;
+			
+			this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); });
+		}
 	}
 	
 	this.draw();
@@ -811,7 +827,7 @@ EditorCanvas.prototype.handleMouseDown = function(evt){
 	let dimFactors = this.eventPropagator.runOnGame( game => { return game.dimensionFactors(); } );
 	x = x / dimFactors.xFactor;
 	y = y / dimFactors.yFactor;
-	let approxTime = this.yToTime(y, this.songData.gameData.brick_speed, this.songData.gameData.time_running);
+	let approxTime = this.yToTime(y);
 	let xPos = this.xToNotePos(x);
 	let beatPos = wasm.BrickData.closest_beat_pos(approxTime, this.songData.gameData.bpm);
 	
@@ -863,7 +879,7 @@ EditorCanvas.prototype.handleMouseMove = function(evt){
 		let dimFactors = this.eventPropagator.runOnGame( game => { return game.dimensionFactors(); } );
 		x = x / dimFactors.xFactor;
 		y = y / dimFactors.yFactor;
-		let approxTime = this.yToTime(y, this.songData.gameData.brick_speed, this.songData.gameData.time_running);
+		let approxTime = this.yToTime(y);
 		let xPos = this.xToNotePos(x);
 		let beatPos = wasm.BrickData.closest_beat_pos(approxTime, this.songData.gameData.bpm);
 		
@@ -1075,7 +1091,7 @@ function changeControlDialog(controlsMap, controlsMenu, inputID){
 	enterKeyDiv.appendChild(enterKeyText);
 	document.body.appendChild(enterKeyDiv);
 	
-	// >:< preventDefault() and {capture: true} do not prevent event from being sent to other event handlers. 
+	// !!! !!! !!! preventDefault() and {capture: true} do not prevent event from being sent to other event handlers. 
 		// Way to make this temporarily the only even handler for key presses?
 		// Solution:
 			// eventPropagator flag when a dialog is launched (changeControlDialog, loadSongDialog, etc.)

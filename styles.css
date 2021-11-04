@@ -189,6 +189,11 @@ canvas{
 	z-index: 300;
 }
 
+.full-sized{
+	width: 100%;
+	height: 100%;
+}
+
 @media(max-aspect-ratio: 8/5){
 	#screen{
 		position: absolute;

@@ -158,6 +158,11 @@ pub fn ground_pos() -> i32 {
 }
 
 #[wasm_bindgen]
+pub fn max_notes_per_screen_width() -> u8 {
+	return objects::MAX_NOTES_PER_SCREEN_WIDTH;
+}
+
+#[wasm_bindgen]
 pub fn player_dimensions() -> Position {
 	return Position {
 		x: objects::PLAYER_WIDTH as f32,

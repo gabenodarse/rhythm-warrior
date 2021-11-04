@@ -39,7 +39,7 @@ Game.prototype.init = async function () {
 	// initialize loader and load graphics
 	// TODO error handling when it takes too long
 	await loader.init()
-		.then( () => loader.loadGraphics("canvases", this.div)) // >:< canvases or webGL. Make just webGL
+		.then( () => loader.loadGraphics("canvases", this.div)) // !!! !!! !!! canvases or webGL. Make just webGL
 		.then( res => this.graphics = res )
 		.catch( rej => { throw Error("Error initializing loader / loading assets: " + rej ) });
 		
@@ -301,7 +301,6 @@ Game.prototype.saveSong = function(songData, overwrite){
 	let notes = this.gameObject.bricks();
 	notes.forEach( note => {
 		note.approx_time = wasm.BrickData.approx_time(note.beat_pos, this.songData.bpm);
-		console.log(note.approx_time);
 	});
 	
 	
