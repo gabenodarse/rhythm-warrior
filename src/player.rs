@@ -50,7 +50,8 @@ pub struct Player {
 	state: TaggedState,
 	bounds: ObjectBounds,
 	
-	inputs_down: [bool; Input::Slash3 as usize + 1], // >:< this way of getting the size of the enum is flimsy
+	// !!! this way of getting the size of the enum is flimsy. Would prefer enum_variant_count!(Input)
+	inputs_down: [bool; Input::Slash3 as usize + 1], 
 	target: Option<TargetInfo>,
 	face_dir: Direction,
 	hit_dir: Direction,
@@ -90,7 +91,7 @@ struct TaggedState {
 struct TargetInfo {
 	top_y: f32,
 	bottom_y: f32,
-	pos: f32, // where the player left_x should be (>:< rename to left_x_pos)
+	left_x_pos: f32, // where the player left_x should be
 	is_hold_note: bool,
 	hit_dir: Direction,
 	dash_distance: f32,
@@ -159,8 +160,17 @@ impl Player {
 	}
 	
 	pub fn end_input(&mut self, input: Input) {
-		self.stop_hold = true; // >:< stop hold on any key up?
-		self.inputs_down[input as usize] = false;		
+		self.inputs_down[input as usize] = false;
+		if let Input::Dash = input {
+			self.multi_note_hold = false;
+		} else if let Some(hit_type) = self.hit_type {
+			match (input, hit_type) {
+				(Input::Slash1, BrickType::Type1) => self.stop_hold = true,
+				(Input::Slash2, BrickType::Type2) => self.stop_hold = true,
+				(Input::Slash3, BrickType::Type3) => self.stop_hold = true,
+				_ => ()
+			}
+		}
 	}
 	
 	// inputs a slash command, updating player state
@@ -252,7 +262,7 @@ impl Player {
 		let target = if let Some(t) = &self.target { t } else { return; };
 		
 		// if within range where boost is reasonable, then boost
-		let pos_difference = target.pos - self.bounds.left_x;
+		let pos_difference = target.left_x_pos - self.bounds.left_x;
 		if pos_difference < MAX_BOOST_DISTANCE && pos_difference > 0.0 {
 			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running - self.state.time), flags: 0, arg: 0 };
 			let mut rendering_instruction = PositionedGraphic{ g: graphic, x: self.bounds.left_x, y: self.bounds.top_y };
@@ -270,8 +280,8 @@ impl Player {
 				rendering_instruction.x += BOOST_GRAPHIC_OFFSET;
 			}
 			
-			self.bounds.left_x = target.pos;
-			self.bounds.right_x = target.pos + PLAYER_WIDTH as f32;
+			self.bounds.left_x = target.left_x_pos;
+			self.bounds.right_x = target.left_x_pos + PLAYER_WIDTH as f32;
 			self.hit_dir = target.hit_dir;
 		} else if pos_difference > -MAX_BOOST_DISTANCE && pos_difference < 0.0 {
 			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running - self.state.time), flags: GraphicFlags::HorizontalFlip as u8, arg: 0 };
@@ -290,8 +300,8 @@ impl Player {
 				rendering_instruction.x -= BOOST_GRAPHIC_OFFSET;
 			}
 			
-			self.bounds.left_x = target.pos;
-			self.bounds.right_x = target.pos + PLAYER_WIDTH as f32;
+			self.bounds.left_x = target.left_x_pos;
+			self.bounds.right_x = target.left_x_pos + PLAYER_WIDTH as f32;
 			self.hit_dir = target.hit_dir;
 		}
 	}
@@ -356,28 +366,28 @@ impl Player {
 				let dash_distance = target_difference - BRICK_WIDTH as f32 - PLAYER_WIDTH as f32; // before the last brick, not after it
 				let dash_distance = if dash_distance > MIN_DASH_WIDTH as f32 { dash_distance } else { MIN_DASH_WIDTH as f32 };
 				
-				let pos;
+				let left_x_pos;
 				let hit_dir;
 				// if left of target, right of target, in between targets
 				if left_target - self.bounds.left_x >= 0.0 {
 					self.face_dir = Direction::Right;
-						pos = left_target;
+						left_x_pos = left_target;
 						hit_dir = Direction::Right;
 				} else if self.bounds.left_x - right_target >= 0.0 {
 					self.face_dir = Direction::Left;
-						pos = right_target;
+						left_x_pos = right_target;
 						hit_dir = Direction::Left;
 				} else if left_target - self.bounds.left_x > self.bounds.left_x - right_target {
 					self.face_dir = Direction::Left;
-						pos = left_target;
+						left_x_pos = left_target;
 						hit_dir = Direction::Right;
 				} else {
 					self.face_dir = Direction::Right;
-						pos = right_target;
+						left_x_pos = right_target;
 						hit_dir = Direction::Left;
 				}
 				
-				self.target = Some( TargetInfo { top_y: bi.top_y, bottom_y: bi.bottom_y, pos, is_hold_note, hit_dir, dash_distance, target_centers } );
+				self.target = Some( TargetInfo { top_y: bi.top_y, bottom_y: bi.bottom_y, left_x_pos, is_hold_note, hit_dir, dash_distance, target_centers } );
 				self.hit_dir = self.face_dir;
 			}
 		}
@@ -397,11 +407,11 @@ impl Player {
 				match self.face_dir {
 					Direction::Left => {
 						let end_pos = self.bounds.left_x - seconds_passed * RUN_SPEED;
-						self.bounds.left_x = if end_pos < ti.pos { ti.pos } else { end_pos };
+						self.bounds.left_x = if end_pos < ti.left_x_pos { ti.left_x_pos } else { end_pos };
 					},
 					Direction::Right => {
 						let end_pos = self.bounds.left_x + seconds_passed * RUN_SPEED;
-						self.bounds.left_x = if end_pos > ti.pos { ti.pos } else { end_pos };
+						self.bounds.left_x = if end_pos > ti.left_x_pos { ti.left_x_pos } else { end_pos };
 					}
 				}
 				
@@ -410,7 +420,7 @@ impl Player {
 		}
 	}
 	
-	// updates the state and performs any other consequent updates
+	// updates the state and performs any other consequent updates to player position or lingering graphics
 	fn update_state(&mut self, time_running: f32) {
 		let t = self.state.time;
 		match self.state.state {
@@ -419,7 +429,7 @@ impl Player {
 				match &self.target {
 					None => self.state = TaggedState { state: PlayerState::Walking, time: time_running },
 					Some(ti) => {
-						if ti.pos - self.bounds.left_x < F32_ZERO && ti.pos - self.bounds.left_x > -F32_ZERO {
+						if ti.left_x_pos - self.bounds.left_x < F32_ZERO && ti.left_x_pos - self.bounds.left_x > -F32_ZERO {
 							self.state = TaggedState { state: PlayerState::Walking, time: time_running };
 						} 
 					}
@@ -431,7 +441,7 @@ impl Player {
 					// run or walk depending if the target is reached
 					None => (),
 					Some(ti) => {
-						if ti.pos - self.bounds.left_x > F32_ZERO || ti.pos - self.bounds.left_x < -F32_ZERO {
+						if ti.left_x_pos - self.bounds.left_x > F32_ZERO || ti.left_x_pos - self.bounds.left_x < -F32_ZERO {
 							self.state = TaggedState { state: PlayerState::Running, time: time_running };
 						}
 					}

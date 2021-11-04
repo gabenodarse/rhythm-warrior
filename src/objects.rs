@@ -13,7 +13,6 @@ pub const BRICK_HEIGHT: i32 = 100;
 pub const BRICK_SEGMENT_HEIGHT: i32 = 50;
 pub const SLASH_WIDTH: i32 = 60;
 pub const SLASH_HEIGHT: i32 = PLAYER_HEIGHT;
-pub const DASH_WIDTH: i32 = BRICK_WIDTH * 3; // >:< remove as constant
 pub const MIN_DASH_WIDTH: i32 = 50;
 pub const DASH_HEIGHT: i32 = PLAYER_HEIGHT * 9 / 10;
 pub const HOLD_HITBOX_WIDTH: i32 = 20;

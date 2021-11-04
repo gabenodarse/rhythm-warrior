@@ -37,7 +37,6 @@ mod player;
 mod brick;
 mod game;
 
-use std::collections::btree_set::BTreeSet; 
 use std::cmp::Ordering;
 use macros;
 
@@ -53,7 +52,6 @@ const LEFT_BOUNDARY: f32 = 0.0;
 const RIGHT_BOUNDARY: f32 = LEFT_BOUNDARY + GAME_WIDTH as f32;
 const TOP_BOUNDARY: f32 = 0.0;
 const GROUND_POS: f32 = TOP_BOUNDARY + 240.0; // !!! associate with the graphic for the ground
-const MAX_TIME_BETWEEN_TICKS: f32 = 0.025;
 const FRAME_TIME: f32 = 0.00833; // 60 fps
 
 const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -F32_ZERO and +F32_ZERO is essentially 0
@@ -71,20 +69,6 @@ pub struct GameData {
 	pub duration: f32,
 }
 
-#[derive(Clone, Copy)]
-pub struct UpcomingBrick {
-	graphic_group: GraphicGroup,
-	brick_type: BrickType,
-	x: f32,
-	// the y value at which the note should appear. At time = 0 the top of the screen is y = 0
-		// and a note that should be hit at time = 0 has appearance_y of GROUND_POS - BRICK_HEIGHT
-		// notes off the bottom of the screen have appearance_y's corresponding to how much has to be scrolled before they show up
-	appearance_y: f32, 
-	height: f32,
-	is_hold_note: bool
-}
-
-// >:< initialize struc with wasm bindgen, need new constructor?
 #[wasm_bindgen]
 #[derive(Clone)]
 pub struct BrickData {
@@ -163,6 +147,14 @@ pub fn max_notes_per_screen_width() -> u8 {
 }
 
 #[wasm_bindgen]
+pub fn game_dimensions() -> Position {
+	Position {
+		x: GAME_WIDTH as f32,
+		y: GAME_HEIGHT as f32,
+	}
+}
+
+#[wasm_bindgen]
 pub fn player_dimensions() -> Position {
 	return Position {
 		x: objects::PLAYER_WIDTH as f32,
@@ -176,27 +168,6 @@ pub fn brick_dimensions() -> Position {
 		x: objects::BRICK_WIDTH as f32,
 		y: objects::BRICK_HEIGHT as f32,
 	};
-}
-
-// converts a note pos (discrete integer) to an x valued float
-fn note_pos_to_x(pos: u8) -> f32 {
-		let pos = match pos >= objects::MAX_NOTES_PER_SCREEN_WIDTH {
-			true => objects::MAX_NOTES_PER_SCREEN_WIDTH - 1,
-			false => pos
-		};
-		
-		return (objects::BRICK_WIDTH * pos as i32) as f32;
-	}
-	
-// converts a note x to a note pos (discrete integer)
-fn note_pos_from_x(x: f32) -> u8 {
-	let pos = (x / objects::BRICK_WIDTH as f32) as u8;
-	let pos = match pos >= objects::MAX_NOTES_PER_SCREEN_WIDTH {
-		true => objects::MAX_NOTES_PER_SCREEN_WIDTH - 1,
-		false => pos
-	};
-	
-	return pos;
 }
 
 fn frame_number(time_since_start: f32) -> u8 {
@@ -228,7 +199,7 @@ impl PartialOrd for BrickData {
 
 impl Ord for BrickData {
 	fn cmp(&self, other: &BrickData) -> Ordering {
-		let self_top_y = self.appearance_y(60.0, 100.0); // >:< dummy bpm and brick speed values
+		let self_top_y = self.appearance_y(60.0, 100.0); // dummy bpm and brick speed values
 		let other_top_y = other.appearance_y(60.0, 100.0);
 		if self_top_y < other_top_y { Ordering::Less }
 		else if self_top_y > other_top_y { Ordering::Greater }
@@ -240,6 +211,7 @@ impl Ord for BrickData {
 
 #[wasm_bindgen]
 impl BrickData {
+	// here for construction of BrickData structures from javascript
 	pub fn new(brick_type: BrickType, beat_pos: i32, end_beat_pos: i32, x_pos: i32, is_triplet: bool,
 	is_trailing: bool, is_leading: bool, is_hold_note: bool) -> BrickData {
 		
@@ -270,7 +242,7 @@ impl BrickData {
 		} else if self.is_trailing {
 			pixels_passed += pixels_per_beat / 8.0;
 		} else if self.is_triplet {
-			// >:< 
+			
 		}
 		
 		return pixels_passed + GROUND_POS - objects::BRICK_HEIGHT as f32;
