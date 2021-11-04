@@ -146,11 +146,13 @@ function EditorCanvas(songData, eventPropagator){
 	this.beatInterval; // how long between beats in seconds // !!! get from game every time or store as state?
 	this.groundPosOffset = wasm.ground_pos();
 	this.mouseDown;
+	this.changeBrickType;
 	this.selectedBrick;
 	this.songData;
 	this.eventPropagator;
 	
 	this.mouseDown = false;
+	this.changeBrickType = false;
 	this.selectedBrick = null;
 	this.songData = songData;
 	this.eventPropagator = eventPropagator;
@@ -701,6 +703,7 @@ EditorCanvas.prototype.draw = function(){
 		} else {
 			ctx.beginPath();
 			ctx.setLineDash([6, 16]);
+			ctx.lineWidth = 1;
 			ctx.moveTo(0, y);
 			ctx.lineTo(this.canvas.width, y);
 			ctx.stroke();
@@ -717,8 +720,28 @@ EditorCanvas.prototype.draw = function(){
 			- songData.gameData.time_running;
 		let startY = this.timeToY(startTimeDifference, songData.gameData.brick_speed) - brickDims.y / 2;
 		let endY = this.timeToY(endTimeDifference, songData.gameData.brick_speed) + brickDims.y / 2;
+		if(this.selectedBrick.is_leading || this.selectedBrick.is_trailing){
+			let minutesPerBeat = 1 / songData.gameData.bpm;
+			let secondsPerBeat = 60 * minutesPerBeat;
+			let secondsPerEighthBeat = secondsPerBeat / 8;
+			let difference = secondsPerEighthBeat * songData.gameData.brick_speed;
+			
+			if(this.selectedBrick.is_leading){
+				startY -= difference;
+				if(!this.selectedBrick.is_hold_note){
+					endY -= difference;
+				}
+			}
+			if(this.selectedBrick.is_trailing){
+				startY += difference;
+				if(!this.selectedBrick.is_hold_note){
+					endY += difference;
+				}
+			}
+		}
 		
 		ctx.setLineDash([]);
+		ctx.lineWidth = 3;
 		ctx.strokeRect(startX, startY, brickDims.x, endY - startY);
 	}
 }
@@ -774,6 +797,8 @@ EditorCanvas.prototype.handleKeyDown = function(evt){
 				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
 			this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); });
 		}
+		
+		// >:< left arrow right arrow
 	}
 	
 	this.draw();
@@ -797,18 +822,7 @@ EditorCanvas.prototype.handleMouseDown = function(evt){
 		if(this.selectedBrick && this.selectedBrick.beat_pos == brick.beat_pos && this.selectedBrick.x_pos == brick.x_pos
 		&& this.selectedBrick.is_leading == brick.is_leading && this.selectedBrick.is_trailing == brick.is_trailing
 		&& this.selectedBrick.is_triplet == brick.is_triplet){
-			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
-			
-			if(brick.brick_type < 2){
-				brick.brick_type += 1;
-			} else {
-				brick.brick_type = 0;
-			}
-			
-			this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
-			brick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); } );
+			this.changeBrickType = true;
 		}
 	} else {
 		this.eventPropagator.runOnGame( game => { game.createDefaultBrick(beatPos, xPos); } );
@@ -823,6 +837,21 @@ EditorCanvas.prototype.handleMouseDown = function(evt){
 
 EditorCanvas.prototype.handleMouseUp = function(evt){
 	this.mouseDown = false;
+	if(this.changeBrickType){
+		let brick = this.selectedBrick;
+		this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+			brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+		
+		if(brick.brick_type < 2){
+			brick.brick_type += 1;
+		} else {
+			brick.brick_type = 0;
+		}
+		
+		this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+			brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+		this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); } );
+	}
 	this.draw();
 }
 	
@@ -839,6 +868,8 @@ EditorCanvas.prototype.handleMouseMove = function(evt){
 		let beatPos = wasm.BrickData.closest_beat_pos(approxTime, this.songData.gameData.bpm);
 		
 		if(beatPos != this.selectedBrick.end_beat_pos || xPos != this.selectedBrick.x_pos){
+			this.changeBrickType = false;
+			
 			let brick = this.selectedBrick;
 			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
 				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
