@@ -54,7 +54,7 @@ pub struct Player {
 	inputs_down: [bool; Input::Slash3 as usize + 1], 
 	target: Option<TargetInfo>,
 	face_dir: Direction,
-	hit_dir: Direction,
+	hit_dir: Direction, // !!! target has hit_dir as well... both necessary?
 	
 	hit_type: Option<BrickType>,
 	
@@ -203,12 +203,11 @@ impl Player {
 		}
 	}
 	
-	pub fn hitbox (&self) -> Option<HitBox> {
+	pub fn hitboxes (&self) -> Vec<HitBox> {
+		let mut hitboxes = Vec::new();
 		match self.state.state {
 			PlayerState::Walking | PlayerState::Running | PlayerState::PreSlash | PlayerState::PreSlashDash
-			| PlayerState::PreDash | PlayerState::Dash | PlayerState::PostSlash => {
-				return None;
-			},
+			| PlayerState::PreDash | PlayerState::Dash | PlayerState::PostSlash => {},
 			PlayerState::Slash => {
 				let brick_type = if let Some(bt) = self.hit_type {bt} else {panic!()};
 				let hitbox_x = match self.hit_dir {
@@ -222,7 +221,7 @@ impl Player {
 					top_y: self.bounds.top_y - HITBOX_FORGIVENESS_MARGIN,
 					bottom_y: self.bounds.bottom_y + HITBOX_FORGIVENESS_MARGIN
 				};
-				return Some(HitBox { bounds, brick_type });
+				hitboxes.push(HitBox { bounds, brick_type });
 			},
 			PlayerState::SlashDash => {
 				let brick_type = if let Some(bt) = self.hit_type {bt} else {panic!()};
@@ -238,23 +237,52 @@ impl Player {
 					top_y: self.bounds.top_y - HITBOX_FORGIVENESS_MARGIN,
 					bottom_y: self.bounds.bottom_y + HITBOX_FORGIVENESS_MARGIN
 				};
-				return Some(HitBox { bounds, brick_type });
+				hitboxes.push(HitBox { bounds, brick_type });
 			}
 			PlayerState::Hold => {
 				let brick_type = if let Some(bt) = self.hit_type {bt} else {panic!()};
-				let hitbox_x = match self.hit_dir {
-					Direction::Left => {self.bounds.left_x - BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0},
-					Direction::Right => {self.bounds.right_x + BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0}
-				};
-				let bounds = ObjectBounds { 
-					left_x: hitbox_x, 
-					right_x: hitbox_x + HOLD_HITBOX_WIDTH as f32, 
-					top_y: self.bounds.top_y,
-					bottom_y: self.bounds.bottom_y + HOLD_HITBOX_HEIGHT as f32
-				};
-				return Some(HitBox { bounds, brick_type });
+				
+				if self.multi_note_hold {
+					if let Some(target_info) = &self.hold_target_info {
+						for tc in &target_info.target_centers {
+							let hitbox_x = tc - HOLD_HITBOX_WIDTH as f32 / 2.0;
+							let bounds = ObjectBounds { 
+								left_x: hitbox_x, 
+								right_x: hitbox_x + HOLD_HITBOX_WIDTH as f32, 
+								top_y: self.bounds.top_y,
+								bottom_y: self.bounds.bottom_y + HOLD_HITBOX_HEIGHT as f32
+							};
+							
+							hitboxes.push(HitBox { bounds, brick_type });
+						}
+					}
+				} else {
+					let hitbox_x;
+					if let Some(target_info) = &self.hold_target_info {
+						hitbox_x = match target_info.hit_dir {
+							Direction::Left => {self.bounds.left_x - BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0},
+							Direction::Right => {self.bounds.right_x + BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0}
+						};
+					} else {
+						hitbox_x = match self.face_dir {
+							Direction::Left => {self.bounds.left_x - BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0},
+							Direction::Right => {self.bounds.right_x + BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0}
+						};
+					}
+					
+					let bounds = ObjectBounds { 
+						left_x: hitbox_x, 
+						right_x: hitbox_x + HOLD_HITBOX_WIDTH as f32, 
+						top_y: self.bounds.top_y,
+						bottom_y: self.bounds.bottom_y + HOLD_HITBOX_HEIGHT as f32
+					};
+					
+					hitboxes.push(HitBox { bounds, brick_type });
+				}
 			},
-		};
+		}
+		
+		return hitboxes;
 	}
 	
 	// boost from current position to next to target, if close enough
@@ -326,7 +354,6 @@ impl Player {
 				continue;
 			} 
 			
-			
 			// get the group of UpcomingBricks
 			match &mut bricks_info {
 				None => {
@@ -367,27 +394,23 @@ impl Player {
 				let dash_distance = if dash_distance > MIN_DASH_WIDTH as f32 { dash_distance } else { MIN_DASH_WIDTH as f32 };
 				
 				let left_x_pos;
-				let hit_dir;
 				// if left of target, right of target, in between targets
 				if left_target - self.bounds.left_x >= 0.0 {
 					self.face_dir = Direction::Right;
 						left_x_pos = left_target;
-						hit_dir = Direction::Right;
 				} else if self.bounds.left_x - right_target >= 0.0 {
 					self.face_dir = Direction::Left;
 						left_x_pos = right_target;
-						hit_dir = Direction::Left;
 				} else if left_target - self.bounds.left_x > self.bounds.left_x - right_target {
 					self.face_dir = Direction::Left;
 						left_x_pos = left_target;
-						hit_dir = Direction::Right;
 				} else {
 					self.face_dir = Direction::Right;
 						left_x_pos = right_target;
-						hit_dir = Direction::Left;
 				}
 				
-				self.target = Some( TargetInfo { top_y: bi.top_y, bottom_y: bi.bottom_y, left_x_pos, is_hold_note, hit_dir, dash_distance, target_centers } );
+				self.target = Some( TargetInfo { top_y: bi.top_y, bottom_y: bi.bottom_y, left_x_pos, is_hold_note, hit_dir: self.face_dir,
+					dash_distance, target_centers } );
 				self.hit_dir = self.face_dir;
 			}
 		}
@@ -598,10 +621,11 @@ impl Player {
 			},
 			PlayerState::Hold => {
 				if let Some(ht) = self.hit_type {
-					if self.inputs_down[BrickType::to_input(ht) as usize] {
+					if !self.stop_hold {
 						return;
 					}
 				} 
+				self.multi_note_hold = false;
 				self.state = TaggedState { state: PlayerState::Walking, time: time_running };
 				return;
 			}
@@ -681,6 +705,15 @@ impl Player {
 			},
 			PlayerState::Hold => {
 				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
+				let hit_dir;
+				let player_x;
+				let flags;
+				
+				if let Some(target_info) = &self.hold_target_info {
+					hit_dir = target_info.hit_dir;
+				} else {
+					hit_dir = self.hit_dir;
+				}
 				
 				// push player graphic
 				let graphic_group = match brick_type {
@@ -688,12 +721,18 @@ impl Player {
 					BrickType::Type2 => GraphicGroup::Holding2,
 					BrickType::Type3 => GraphicGroup::Holding3
 				};
-				let x = match self.face_dir {
-					Direction::Right => self.bounds.left_x,
-					Direction::Left => self.bounds.left_x - SLASH_WIDTH as f32,
+				match hit_dir {
+					Direction::Right => {
+						player_x = self.bounds.left_x;
+						flags = 0;
+					},
+					Direction::Left => {
+						player_x = self.bounds.left_x - SLASH_WIDTH as f32;
+						flags = GraphicFlags::HorizontalFlip as u8;
+					}
 				};
 				let graphic = Graphic { g: graphic_group, frame: 0, flags, arg };
-				positioned_graphics.push( PositionedGraphic { g: graphic, x, y: self.bounds.top_y } );
+				positioned_graphics.push( PositionedGraphic { g: graphic, x: player_x, y: self.bounds.top_y } );
 				
 				// push hold hitbox graphics
 				let hitbox_graphic_group = match brick_type {
@@ -701,12 +740,23 @@ impl Player {
 					BrickType::Type2 => GraphicGroup::Hold2,
 					BrickType::Type3 => GraphicGroup::Hold3
 				};
-				let hitbox_graphic_x = match self.hit_dir {
-					Direction::Left => {self.bounds.left_x - BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0},
-					Direction::Right => {self.bounds.right_x + BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0}
-				};
-				let hitbox_graphic = Graphic {g: hitbox_graphic_group, frame: 0, flags: 0, arg: 0};
-				positioned_graphics.push(PositionedGraphic {g: hitbox_graphic, x: hitbox_graphic_x, y: self.bounds.bottom_y});
+				
+				if self.multi_note_hold {
+					if let Some(target_info) = &self.hold_target_info {
+						for tc in &target_info.target_centers {
+							let hitbox_graphic_x = tc - HOLD_HITBOX_WIDTH as f32 / 2.0;
+							let hitbox_graphic = Graphic {g: hitbox_graphic_group, frame: 0, flags: 0, arg: 0};
+							positioned_graphics.push(PositionedGraphic {g: hitbox_graphic, x: hitbox_graphic_x, y: self.bounds.bottom_y});
+						}
+					}
+				} else {
+					let hitbox_graphic_x = match hit_dir {
+						Direction::Left => {self.bounds.left_x - BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0},
+						Direction::Right => {self.bounds.right_x + BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0}
+					};
+					let hitbox_graphic = Graphic {g: hitbox_graphic_group, frame: 0, flags: 0, arg: 0};
+					positioned_graphics.push(PositionedGraphic {g: hitbox_graphic, x: hitbox_graphic_x, y: self.bounds.bottom_y});
+				}
 			},
 			_ => {
 				let graphic_group = GraphicGroup::Walking;

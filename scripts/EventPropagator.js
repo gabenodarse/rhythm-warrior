@@ -33,8 +33,8 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 		if(resizeRefresher){
 			resizeRefresher = false;
 			requestAnimationFrame(() => {
-				resizeRefresher = true;
 				this.game.resize();
+				resizeRefresher = true;
 			});
 		}
 	}
@@ -48,7 +48,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	
 	document.addEventListener("keydown", evt => {	this.handleKeyDown(evt) });
 	document.addEventListener("keyup", evt => { this.handleKeyUp(evt) });
-	document.addEventListener("resize", resize);
+	window.addEventListener("resize", resize);
 }
 
 EventPropagator.prototype.togglePlay = function(){

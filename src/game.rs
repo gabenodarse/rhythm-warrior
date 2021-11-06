@@ -1,6 +1,9 @@
 
+extern crate console_error_panic_hook; // !!! set when a new game is created. Move to its own initialization
+
 use std::collections::btree_set::BTreeSet; 
 use std::collections::VecDeque;
+use std::cmp::Ordering;
 
 use crate::objects;
 
@@ -44,8 +47,9 @@ struct UpcomingBrick {
 #[wasm_bindgen]
 pub struct Game {
 	player: Player,
+	// !!! better data structures than VecDeques. Indexable BTrees
 	bricks: VecDeque<UpcomingBrick>, // all bricks of the song, ordered
-	// uses a vec instead of a btree because btrees in rust are somehow unindexable
+	// uses a vec instead of a btree because std lib btreeset is unindexable
 	current_bricks: VecDeque<Brick>, // current bricks that are on screen or about to appear on screen, ordered
 	upcoming_brick_idx: usize,
 	scrolled_y: f32,
@@ -56,14 +60,13 @@ pub struct Game {
 	bricks_broken: u8
 }
 
-// notes: BTreeSet<BrickData>,
-	// game_data: GameData
 #[wasm_bindgen]
 impl Game {
 	pub fn new(bpm: f32, brick_speed: f32, duration: f32) -> Game {
+		console_error_panic_hook::set_once();
 		
 		return Game {
-			player: Player::new((GAME_WIDTH / 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0),
+			player: Player::new((BRICK_WIDTH * 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0),
 			bricks: VecDeque::new(), // bricks on screen, ordered by time they are meant to be played
 			current_bricks: VecDeque::new(),
 			upcoming_brick_idx: 0,
@@ -123,7 +126,7 @@ impl Game {
 		let score = &mut self.game_data.score;
 		let bricks = &mut self.current_bricks;
 		let bricks_broken = &mut self.bricks_broken;
-		if let Some(hitbox) = self.player.hitbox() {
+		for hitbox in self.player.hitboxes() {
 			bricks.retain(|&brick| -> bool {
 				if hitbox.brick_type == brick.brick_type() {
 					let intersect = objects::intersect(&hitbox.bounds, &brick.bounds());
@@ -242,9 +245,24 @@ impl Game {
 	
 	fn prepare_song(&mut self) {
 		self.bricks = VecDeque::new();
+		// reverse ordered vec containing the component bricks of hold notes which have appeared.
+			// hold notes are stored here temporarily so that self.bricks can retain its order as bricks are added
+			// e.g. if there are two hold notes appearing at the same time, instead of adding all of 1 hold note
+			// and then all of the other, they can be added alternating 1 brick at a time, the tops of each added first
+		let mut hold_notes: Vec<UpcomingBrick> = Vec::new(); 
 		
 		for brick_data in &self.notes {
 			let appearance_y = brick_data.appearance_y(self.game_data.bpm, self.game_data.brick_speed);
+			
+			// add hold notes which have passed
+			while let Some(upcoming_brick) = hold_notes.last() {
+				if upcoming_brick.appearance_y < appearance_y {
+					self.bricks.push_back(hold_notes.pop().unwrap());
+				} else {
+					break;
+				}
+			}
+			
 			let (graphic_group, hold_graphic_group) = match brick_data.brick_type {
 				BrickType::Type1 => (GraphicGroup::Brick1, GraphicGroup::Brick1Segment),
 				BrickType::Type2 => (GraphicGroup::Brick2, GraphicGroup::Brick2Segment),
@@ -266,7 +284,7 @@ impl Game {
 				let mut appearance_y = appearance_y + BRICK_HEIGHT as f32;
 				
 				while(appearance_y < end_y) {
-					self.bricks.push_back( UpcomingBrick {
+					hold_notes.push( UpcomingBrick {
 						graphic_group: hold_graphic_group,
 						brick_type: brick_data.brick_type, 
 						x: brick_data.x(),
@@ -277,7 +295,7 @@ impl Game {
 					appearance_y += 50.0;
 				}
 				
-				self.bricks.push_back( UpcomingBrick {
+				hold_notes.push( UpcomingBrick {
 					graphic_group: hold_graphic_group,
 					brick_type: brick_data.brick_type, 
 					x: brick_data.x(),
@@ -285,9 +303,14 @@ impl Game {
 					height: BRICK_SEGMENT_HEIGHT as f32,
 					is_hold_note: true
 				});
+				
+				hold_notes.sort_by(|a, b| b.cmp(a)); // sort in reverse order
 			}
 		}
 		
+		for i in 1 .. self.bricks.len() {
+			assert!(self.bricks[i-1] <= self.bricks[i]);
+		}
 		self.game_data.max_score = self.notes.len() as i32 * 100;
 	}
 	
@@ -315,7 +338,7 @@ impl Game {
 	
 	// seeks (changes the song time) to the time specified. resets song
 	pub fn seek(&mut self, time: f32) {
-		self.player = Player::new((GAME_WIDTH / 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0);
+		self.player = Player::new((BRICK_WIDTH * 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0);
 		self.scrolled_y = self.game_data.brick_speed * time;
 		self.end_appearance_y = Game::end_appearance_y(self.scrolled_y, self.game_data.brick_speed);
 		self.game_data.time_running = time;
@@ -339,5 +362,28 @@ impl Game {
 	
 	fn end_appearance_y(scrolled_y: f32, brick_speed: f32) -> f32 {
 		return scrolled_y + GAME_HEIGHT as f32 + brick_speed * 2.0; // 2 second window after bricks are off the screen
+	}
+}
+
+
+// Equality and Order are determined only on the appearance y of bricks
+impl PartialEq for UpcomingBrick {
+	fn eq(&self, other: &UpcomingBrick) -> bool {
+		return self.appearance_y == other.appearance_y;
+	}
+}
+impl Eq for UpcomingBrick {}
+
+impl PartialOrd for UpcomingBrick {
+	fn partial_cmp(&self, other: &UpcomingBrick) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for UpcomingBrick {
+	fn cmp(&self, other: &UpcomingBrick) -> Ordering {
+		if self.appearance_y < other.appearance_y { Ordering::Less }
+		else if self.appearance_y == other.appearance_y { Ordering::Equal }
+		else { Ordering::Greater }
 	}
 }

@@ -29,8 +29,6 @@
 // !!! are as casts what I want / are they idiomatic Rust? Also, types seem to be arbitrary...
 	// (define floats and integer forms of constants so casting isn't needed?)
 
-#[allow(dead_code)]
-
 mod objects;
 mod resources;
 mod player;

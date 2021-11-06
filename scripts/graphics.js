@@ -119,9 +119,8 @@ CanvasGraphics.prototype.resize = function(xFactor, yFactor){
 		graphicGroup.forEach( (canvasGroup, gIdx) => {
 			let fullsize = canvasGroup.fullsize;
 			canvasGroup.canvases.forEach( canvas => {
-				canvas.width = dimensions.x * xFactor;
-				canvas.height = dimensions.y * yFactor;
-				canvas.getContext("2d").drawImage(fullsize, 0, 0, canvas.width, canvas.height);
+				canvas.style.width = dimensions.x * xFactor + "px";
+				canvas.style.height = dimensions.y * yFactor + "px";
 			})
 		});
 	});
