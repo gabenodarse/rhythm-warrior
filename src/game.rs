@@ -151,11 +151,7 @@ impl Game {
 		graphics.clear();
 		
 		graphics.push(
-			PositionedGraphic {
-				g: Graphic{ g: GraphicGroup::Background, frame: 0, flags: 0, arg: 0},
-				x: 0.0,
-				y: 0.0
-			},
+			PositionedGraphic::new(Graphic{ g: GraphicGroup::Background, frame: 0, flags: 0, arg: 0}, 0.0, 0.0)
 		);
 		
 		graphics.append(&mut self.player.rendering_instructions(self.game_data.time_running));

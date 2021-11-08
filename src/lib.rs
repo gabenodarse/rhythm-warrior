@@ -112,6 +112,7 @@ pub struct PositionedGraphic {
 }
 
 #[wasm_bindgen]
+#[derive(Clone, Copy)]
 pub struct Position {
 	pub x: f32,
 	pub y: f32
@@ -178,6 +179,17 @@ pub fn num_possible_inputs() -> usize {
 }
 
 // --- methods and trait implementation ---
+
+impl PositionedGraphic {
+	pub fn new(g: Graphic, x: f32, y: f32) -> PositionedGraphic {
+		let offset = resources::GRAPHIC_OFFSETS[g.g as usize];
+		return PositionedGraphic {
+			g,
+			x: x - offset.x,
+			y: y - offset.y
+		}
+	}
+}
 
 // equality and order are determined solely on the start position of the note and its x pos, 
 	// not the brick type or whether it's a hold note or approximate time

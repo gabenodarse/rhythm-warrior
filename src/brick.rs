@@ -69,10 +69,6 @@ impl Brick {
 	}
 	
 	pub fn rendering_instruction(&self) -> PositionedGraphic {
-		PositionedGraphic {
-			g: self.graphic,
-			x: self.bounds.left_x as f32,
-			y: self.bounds.top_y as f32,
-		}
+		return PositionedGraphic::new(self.graphic, self.bounds.left_x as f32, self.bounds.top_y as f32);
 	}
 }

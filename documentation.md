@@ -65,8 +65,14 @@ remnant file that is kept around in case it is useful in the future
 each key in the resources.json file represents 1 graphic or animation. 
 to add a graphic or animation, add the key to the resources.json file and create an array with the associated images
 then, modify resources.rs such that: 
-	keys have a corresponding name
-	max count of the new graphic/animation and its size are as desired
+	keys have a corresponding GraphicGroup. Names must be identical
+	the offset dimensions of the graphic are specified
+	max count of the new graphic/animation are specified
+The offset dimensions define how much offset the graphic has from the object it represents. 
+	For example, if a graphic represents a person, the offset defines how much space around the person is also included in the graphic
+	offsets therefore should be relative to the object's size
+	offsets are added to both sides of the object (i.e. an x offset is added to both the left and right side) to determine the graphic size
+
 animation frames are cycled through at 120 fps
 
 graphics are displayed by passing the graphic id and frame number (along with transformation flags) to js

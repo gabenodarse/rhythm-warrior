@@ -19,4 +19,3 @@ pub fn derive_num_variants(input: TokenStream) -> TokenStream {
     };
     return gen.into();
 }
-
