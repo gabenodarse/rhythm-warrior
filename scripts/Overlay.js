@@ -25,7 +25,7 @@ export function Overlay(songData, eventPropagator, controlsMap){
 	this.endGameScreen = new EndGameScreen(eventPropagator);
 	this.score = new Score();
 	this.menu = new Menu(eventPropagator, controlsMap);
-	this.editorOverlay = new EditorOverlay(songData, eventPropagator);
+	this.editorOverlay = new EditorOverlay(eventPropagator);
 	
 	this.overlayDiv.id = "overlay";
 	
@@ -122,7 +122,7 @@ function EndGameScreen(eventPropagator){
 
 // EditorOverlay class, contains the editor's guiding lines and the editor's controls
 // !!! range scroller isn't modified when the song is modified
-function EditorOverlay(songData, eventPropagator){
+function EditorOverlay(eventPropagator){
 	this.div;
 	this.editorCanvas;
 	this.scroller;
@@ -132,8 +132,8 @@ function EditorOverlay(songData, eventPropagator){
 	this.div.className = "editor-overlay";
 	this.div.style.display = "none";
 	
-	this.editorCanvas = new EditorCanvas(songData, eventPropagator);
-	this.controls = new EditorControls(songData, eventPropagator);
+	this.editorCanvas = new EditorCanvas(eventPropagator);
+	this.controls = new EditorControls(eventPropagator);
 	
 	this.div.appendChild(this.editorCanvas.domElement());
 	this.div.appendChild(this.controls.domElement());
@@ -141,7 +141,7 @@ function EditorOverlay(songData, eventPropagator){
 
 // EditorCanvas class, displays lines that (should) represent beat breakpoints in a song
 	// clicking on the canvas adds notes, wheel scrolling changes the song time
-function EditorCanvas(songData, eventPropagator){
+function EditorCanvas(eventPropagator){
 	this.canvas;
 	this.beatInterval; // how long between beats in seconds // !!! get from game every time or store as state?
 	this.groundPosOffset = wasm.ground_pos();
@@ -154,7 +154,7 @@ function EditorCanvas(songData, eventPropagator){
 	this.mouseDown = false;
 	this.changeBrickType = false;
 	this.selectedBrick = null;
-	this.songData = songData;
+	this.songData = null;
 	this.eventPropagator = eventPropagator;
 	
 	let dims = wasm.game_dimensions();
@@ -163,7 +163,6 @@ function EditorCanvas(songData, eventPropagator){
 	this.canvas.height = dims.y;
 	this.canvas.className = "full-sized";
 	
-	this.updateSongData(songData);
 	this.canvas.addEventListener("mousedown", evt => { this.handleMouseDown(evt); });
 	this.canvas.addEventListener("mouseup", evt => { this.handleMouseUp(evt); });
 	this.canvas.addEventListener("mousemove", evt => { this.handleMouseMove(evt); });
@@ -173,7 +172,7 @@ function EditorCanvas(songData, eventPropagator){
 
 // EditorControls class, contains controls which can control EditorCanvas scrolling and game playing/pausing
 // TODO add triplet note button to convert editor canvas's selected brick to triplet note
-function EditorControls(songData, eventPropagator){
+function EditorControls(eventPropagator){
 	this.div;
 	this.rangesDiv;
 	this.buttonDiv;
@@ -182,9 +181,6 @@ function EditorControls(songData, eventPropagator){
 	this.playPauseButton;
 	this.songDuration;
 	this.beatInterval;
-	
-	this.songDuration = songData.gameData.duration;
-	this.beatInterval = songData.gameData.beat_interval;
 	
 	this.div = document.createElement("div");
 	this.div.className = "editor-controls";
@@ -554,12 +550,12 @@ HomeScreen.prototype.populateSelections = function(songs){
 		});
 		
 		songs[0]["values"].forEach( (song, idx) => {
-			if(song[idIDX] == 6 && song[nameIDX].toUpperCase() === "WAKE ME UP"){
+			if(song[idIDX] == 8 && song[nameIDX].toUpperCase() === "HIP SHOP COVER"){
 				let selection = new HomeSelection(song[idIDX], song[nameIDX], song[artistIDX], song[difficultyIDX], song[durationIDX]);
 				this.songSelections.push(selection);
 				this.homeScreenDiv.appendChild(selection.domElement());
 			}
-			if(song[idIDX] == 7 && song[nameIDX].toUpperCase() === "ANIMALS"){
+			if(song[idIDX] == 9 && song[nameIDX].toUpperCase() === "NEW SONG"){
 				let selection = new HomeSelection(song[idIDX], song[nameIDX], song[artistIDX], song[difficultyIDX], song[durationIDX]);
 				this.songSelections.push(selection);
 				this.homeScreenDiv.appendChild(selection.domElement());
@@ -931,11 +927,14 @@ EditorControls.prototype.domElement = function(){
 }
 
 EditorControls.prototype.updateSongData = function(songData){
+	let songDuration = songData.gameData.duration;
+	let beatInterval = songData.gameData.beat_interval;
 	let time = songData.gameData.time_running;
-	let prevT = parseFloat(this.broadRange.value) / 100 * this.songDuration 
-		+ parseFloat(this.preciseRange.value) * this.beatInterval;
+	
+	let prevT = parseFloat(this.broadRange.value) / 100 * songDuration 
+		+ parseFloat(this.preciseRange.value) * beatInterval;
 	if(time - prevT > 0.5 || prevT - time > 0.5){
-		this.broadRange.value = time / this.songDuration * 100;
+		this.broadRange.value = time / songDuration * 100;
 		this.preciseRange.value = 0;
 	}
 }

@@ -304,6 +304,11 @@ impl Game {
 			}
 		}
 		
+		// add any remaining bricks from hold notes
+		while let Some(upcoming_brick) = hold_notes.last() {
+			self.bricks.push_back(hold_notes.pop().unwrap());
+		}
+		
 		for i in 1 .. self.bricks.len() {
 			assert!(self.bricks[i-1] <= self.bricks[i]);
 		}

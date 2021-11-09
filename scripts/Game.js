@@ -63,10 +63,6 @@ Game.prototype.init = async function () {
 	this.xFactor = 1;
 	this.yFactor = 1;
 	
-	// !!! don't load song (mp3 and notes from database) on initialization
-	// !!! loading arbitrary song... instead should query and load first song, or allow no song to be loaded
-	await this.loadSong(7); 
-	
 	this.isLoaded = true;
 }
 
@@ -241,27 +237,28 @@ Game.prototype.loadSong = function(songID){
 	
 	this.gameObject = wasm.Game.new(bpm, brickSpeed, duration);
 	
-	let brickTypeIDX, beatPosIDX, endBeatPosIDX, xPosIDX, isTripletIDX, isTrailingIDX, isLeadingIDX, isHoldNoteIDX;
-	bricks[0]["columns"].forEach( (columnName, idx) => {
-		if(columnName.toUpperCase() === "BRICKTYPE"){
-			brickTypeIDX = idx;
-		} else if(columnName.toUpperCase() === "BEATPOS"){
-			beatPosIDX = idx;
-		} else if(columnName.toUpperCase() === "ENDBEATPOS"){
-			endBeatPosIDX = idx;
-		} else if(columnName.toUpperCase() === "XPOS"){
-			xPosIDX = idx;
-		} else if(columnName.toUpperCase() === "ISTRIPLET"){
-			isTripletIDX = idx;
-		} else if(columnName.toUpperCase() === "ISTRAILING"){
-			isTrailingIDX = idx;
-		} else if(columnName.toUpperCase() === "ISLEADING"){
-			isLeadingIDX = idx;
-		} else if(columnName.toUpperCase() === "ISHOLDNOTE"){
-			isHoldNoteIDX = idx;
-		}
-	});
 	if(bricks[0]){
+		let brickTypeIDX, beatPosIDX, endBeatPosIDX, xPosIDX, isTripletIDX, isTrailingIDX, isLeadingIDX, isHoldNoteIDX;
+		bricks[0]["columns"].forEach( (columnName, idx) => {
+			if(columnName.toUpperCase() === "BRICKTYPE"){
+				brickTypeIDX = idx;
+			} else if(columnName.toUpperCase() === "BEATPOS"){
+				beatPosIDX = idx;
+			} else if(columnName.toUpperCase() === "ENDBEATPOS"){
+				endBeatPosIDX = idx;
+			} else if(columnName.toUpperCase() === "XPOS"){
+				xPosIDX = idx;
+			} else if(columnName.toUpperCase() === "ISTRIPLET"){
+				isTripletIDX = idx;
+			} else if(columnName.toUpperCase() === "ISTRAILING"){
+				isTrailingIDX = idx;
+			} else if(columnName.toUpperCase() === "ISLEADING"){
+				isLeadingIDX = idx;
+			} else if(columnName.toUpperCase() === "ISHOLDNOTE"){
+				isHoldNoteIDX = idx;
+			}
+		});
+		
 		bricks[0]["values"].forEach( brick => {
 			this.gameObject.add_brick(wasm.BrickData.new( 
 				brick[brickTypeIDX], brick[beatPosIDX], brick[endBeatPosIDX], brick[xPosIDX],
