@@ -64,19 +64,19 @@ CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
 	});
 	
 	// move and make canvases visible
-	let end = instructions.num_graphics * 3;
-	let f32buf = new Float32Array(wasmMemory().buffer, instructions.graphics_ptr, end);
-	let u8buf = new Uint8Array(wasmMemory().buffer, instructions.graphics_ptr, end*4);
+	let len = instructions.num_graphics * 3; // 3 32bit data chunks per graphic
+	let f32buf = new Float32Array(wasmMemory().buffer, instructions.graphics_ptr, len);
+	let u8buf = new Uint8Array(wasmMemory().buffer, instructions.graphics_ptr, len*4);
 	let i = 0;
-	while(i < end){
-		let x = f32buf[i];
-		++i;
-		let y = f32buf[i];
-		++i;
+	while(i < len){
 		let graphicIdx = u8buf[i*4];
 		let graphicFrame = u8buf[i*4 + 1];
 		let graphicFlags = u8buf[i*4 + 2];
 		let graphicArg = u8buf[i*4 + 3];
+		++i;
+		let x = f32buf[i];
+		++i;
+		let y = f32buf[i];
 		++i;
 		
 		let numFrames = this.canvases[graphicIdx].length;
