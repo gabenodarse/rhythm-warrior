@@ -15,6 +15,7 @@ g_keyCodeNames[13] = "Enter";
 export function Overlay(songData, eventPropagator, controlsMap){
 	this.overlayDiv;
 	this.score;
+	this.fps;
 	this.menu;
 	this.editorOverlay;
 	this.homeScreen;
@@ -24,12 +25,14 @@ export function Overlay(songData, eventPropagator, controlsMap){
 	this.homeScreen = new HomeScreen(eventPropagator);
 	this.endGameScreen = new EndGameScreen(eventPropagator);
 	this.score = new Score();
+	this.fps = new FPS();
 	this.menu = new Menu(eventPropagator, controlsMap);
 	this.editorOverlay = new EditorOverlay(eventPropagator);
 	
 	this.overlayDiv.id = "overlay";
 	
 	this.overlayDiv.appendChild(this.score.domElement());
+	this.overlayDiv.appendChild(this.fps.domElement());
 	this.overlayDiv.appendChild(this.menu.domElement());
 	this.overlayDiv.appendChild(this.editorOverlay.domElement());
 	this.overlayDiv.appendChild(this.homeScreen.domElement());
@@ -252,6 +255,25 @@ function Score(){
 	document.body.appendChild(this.scoreDiv);
 }
 
+// FPS class, displays a fps which may be updated
+function FPS(){
+	this.fpsDiv;
+	this.fps;
+	this.fpsInner;
+	
+	this.fpsDiv = document.createElement("div");
+	this.fpsDiv.className = "fps";
+	this.fpsDiv.style.display = "none";
+	
+	this.fps = 0;
+	this.fpsInner = document.createElement("p");
+	
+	this.fpsInner.innerHTML = this.fps;
+	
+	this.fpsDiv.appendChild(this.fpsInner);
+	document.body.appendChild(this.fpsDiv);
+}
+
 // Menu class, contains the menu div on which menu panels are displayed and contains logic of menu panels and their selections
 function Menu(eventPropagator, controlsMap){
 	this.menuDiv;
@@ -429,6 +451,7 @@ function MenuSelection(onSelect, value, parentPanelDiv){
 
 Overlay.prototype.showElement = function(elementName){
 	if(this[elementName] != undefined){
+		// TODO make sure elements have a show function (base class all elements inherit from and error check)
 		this[elementName].show();
 	}
 	else{
@@ -461,6 +484,7 @@ Overlay.prototype.passEvent = function(elementName, evt){
 	}
 }
 
+// !!! updating song data should update score?
 Overlay.prototype.updateSongData = function(songData){
 	this.editorOverlay.updateSongData(songData);
 	this.updateScore(songData.score);
@@ -468,6 +492,10 @@ Overlay.prototype.updateSongData = function(songData){
 
 Overlay.prototype.updateScore = function(newScore){
 	this.score.update(newScore);
+}
+
+Overlay.prototype.updateFPS = function(newFPS){
+	this.fps.update(newFPS);
 }
 
 HomeScreen.prototype.show = function(){
@@ -997,6 +1025,25 @@ Score.prototype.update = function(newScore){
 	if(newScore != this.score){
 		this.score = newScore;
 		this.scoreInner.innerHTML = newScore;
+	}
+}
+
+FPS.prototype.domElement = function(){
+	return this.fpsDiv;
+}
+
+FPS.prototype.show = function(){
+	this.fpsDiv.style.display = "block";
+}
+
+FPS.prototype.hide = function(){
+	this.fpsDiv.style.display = "none";
+}
+
+FPS.prototype.update = function(newFPS){
+	if(newFPS != this.fps){
+		this.fps = newFPS;
+		this.fpsInner.innerHTML = newFPS;
 	}
 }
 	

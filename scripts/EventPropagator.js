@@ -64,6 +64,7 @@ EventPropagator.prototype.start = function(){
 	this.overlay.hideElement("menu");
 	this.overlay.hideElement("homeScreen");
 	this.overlay.showElement("score");
+	this.overlay.showElement("fps")
 	
 	if(this.isRunning){
 		throw Error("Attempting to start game when the game is already running");
@@ -76,6 +77,7 @@ EventPropagator.prototype.pause = function(){
 	this.overlay.showElement("menu");
 	this.overlay.populateMenu("gameMenu");
 	this.overlay.hideElement("score");
+	this.overlay.hideElement("fps");
 	this.stopFlag = true;
 }
 
@@ -87,6 +89,7 @@ EventPropagator.prototype.exitToHomeScreen = function(){
 	this.stopFlag = true;
 	this.overlay.hideElement("menu");
 	this.overlay.hideElement("score");
+	this.overlay.hideElement("fps");
 	this.overlay.hideElement("editorOverlay");
 	this.overlay.hideElement("endGameScreen");
 	this.overlay.showElement("homeScreen");
@@ -96,6 +99,7 @@ EventPropagator.prototype.enableEditor = function(){
 	if(!this.isEditor){
 		this.overlay.showElement("editorOverlay");
 		this.overlay.hideElement("score");
+		this.overlay.hideElement("fps");
 		
 		this.game = this.game.toEditor();
 		
@@ -110,6 +114,7 @@ EventPropagator.prototype.disableEditor = function(){
 	if(this.isEditor){
 		this.overlay.hideElement("editorOverlay");
 		this.overlay.showElement("score");
+		this.overlay.showElement("fps");
 		
 		this.game = this.game.toGame();
 		
@@ -203,8 +208,10 @@ EventPropagator.prototype.gameLoop = function(){
 		this.game.tick();
 		
 		let songData = this.game.getSongData();
+		let fps = this.game.getFPS();
 		
 		this.overlay.updateScore(songData.gameData.score);
+		this.overlay.updateFPS(fps);
 		
 		if(songData.gameData.time_running > 60){
 			this.overlay.showElement("endGameScreen");

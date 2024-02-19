@@ -135,10 +135,28 @@ canvas{
 	right: 0;
 	height: 4%;
 	width: 10%;
-	font-size: 2em;
-	z-index: 200;
+	font-size: 5vw;
+	margin-top: 4%;
+	user-select: none;
+}
+
+.score p{
+	margin: 0;
+}
+
+.fps{
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 4%;
+	width: 10%;
+	font-size: 2vw;
 	margin: 0;
 	user-select: none;
+}
+
+.fps p{
+	margin: 0;
 }
 
 .menu{

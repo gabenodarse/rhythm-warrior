@@ -12,20 +12,39 @@ export function Game () {
 	this.yFactor;
 	
 	this.div;
-	this.lastTick;
 	this.gameObject;
 	this.graphics; // !!! can be either canvases or webGL. Add way to choose between them.
 	this.database; 
 	this.songData;
 	this.isLoaded = false;
 	
-	this.audioContext = new AudioContext();
+	// tick timer and fps
+	this.lastTick; // keeps track of the time since the game last updated and rendered
+	this.tickTimes; // array of tick times for fps calculation
+	this.tickCounter; // counts number of ticks since last fps calculation
+	this.numFramesPerFPS; // number of frames to draw between each fps calculation
+	this.fps;
+	
+	// audio
+	this.audioContext;
 	this.popAudioBuffer;
 	this.audioSource;
 	this.audioBuffer;
+	this.audioTimeSafetyBuffer;
+
+	// set defaults
+	this.isLoaded = false;
+
+	this.numFramesPerFPS = 30;
+	this.tickTimes = new Array(this.numFramesPerFPS);
+	this.tickCounter = 0;
+	this.fps = 0;
+
+	// TODO move to init function?
+	this.audioContext = new AudioContext();
 	this.audioTimeSafetyBuffer = 0.15;
 	
-	//initialize screen div
+	// initialize screen div
 	this.div = document.createElement("div");
 	this.div.id = "game";
 	document.getElementById("screen").appendChild(this.div);
@@ -108,7 +127,7 @@ Game.prototype.start = async function (callback) {
 	
 	let switchTime = this.audioContext.currentTime + this.audioTimeSafetyBuffer;
 	this.audioSource.start(switchTime, this.gameObject.game_data().time_running + this.songData.startOffset); 
-	// set the last tick time to when the moment the game is set to restart
+	// set the last tick time to when the moment the game is set to start
 	this.lastTick = new Date().getTime() + this.audioTimeSafetyBuffer * 1000; 
 	
 	// timeout to prevent negative ticks
@@ -131,10 +150,21 @@ Game.prototype.tick = function(){
 	let now = new Date().getTime();
 	// !!! render asynchronously to keep game ticking???
 	// !!! handle if there's too long a time between ticks (pause game?)
-	// !!! get fps, average, and log
+	// !!! log fps
 	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
 	this.lastTick = now;
+
+	// fps tracking
+	this.tickTimes[this.tickCounter] = now;
+	this.tickCounter += 1;
+	if(this.tickCounter == this.numFramesPerFPS){
+		let averageTickTime = (this.tickTimes[this.numFramesPerFPS - 1] - this.tickTimes[0]) / this.numFramesPerFPS;
+		averageTickTime = averageTickTime / 1000; // convert to seconds
+		this.fps = 1 / averageTickTime;
+		this.tickCounter = 0;
+	}
 	
+	// tick game state
 	this.gameObject.tick(timePassed); 
 	this.songData.gameData = this.gameObject.game_data();
 	
@@ -147,6 +177,8 @@ Game.prototype.tick = function(){
 		audioSource.connect(this.audioContext.destination);
 		audioSource.start();
 	}
+
+	
 	
 	this.renderGame();
 }
@@ -167,14 +199,20 @@ Game.prototype.renderGame = function(){
 	this.graphics.render(instructions, this.xFactor, this.yFactor);
 }
 
+// !!! getScore
 Game.prototype.score = function(){
 	return this.gameObject.score();
+}
+
+Game.prototype.getFPS = function(){
+	return this.fps;
 }
 
 Game.prototype.dimensionFactors = function(){
 	return {xFactor: this.xFactor, yFactor: this.yFactor};
 }
 
+// !!! songData should contain score?
 Game.prototype.getSongData = function(){
 	return this.songData;
 }
