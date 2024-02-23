@@ -3,8 +3,11 @@
 import * as wasm from "../pkg/music_mercenary.js";
 import * as load from "./load.js";
 
-//TODO searching through game to its prototype to find the tick function every tick is technically suboptimal?
 export function Game () {
+	// !!! move fps to actual frame update location in event propagator - since ticks and frames are seperate
+		// measure tick time in the same way fps is measured - averaged over 30 ticks
+		// get maximum and minimum frame and tick times, not just average
+		// also measure preRender time
 	//members
 	this.width;
 	this.height;
@@ -13,10 +16,10 @@ export function Game () {
 	
 	this.div;
 	this.gameObject;
-	this.graphics; // !!! can be either canvases or webGL. Add way to choose between them.
+	this.graphics; // !!! use webGL
 	this.database; 
 	this.songData;
-	this.isLoaded = false;
+	this.isLoaded;
 	
 	// tick timer and fps
 	this.lastTick; // keeps track of the time since the game last updated and rendered
@@ -95,7 +98,7 @@ Game.prototype.resize = function(){
 	this.xFactor = width / gameDim.x;
 	this.yFactor = height / gameDim.y;
 	this.graphics.resize(this.xFactor, this.yFactor);
-	this.renderGame();
+	// !!! this.preRender();
 }
 
 Game.prototype.start = async function (callback) {
@@ -143,26 +146,15 @@ Game.prototype.pause = function(){
 
 Game.prototype.restart = function(){
 	this.gameObject.seek(0);
-	this.renderGame();
+	this.preRender();
 }
 
 Game.prototype.tick = function(){
 	let now = new Date().getTime();
-	// !!! render asynchronously to keep game ticking???
 	// !!! handle if there's too long a time between ticks (pause game?)
-	// !!! log fps
+	// !!! log fps and tick rate
 	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
 	this.lastTick = now;
-
-	// fps tracking
-	this.tickTimes[this.tickCounter] = now;
-	this.tickCounter += 1;
-	if(this.tickCounter == this.numFramesPerFPS){
-		let averageTickTime = (this.tickTimes[this.numFramesPerFPS - 1] - this.tickTimes[0]) / this.numFramesPerFPS;
-		averageTickTime = averageTickTime / 1000; // convert to seconds
-		this.fps = 1 / averageTickTime;
-		this.tickCounter = 0;
-	}
 	
 	// tick game state
 	this.gameObject.tick(timePassed); 
@@ -178,9 +170,22 @@ Game.prototype.tick = function(){
 		audioSource.start();
 	}
 
-	
-	
-	this.renderGame();
+	// fps tracking
+	this.tickTimes[this.tickCounter] = now;
+	this.tickCounter += 1;
+	if(this.tickCounter == this.numFramesPerFPS){
+		let averageFrameTime = (this.tickTimes[this.numFramesPerFPS - 1] - this.tickTimes[0]) / this.numFramesPerFPS;
+		averageFrameTime = averageFrameTime / 1000; // convert to seconds
+		this.fps = 1 / averageFrameTime;
+		this.tickCounter = 0;
+		
+		// measure how long this tick took
+		now = new Date().getTime();
+		let tickTime = (now - this.lastTick) / 1000; 
+
+		// !!! seperate variable for tick time
+		this.fps = this.fps + "\n" + tickTime;
+	}
 }
 
 Game.prototype.startControl = function(cntrl){
@@ -193,15 +198,14 @@ Game.prototype.stopControl = function(cntrl){
 	this.gameObject.stop_command(cntrl, (now - this.lastTick) / 1000);
 }
 
-Game.prototype.renderGame = function(){
+Game.prototype.preRender = function(){
 	let instructions = this.gameObject.rendering_instructions();
 	
-	this.graphics.render(instructions, this.xFactor, this.yFactor);
+	this.graphics.preRender(instructions, this.xFactor, this.yFactor);
 }
 
-// !!! getScore
-Game.prototype.score = function(){
-	return this.gameObject.score();
+Game.prototype.getScore = function(){
+	return this.songData.score;
 }
 
 Game.prototype.getFPS = function(){
@@ -212,7 +216,7 @@ Game.prototype.dimensionFactors = function(){
 	return {xFactor: this.xFactor, yFactor: this.yFactor};
 }
 
-// !!! songData should contain score?
+// TODO songData should contain score?
 Game.prototype.getSongData = function(){
 	return this.songData;
 }
@@ -321,7 +325,7 @@ Game.prototype.loadSong = function(songID){
 	
 	this.audioBuffer = null;
 	
-	this.renderGame();
+	this.preRender();
 }
 
 Game.prototype.loadMP3 = async function(file){
@@ -370,7 +374,7 @@ Object.setPrototypeOf(Editor.prototype, Game.prototype);
 Editor.prototype.seek = function(time){
 	this.gameObject.seek(time);
 	this.songData.gameData = this.gameObject.game_data()
-	this.renderGame();
+	this.preRender();
 }
 
 Editor.prototype.createDefaultBrick = function(beatPos, xPos){

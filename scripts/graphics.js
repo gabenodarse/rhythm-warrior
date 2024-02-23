@@ -49,7 +49,7 @@ export function CanvasGraphics(images, screenDiv){
 	});
 }
 
-CanvasGraphics.prototype.render = function(instructions, xFactor, yFactor){
+CanvasGraphics.prototype.preRender = function(instructions, xFactor, yFactor){
 	// clear old canvases
 	this.canvases.forEach( graphicGroup => {
 		graphicGroup.forEach( canvasGroup => {
@@ -229,7 +229,7 @@ WebGLGraphics.prototype.resize = function(xFactor, yFactor){
 	this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 }
 
-WebGLGraphics.prototype.render = function(instructions, xFactor, yFactor){
+WebGLGraphics.prototype.preRender = function(instructions, xFactor, yFactor){
 	const gl = this.gl;
 	const positionBuffer = this.positionBuffer;
 	const textures = this.textures;

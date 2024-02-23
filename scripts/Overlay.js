@@ -484,7 +484,7 @@ Overlay.prototype.passEvent = function(elementName, evt){
 	}
 }
 
-// !!! updating song data should update score?
+// TODO updating song data should update score?
 Overlay.prototype.updateSongData = function(songData){
 	this.editorOverlay.updateSongData(songData);
 	this.updateScore(songData.score);
@@ -532,7 +532,7 @@ HomeScreen.prototype.handleEvent = function(evt){
 			let songID = this.songSelections[this.selectionIdx].getSongID();
 			let fn = game => game.loadSong(songID);
 			this.eventPropagator.runOnGame(fn);
-			this.eventPropagator.start();
+			this.eventPropagator.startLoop();
 		}
 	}
 }

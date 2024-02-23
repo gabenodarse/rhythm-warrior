@@ -15,8 +15,9 @@ export function EventPropagator(){
 	this.isRunning;
 	this.isEditor;
 	this.stopFlag;
+	this.isPreRendered; // boolean describing whether the game state is ready to be re-rendered
 	
-	this.loop;
+	this.loop; // TODO loop is set to anonymous functions that call gameLoop or editorLoop. Set it be set to the functions themselves?
 	this.resize;
 }
 
@@ -46,9 +47,10 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	this.isRunning = false;
 	this.isEditor = false;
 	
-	document.addEventListener("keydown", evt => {	this.handleKeyDown(evt) });
+	document.addEventListener("keydown", evt => { this.handleKeyDown(evt) });
 	document.addEventListener("keyup", evt => { this.handleKeyUp(evt) });
 	window.addEventListener("resize", resize);
+	window.addEventListener("gameRender", evt => { this.handleGameRender(evt) });
 }
 
 EventPropagator.prototype.togglePlay = function(){
@@ -56,21 +58,8 @@ EventPropagator.prototype.togglePlay = function(){
 		this.stopFlag = true;
 	} else {
 		this.stopFlag = false;
-		this.start();
+		this.startLoop();
 	}
-}
-
-EventPropagator.prototype.start = function(){
-	this.overlay.hideElement("menu");
-	this.overlay.hideElement("homeScreen");
-	this.overlay.showElement("score");
-	this.overlay.showElement("fps")
-	
-	if(this.isRunning){
-		throw Error("Attempting to start game when the game is already running");
-	}
-	
-	this.startLoop();
 }
 
 EventPropagator.prototype.pause = function(){
@@ -130,7 +119,7 @@ EventPropagator.prototype.runOnGame = function(functionToRun, updateEditor){
 	
 	let ret = functionToRun(this.game);
 	
-	this.game.renderGame();
+	this.game.preRender();
 	if(updateEditor === true) {
 		this.overlay.updateSongData(this.game.getSongData());
 	}
@@ -165,7 +154,7 @@ EventPropagator.prototype.handleKeyDown = function(evt){
 		if(!this.overlay.isElementShowing("homeScreen") && this.overlay.isElementShowing("menu")){
 			this.overlay.hideElement("menu");
 			if(!this.isRunning && !this.isEditor){
-				this.start();
+				this.startLoop();
 			}
 		} else if(!this.overlay.isElementShowing("homeScreen") && !this.overlay.isElementShowing("menu")){
 			this.overlay.showElement("menu");
@@ -201,24 +190,39 @@ EventPropagator.prototype.handleKeyDown = function(evt){
 	}
 }
 
+EventPropagator.prototype.handleGameRender = function(evt){
+	if(this.isPreRendered == false){
+		this.game.preRender();
+		this.isPreRendered = true;
+	}
+}
+
 EventPropagator.prototype.gameLoop = function(){
+	let songData = this.game.getSongData();
 	if(this.stopFlag){
+		this.stopLoop();
+	} else if(songData.gameData.time_running > 60) {
+		this.overlay.showElement("endGameScreen");
 		this.stopLoop();
 	} else {
 		this.game.tick();
 		
-		let songData = this.game.getSongData();
+		let score = this.game.getScore();
 		let fps = this.game.getFPS();
 		
-		this.overlay.updateScore(songData.gameData.score);
+		this.overlay.updateScore(score);
 		this.overlay.updateFPS(fps);
-		
-		if(songData.gameData.time_running > 60){
-			this.overlay.showElement("endGameScreen");
-			this.stopLoop();
-		}
-		
-		requestAnimationFrame(this.loop);
+
+		requestAnimationFrame(() => {
+			// if the game is pre-rendered, dispatch an event saying that the render occurred 
+			// (instead of prerendering every animation frame, prerender when the gameRender event or some other event triggers one)
+			if(this.isPreRendered){
+				this.isPreRendered = false;
+				let evt = new Event("gameRender");
+				window.dispatchEvent( evt );
+			}
+			this.loop();
+		});
 	}
 }
 
@@ -228,12 +232,30 @@ EventPropagator.prototype.editorLoop = function(){
 	} else {
 		this.game.tick();
 		this.overlay.updateSongData(this.game.getSongData());
-		requestAnimationFrame(this.loop);
+		requestAnimationFrame(() => {
+			// if the game is pre-rendered, dispatch an event saying that the render occurred 
+			// (instead of prerendering every animation frame, prerender when the gameRender event or some other event triggers one)
+			if(this.isPreRendered){
+				let evt = new Event("gameRender");
+				window.dispatchEvent( evt );
+				this.isPreRendered = false;
+			}
+			this.loop();
+		});
 	}
 }
 
 // sends the loop to the game as a callback, starting a new loop.
 EventPropagator.prototype.startLoop = function(){
+	if(this.isRunning){
+		throw Error("Attempting to start game when the game is already running");
+	}
+
+	this.overlay.hideElement("menu");
+	this.overlay.hideElement("homeScreen");
+	this.overlay.showElement("score");
+	this.overlay.showElement("fps");
+
 	this.isRunning = true;
 	this.stopFlag = false;
 	
@@ -243,6 +265,9 @@ EventPropagator.prototype.startLoop = function(){
 		}
 	}
 	
+	this.game.preRender();
+	this.isPreRendered = true;
+
 	this.game.start(this.loop);
 }
 
