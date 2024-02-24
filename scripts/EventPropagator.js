@@ -17,8 +17,28 @@ export function EventPropagator(){
 	this.stopFlag;
 	this.isPreRendered; // boolean describing whether the game state is ready to be re-rendered
 	
+	// fps timer
+	this.lastFrame; // time of the last frame
+	this.numFramesPerFPS; // number of frames to draw between each fps calculation
+	this.frameTimes; // array of frame times for fps calculation
+	this.frameCounter; // counts number of frames since last fps calculation
+	this.minFrameTracker; // minimum frame time in this fps calculation
+	this.maxFrameTracker; // maximum frame time in this fps calculation
+	this.minFrameTime;
+	this.maxFrameTime;
+	this.fps;
+
 	this.loop; // TODO loop is set to anonymous functions that call gameLoop or editorLoop. Set it be set to the functions themselves?
 	this.resize;
+
+	this.numFramesPerFPS = 30; 
+	this.frameTimes = new Array(this.numFramesPerFPS); 
+	this.frameCounter = 0; 
+	this.minFrameTracker = 1000;
+	this.maxFrameTracker = 0;
+	this.minFrameTime = 0;
+	this.maxFrameTime = 0;
+	this.fps = 0;
 }
 
 // !!! moving functions to prototype means more difficult removal of listeners? or should some/all of this go to prototype?
@@ -207,15 +227,43 @@ EventPropagator.prototype.gameLoop = function(){
 	} else {
 		this.game.tick();
 		
+		// TODO reduce fps info to just fps
 		let score = this.game.getScore();
-		let fps = this.game.getFPS();
+		let tickTime = this.game.getTickTime();
+		let preRenderTime = this.game.getPreRenderTime();
+		let fps = "FPS: " + this.fps + "<br>MIN FRAME TIME (ms): " + this.minFrameTime + "<br>MAX FRAME TIME(ms): " + this.maxFrameTime
+			+ "<br>TICK TIME AVERAGE(ms): " + tickTime.average + "<br>MIN: " + tickTime.min + "<br>MAX: " + tickTime.max
+			+ "<br>PRE-RENDER TIME AVERAGE(ms): " + preRenderTime.average + "<br>MIN: " + preRenderTime.min + "<br>MAX: " + preRenderTime.max;
 		
 		this.overlay.updateScore(score);
 		this.overlay.updateFPS(fps);
 
 		requestAnimationFrame(() => {
-			// if the game is pre-rendered, dispatch an event saying that the render occurred 
-			// (instead of prerendering every animation frame, prerender when the gameRender event or some other event triggers one)
+			let now = performance.now();
+			let timePassed = now - this.lastFrame;
+			this.lastFrame = now;
+			this.frameTimes[this.frameCounter] = now; 
+			this.frameCounter += 1;
+			if(timePassed < this.minFrameTracker){
+				this.minFrameTracker = timePassed;
+			}
+			if(timePassed > this.maxFrameTracker){
+				this.maxFrameTracker = timePassed;
+			}
+			if(this.frameCounter == this.numFramesPerFPS){
+				let averageFrameTime = (this.frameTimes[this.numFramesPerFPS - 1] - this.frameTimes[0]) / this.numFramesPerFPS;
+				averageFrameTime = averageFrameTime / 1000; // convert to seconds
+				this.fps = 1 / averageFrameTime;
+				this.minFrameTime = this.minFrameTracker;
+				this.maxFrameTime = this.maxFrameTracker;
+
+				this.minFrameTracker = 1000;
+				this.maxFrameTracker = 0;
+				this.frameCounter = 0;
+			}
+
+			// if the game is pre-rendered, dispatch an event saying that the render occurred (triggering another pre-render)
+			// (instead of prerendering before the repaint, prerender when the gameRender event or some other event triggers one)
 			if(this.isPreRendered){
 				this.isPreRendered = false;
 				let evt = new Event("gameRender");
@@ -265,6 +313,13 @@ EventPropagator.prototype.startLoop = function(){
 		}
 	}
 	
+	// reset fps tracker variables
+	this.lastFrame = performance.now();
+	this.frameTimes = new Array(this.numFramesPerFPS);
+	this.frameCounter = 0;
+	this.minFrameTracker = 1000;
+	this.maxFrameTracker = 0;
+
 	this.game.preRender();
 	this.isPreRendered = true;
 

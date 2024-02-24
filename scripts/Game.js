@@ -4,10 +4,6 @@ import * as wasm from "../pkg/music_mercenary.js";
 import * as load from "./load.js";
 
 export function Game () {
-	// !!! move fps to actual frame update location in event propagator - since ticks and frames are seperate
-		// measure tick time in the same way fps is measured - averaged over 30 ticks
-		// get maximum and minimum frame and tick times, not just average
-		// also measure preRender time
 	//members
 	this.width;
 	this.height;
@@ -16,17 +12,24 @@ export function Game () {
 	
 	this.div;
 	this.gameObject;
-	this.graphics; // !!! use webGL
+	this.graphics;
 	this.database; 
 	this.songData;
 	this.isLoaded;
 	
-	// tick timer and fps
-	this.lastTick; // keeps track of the time since the game last updated and rendered
-	this.tickTimes; // array of tick times for fps calculation
-	this.tickCounter; // counts number of ticks since last fps calculation
-	this.numFramesPerFPS; // number of frames to draw between each fps calculation
-	this.fps;
+	this.lastTick; // time since the game last ticked
+
+	// tick timer
+	this.numTicksPerTickCalc; // number of ticks for each average calculation
+	this.tickCounter; // counts number of ticks since last average calculation
+	this.tickTotalTime; // total tick time for the average calculation
+	this.minTickTracker; // minimum tick time in this average time calculation
+	this.maxTickTracker; // maximum tick time in this average time calculation
+	this.minTickTime;
+	this.maxTickTime;
+	this.averageTickTime;
+
+	this.preRenderTime; // array of average pre-render time, minimum pre-render time, and maximum pre-render time
 	
 	// audio
 	this.audioContext;
@@ -38,10 +41,14 @@ export function Game () {
 	// set defaults
 	this.isLoaded = false;
 
-	this.numFramesPerFPS = 30;
-	this.tickTimes = new Array(this.numFramesPerFPS);
+	this.numTicksPerTickCalc = 30;
 	this.tickCounter = 0;
-	this.fps = 0;
+	this.tickTotalTime = 0;
+	this.minTickTracker = 1000;
+	this.maxTickTracker = 0;
+	this.minTickTime = 0;
+	this.maxTickTime = 0;
+	this.averageTickTime = 0;
 
 	// TODO move to init function?
 	this.audioContext = new AudioContext();
@@ -98,7 +105,7 @@ Game.prototype.resize = function(){
 	this.xFactor = width / gameDim.x;
 	this.yFactor = height / gameDim.y;
 	this.graphics.resize(this.xFactor, this.yFactor);
-	// !!! this.preRender();
+	this.preRender();
 }
 
 Game.prototype.start = async function (callback) {
@@ -131,7 +138,7 @@ Game.prototype.start = async function (callback) {
 	let switchTime = this.audioContext.currentTime + this.audioTimeSafetyBuffer;
 	this.audioSource.start(switchTime, this.gameObject.game_data().time_running + this.songData.startOffset); 
 	// set the last tick time to when the moment the game is set to start
-	this.lastTick = new Date().getTime() + this.audioTimeSafetyBuffer * 1000; 
+	this.lastTick = performance.now() + this.audioTimeSafetyBuffer * 1000; 
 	
 	// timeout to prevent negative ticks
 	setTimeout( () => {
@@ -150,9 +157,9 @@ Game.prototype.restart = function(){
 }
 
 Game.prototype.tick = function(){
-	let now = new Date().getTime();
+	let now = performance.now();
 	// !!! handle if there's too long a time between ticks (pause game?)
-	// !!! log fps and tick rate
+	// !!! log fps and tick times and preRender times
 	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
 	this.lastTick = now;
 	
@@ -170,31 +177,37 @@ Game.prototype.tick = function(){
 		audioSource.start();
 	}
 
-	// fps tracking
-	this.tickTimes[this.tickCounter] = now;
+	// tick time tracking
+	let endTickTime = performance.now();
+	let thisTickTime = endTickTime - now;
+	this.tickTotalTime += thisTickTime;
+	if(thisTickTime < this.minTickTracker){
+		this.minTickTracker = thisTickTime;
+	}
+	if(thisTickTime > this.maxTickTracker){
+		this.maxTickTracker = thisTickTime;
+	}
 	this.tickCounter += 1;
-	if(this.tickCounter == this.numFramesPerFPS){
-		let averageFrameTime = (this.tickTimes[this.numFramesPerFPS - 1] - this.tickTimes[0]) / this.numFramesPerFPS;
-		averageFrameTime = averageFrameTime / 1000; // convert to seconds
-		this.fps = 1 / averageFrameTime;
-		this.tickCounter = 0;
+	if(this.tickCounter == this.numTicksPerTickCalc){
+		let averageTickTime = this.tickTotalTime / this.numTicksPerTickCalc;
+		this.averageTickTime = averageTickTime / 1000; // convert to seconds
+		this.minTickTime = this.minTickTracker;
+		this.maxTickTime = this.maxTickTracker;
 		
-		// measure how long this tick took
-		now = new Date().getTime();
-		let tickTime = (now - this.lastTick) / 1000; 
-
-		// !!! seperate variable for tick time
-		this.fps = this.fps + "\n" + tickTime;
+		this.tickTotalTime = 0;
+		this.minTickTracker = 1000;
+		this.maxTickTracker = 0;
+		this.tickCounter = 0;
 	}
 }
 
 Game.prototype.startControl = function(cntrl){
-	let now = new Date().getTime();
+	let now = performance.now();
 	this.gameObject.input_command(cntrl, (now - this.lastTick) / 1000);
 }
 
 Game.prototype.stopControl = function(cntrl){
-	let now = new Date().getTime();
+	let now = performance.now();
 	this.gameObject.stop_command(cntrl, (now - this.lastTick) / 1000);
 }
 
@@ -202,14 +215,19 @@ Game.prototype.preRender = function(){
 	let instructions = this.gameObject.rendering_instructions();
 	
 	this.graphics.preRender(instructions, this.xFactor, this.yFactor);
+	this.preRenderTime = this.graphics.getPreRenderTime();
 }
 
 Game.prototype.getScore = function(){
-	return this.songData.score;
+	return this.songData.gameData.score;
 }
 
-Game.prototype.getFPS = function(){
-	return this.fps;
+Game.prototype.getTickTime = function(){
+	return {average: this.averageTickTime,min: this.minTickTime,max: this.maxTickTime};
+}
+
+Game.prototype.getPreRenderTime = function(){
+	return this.preRenderTime;
 }
 
 Game.prototype.dimensionFactors = function(){

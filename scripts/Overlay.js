@@ -487,7 +487,6 @@ Overlay.prototype.passEvent = function(elementName, evt){
 // TODO updating song data should update score?
 Overlay.prototype.updateSongData = function(songData){
 	this.editorOverlay.updateSongData(songData);
-	this.updateScore(songData.score);
 }
 
 Overlay.prototype.updateScore = function(newScore){

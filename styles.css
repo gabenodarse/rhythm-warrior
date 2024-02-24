@@ -44,7 +44,6 @@ canvas{
 	left: 0;
 	width: 100%;
 	height: 100vh;
-	zIndex: 100;
 	background-color: #5577ff;
 	user-select: none;
 }
@@ -61,7 +60,6 @@ canvas{
 	font-size: 1.3em;
 	background-color: #ffdd00;
 	text-align: center;
-	highlighted: false;
 }
 
 .home-selection p{
@@ -79,7 +77,6 @@ canvas{
 	height: 100vh;
 	width: 100%;
 	font-size: 3em;
-	zIndex: 100;
 	background-color: #5577ff;
 	user-select: none;
 }
@@ -149,14 +146,15 @@ canvas{
 	top: 0;
 	left: 0;
 	height: 4%;
-	width: 10%;
-	font-size: 2vw;
+	width: 40%;
+	font-size: 1vw;
 	margin: 0;
 	user-select: none;
 }
 
 .fps p{
 	margin: 0;
+	text-align: left;
 }
 
 .menu{
