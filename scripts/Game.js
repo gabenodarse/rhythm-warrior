@@ -29,7 +29,7 @@ export function Game () {
 	this.maxTickTime;
 	this.averageTickTime;
 
-	this.preRenderTime; // array of average pre-render time, minimum pre-render time, and maximum pre-render time
+	this.preRenderTime; // object containing average pre-render time, minimum pre-render time, and maximum pre-render time
 	
 	// audio
 	this.audioContext;

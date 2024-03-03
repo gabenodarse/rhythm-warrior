@@ -1,7 +1,7 @@
 
 import {Game, Editor} from "./Game.js";
 
-let g_menuKeyPresses = []
+let g_menuKeyPresses = [] // TODO needs to be global?
 // !!! resizing resizes both overlay and screen div, prompt "your screen has been resized. OK to adjust"
 	// resizing retains aspect ratio, attempts to size sidebar to accommodate
 	
@@ -13,9 +13,11 @@ export function EventPropagator(){
 	this.resumeEvents; // events to fire once the game resumes
 	
 	this.isRunning;
-	this.isEditor;
 	this.stopFlag;
 	this.isPreRendered; // boolean describing whether the game state is ready to be re-rendered
+	this.resizeRefresher; // boolean to ensure a maximum of one resize event is handled per frame
+
+	this.resize; // function to fire on resize events
 	
 	// fps timer
 	this.lastFrame; // time of the last frame
@@ -28,8 +30,18 @@ export function EventPropagator(){
 	this.maxFrameTime;
 	this.fps;
 
-	this.loop; // TODO loop is set to anonymous functions that call gameLoop or editorLoop. Set it be set to the functions themselves?
-	this.resize;
+	this.loop;
+}
+
+EventPropagator.prototype.init = function(game, overlay, controls){
+	this.game = game;
+	this.overlay = overlay;
+	this.controls = controls;
+	
+	this.loop = () => this.gameLoop();
+	this.resumeEvents = [];
+	this.stopFlag = false;
+	this.isRunning = false;
 
 	this.numFramesPerFPS = 30; 
 	this.frameTimes = new Array(this.numFramesPerFPS); 
@@ -39,38 +51,16 @@ export function EventPropagator(){
 	this.minFrameTime = 0;
 	this.maxFrameTime = 0;
 	this.fps = 0;
-}
 
-// !!! moving functions to prototype means more difficult removal of listeners? or should some/all of this go to prototype?
-EventPropagator.prototype.init = function(game, overlay, controls){
-	this.game = game;
-	this.overlay = overlay;
-	this.controls = controls;
+	this.resizeRefresher = true;
 	
-	this.resumeEvents = [];
-	
-	let resizeRefresher = true;
-	let resize = () => {
-		if(resizeRefresher){
-			resizeRefresher = false;
-			requestAnimationFrame(() => {
-				this.game.resize();
-				resizeRefresher = true;
-			});
-		}
-	}
-	
-	this.loop = () => this.gameLoop();
-	resize();
-	
-	this.stopFlag = false;
-	this.isRunning = false;
-	this.isEditor = false;
-	
-	document.addEventListener("keydown", evt => { this.handleKeyDown(evt) });
-	document.addEventListener("keyup", evt => { this.handleKeyUp(evt) });
-	window.addEventListener("resize", resize);
+	window.addEventListener("keydown", evt => { this.handleEvent(evt) });
+	window.addEventListener("click", evt => {this.handleEvent(evt)})
+	window.addEventListener("keyup", evt => { this.handleKeyUp(evt) });
+	window.addEventListener("resize", this.handleResize );
 	window.addEventListener("gameRender", evt => { this.handleGameRender(evt) });
+
+	this.handleResize();
 }
 
 EventPropagator.prototype.togglePlay = function(){
@@ -83,68 +73,17 @@ EventPropagator.prototype.togglePlay = function(){
 }
 
 EventPropagator.prototype.pause = function(){
-	this.overlay.showElement("menu");
-	this.overlay.populateMenu("gameMenu");
-	this.overlay.hideElement("score");
-	this.overlay.hideElement("fps");
 	this.stopFlag = true;
 }
 
-EventPropagator.prototype.restartSong = function(){
-	this.game.restart(); // !!! should synchronize with game loop or no? Probably
-}
-
-EventPropagator.prototype.exitToHomeScreen = function(){
-	this.stopFlag = true;
-	this.overlay.hideElement("menu");
-	this.overlay.hideElement("score");
-	this.overlay.hideElement("fps");
-	this.overlay.hideElement("editorOverlay");
-	this.overlay.hideElement("endGameScreen");
-	this.overlay.showElement("homeScreen");
-}
-
-EventPropagator.prototype.enableEditor = function(){
-	if(!this.isEditor){
-		this.overlay.showElement("editorOverlay");
-		this.overlay.hideElement("score");
-		this.overlay.hideElement("fps");
-		
-		this.game = this.game.toEditor();
-		
-		this.overlay.updateSongData(this.game.getSongData());
-		
-		this.loop = () => this.editorLoop();
-		this.isEditor = true;
+EventPropagator.prototype.handleResize = function(evt){
+	if(this.resizeRefresher){
+		this.resizeRefresher = false;
+		requestAnimationFrame(() => {
+			this.game.resize();
+			this.resizeRefresher = true;
+		});
 	}
-}
-
-EventPropagator.prototype.disableEditor = function(){
-	if(this.isEditor){
-		this.overlay.hideElement("editorOverlay");
-		this.overlay.showElement("score");
-		this.overlay.showElement("fps");
-		
-		this.game = this.game.toGame();
-		
-		this.overlay.updateSongData(this.game.getSongData());
-		
-		this.loop = () => this.gameLoop();
-		this.isEditor = false;
-	}
-}
-
-EventPropagator.prototype.runOnGame = function(functionToRun, updateEditor){
-	this.stopFlag = true;
-	
-	let ret = functionToRun(this.game);
-	
-	this.game.preRender();
-	if(updateEditor === true) {
-		this.overlay.updateSongData(this.game.getSongData());
-	}
-	
-	return ret;
 }
 
 EventPropagator.prototype.handleKeyUp = function(evt){
@@ -158,8 +97,27 @@ EventPropagator.prototype.handleKeyUp = function(evt){
 	}
 }
 
-EventPropagator.prototype.handleKeyDown = function(evt){
-	// branching if statements to handle events based on state of game and menus
+EventPropagator.prototype.handleEvent = function(evt){
+	if(this.overlay.isCapturing()){
+		let instruction = this.overlay.passEvent(evt);
+		this.runInstruction(instruction);
+		return;
+	}
+	
+	if(evt.type == "keydown"){
+		this.handleGameKeyDown(evt);
+	}
+	
+}
+
+EventPropagator.prototype.handleGameKeyDown = function(evt){
+	if(evt.keyCode === 27){ // escape key
+		if(this.isRunning){
+			this.pause();
+		}
+		this.overlay.openGameMenu();
+	} 
+
 	if(typeof(this.controls[evt.keyCode]) === "number"){
 		if(this.isRunning){
 			this.game.startControl(this.controls[evt.keyCode]);
@@ -169,26 +127,8 @@ EventPropagator.prototype.handleKeyDown = function(evt){
 		}
 	}
 	
-	if(evt.keyCode === 27){ // escape key
-		// if the game is not in editor mode, pause/unpause
-		if(!this.overlay.isElementShowing("homeScreen") && this.overlay.isElementShowing("menu")){
-			this.overlay.hideElement("menu");
-			if(!this.isRunning && !this.isEditor){
-				this.startLoop();
-			}
-		} else if(!this.overlay.isElementShowing("homeScreen") && !this.overlay.isElementShowing("menu")){
-			this.overlay.showElement("menu");
-			this.overlay.populateMenu("gameMenu");
-			if(this.isRunning && !this.isEditor){
-				this.pause();
-			}
-		} else if(this.overlay.isElementShowing("homeScreen") && this.overlay.isElementShowing("menu")){
-			this.overlay.hideElement("menu");
-		} else if(this.overlay.isElementShowing("homeScreen") && !this.overlay.isElementShowing("menu")){
-			this.overlay.showElement("menu");
-			this.overlay.populateMenu("homeMenu");
-		}
-	} else if(this.overlay.isElementShowing("menu")){
+	/* !!! !!! !!!
+	else if(this.overlay.isElementShowing("menu")){
 		this.overlay.passEvent("menu", evt);
 		
 		// master menu
@@ -201,12 +141,22 @@ EventPropagator.prototype.handleKeyDown = function(evt){
 		&& g_menuKeyPresses[2].keyCode == 84 && g_menuKeyPresses[1].keyCode == 69 && g_menuKeyPresses[0].keyCode == 82 ){
 			this.overlay.populateMenu("masterGameMenu");
 		}
-	} else if(this.overlay.isElementShowing("homeScreen")){
-		this.overlay.passEvent("homeScreen", evt);
-	} else if(this.overlay.isElementShowing("endGameScreen")){
-		this.overlay.passEvent("endGameScreen", evt);
-	} else if(this.overlay.isElementShowing("editorOverlay")){
-		this.overlay.passEvent("editorOverlay", evt);
+	} */
+}
+
+EventPropagator.prototype.runInstruction = function(instruction){
+	console.log(instruction);
+	if(!instruction) return;
+	if(instruction == "toggle-play"){
+		this.togglePlay();
+	} else if(instruction == "restart-song"){
+		this.game.restart(); // !!! should synchronize with game loop and pause game
+	} else if(instruction == "stop-loop"){
+		this.stopFlag = true;
+	} else if(instruction == "start-loop"){
+		this.startLoop();
+	} else {
+		throw Error("EventPropagator.runInstruction, no instruction: " + instruction);
 	}
 }
 
@@ -221,9 +171,11 @@ EventPropagator.prototype.gameLoop = function(){
 	let songData = this.game.getSongData();
 	if(this.stopFlag){
 		this.stopLoop();
+		return;
 	} else if(songData.gameData.time_running > 60) {
-		this.overlay.showElement("endGameScreen");
 		this.stopLoop();
+		this.overlay.goToEndGameScreen();
+		return;
 	} else {
 		this.game.tick();
 		
@@ -235,8 +187,7 @@ EventPropagator.prototype.gameLoop = function(){
 			+ "<br>TICK TIME AVERAGE(ms): " + tickTime.average + "<br>MIN: " + tickTime.min + "<br>MAX: " + tickTime.max
 			+ "<br>PRE-RENDER TIME AVERAGE(ms): " + preRenderTime.average + "<br>MIN: " + preRenderTime.min + "<br>MAX: " + preRenderTime.max;
 		
-		this.overlay.updateScore(score);
-		this.overlay.updateFPS(fps);
+		this.overlay.update(fps);
 
 		requestAnimationFrame(() => {
 			let now = performance.now();
@@ -274,35 +225,11 @@ EventPropagator.prototype.gameLoop = function(){
 	}
 }
 
-EventPropagator.prototype.editorLoop = function(){
-	if(this.stopFlag) {
-		this.stopLoop();
-	} else {
-		this.game.tick();
-		this.overlay.updateSongData(this.game.getSongData());
-		requestAnimationFrame(() => {
-			// if the game is pre-rendered, dispatch an event saying that the render occurred 
-			// (instead of prerendering every animation frame, prerender when the gameRender event or some other event triggers one)
-			if(this.isPreRendered){
-				let evt = new Event("gameRender");
-				window.dispatchEvent( evt );
-				this.isPreRendered = false;
-			}
-			this.loop();
-		});
-	}
-}
-
 // sends the loop to the game as a callback, starting a new loop.
 EventPropagator.prototype.startLoop = function(){
 	if(this.isRunning){
 		throw Error("Attempting to start game when the game is already running");
 	}
-
-	this.overlay.hideElement("menu");
-	this.overlay.hideElement("homeScreen");
-	this.overlay.showElement("score");
-	this.overlay.showElement("fps");
 
 	this.isRunning = true;
 	this.stopFlag = false;

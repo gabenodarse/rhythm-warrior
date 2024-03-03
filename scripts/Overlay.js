@@ -6,55 +6,65 @@ g_keyCodeNames[32] = "Space";
 g_keyCodeNames[13] = "Enter";
 
 // !!! does overlay ever have to be resized?
-// TODO having the editor overlay included in game.js Editor class might make more sense
-	// would allow game and overlay elements to synchronize more easily
-// TODO space key for playing/pausing editor?
-// TODO clicking pauses editor?
+// TODO all these classes have a DOMelement function, can make them all inherit from a DOMWrapper class
 
 // main overlay class. all overlay elements are children, directly or nested
-export function Overlay(songData, eventPropagator, controlsMap){
+export function Overlay(game, controlsMap){
+	this.game;
+	this.controlsMap;
+
 	this.overlayDiv;
+	this.menu;
+	this.capturingComponent;
+	this.currentOverlay;
+	
+	this.game = game;
+	this.controlsMap = controlsMap;
+
+	this.overlayDiv = document.createElement("div");
+	this.overlayDiv.id = "overlay";
+
+	document.getElementById("screen").appendChild(this.overlayDiv);
+
+	this.goToHomeScreen();
+}
+
+// class for the overlay active when the game is running
+function GameOverlay(overlayParent){
+	this.overlayParent;
+	this.div;
 	this.score;
 	this.fps;
-	this.menu;
-	this.editorOverlay;
-	this.homeScreen;
-	this.endGameScreen;
+
+	this.overlayParent = overlayParent;
+
+	this.div = document.createElement("div");
+	this.div.className = "game-overlay";
 	
-	this.overlayDiv = document.createElement("div");
-	this.homeScreen = new HomeScreen(eventPropagator);
-	this.endGameScreen = new EndGameScreen(eventPropagator);
 	this.score = new Score();
 	this.fps = new FPS();
-	this.menu = new Menu(eventPropagator, controlsMap);
-	this.editorOverlay = new EditorOverlay(eventPropagator);
-	
-	this.overlayDiv.id = "overlay";
-	
-	this.overlayDiv.appendChild(this.score.domElement());
-	this.overlayDiv.appendChild(this.fps.domElement());
-	this.overlayDiv.appendChild(this.menu.domElement());
-	this.overlayDiv.appendChild(this.editorOverlay.domElement());
-	this.overlayDiv.appendChild(this.homeScreen.domElement());
-	this.overlayDiv.appendChild(this.endGameScreen.domElement());
-	document.getElementById("screen").appendChild(this.overlayDiv);
-	
+	this.div.appendChild(this.score.domElement());
+	this.div.appendChild(this.fps.domElement());
 }
 
 // class for the homescreen which holds song selections
-function HomeScreen(eventPropagator){
-	this.eventPropagator = eventPropagator;
+function HomeScreen(overlayParent){
+	this.overlayParent;
 	this.homeScreenDiv;
-	this.songSelections = [];
+	this.songSelections;
 	this.selectionIdx;
 	
+	this.overlayParent = overlayParent;
+
 	this.homeScreenDiv = document.createElement("div");
 	this.homeScreenDiv.className = "homescreen";
-	this.homeScreenDiv.style.display = "none";
 	
 	let mmTitle = document.createElement("h1");
 	mmTitle.innerHTML = "Music Mercenary";
 	this.homeScreenDiv.appendChild(mmTitle);
+
+	this.songSelections = [];
+	this.update();
 }
 
 // class for song selections which are attached to the home screen
@@ -91,9 +101,9 @@ function HomeSelection(id, name, artist, difficulty, duration){
 }
 
 // class for the homescreen which holds song selections
-function EndGameScreen(eventPropagator){
+function EndGameScreen(overlayParent){
 	this.endScreenDiv;
-	this.eventPropagator;
+	this.overlayParent;
 	this.textDiv;
 	this.textElement1;
 	this.textElement2;
@@ -102,7 +112,7 @@ function EndGameScreen(eventPropagator){
 	
 	this.endScreenDiv = document.createElement("div");
 	this.endScreenDiv.className = "end-game-screen";
-	this.endScreenDiv.style.display = "none";
+	this.endScreenDiv.style.display = "block";
 	
 	this.textDiv = document.createElement("div");
 	this.textDiv.className = "end-game-screen-text-div";
@@ -112,20 +122,27 @@ function EndGameScreen(eventPropagator){
 	this.scoreTextElement = document.createElement("p");
 	this.exitTextElement = document.createElement("p");
 	
-	this.exitTextElement.innerHTML = "Enter to move on";
+	let game = overlayParent.getGame();
+	let songData = game.getSongData();
 	
+	this.textElement1.innerHTML = songData.name + " - " + songData.artist;
+	this.textElement2.innerHTML = "Difficulty: "+ songData.difficulty + " --- time: " + songData.duration;
+	this.scoreTextElement.innerHTML = "Score: " + songData.gameData.score + " / " + songData.gameData.max_score;
+
+	this.exitTextElement.innerHTML = "Enter to move on";
+
 	this.textDiv.appendChild(this.textElement1);
 	this.textDiv.appendChild(this.textElement2);
 	this.textDiv.appendChild(this.scoreTextElement);
 	this.textDiv.appendChild(this.exitTextElement);
 	this.endScreenDiv.appendChild(this.textDiv);
 	
-	this.eventPropagator = eventPropagator;
+	this.overlayParent = overlayParent;
 }
 
 // EditorOverlay class, contains the editor's guiding lines and the editor's controls
 // !!! range scroller isn't modified when the song is modified
-function EditorOverlay(eventPropagator){
+function EditorOverlay(overlayParent){
 	this.div;
 	this.editorCanvas;
 	this.scroller;
@@ -133,10 +150,10 @@ function EditorOverlay(eventPropagator){
 	
 	this.div = document.createElement("div");
 	this.div.className = "editor-overlay";
-	this.div.style.display = "none";
+	this.div.style.display = "block";
 	
-	this.editorCanvas = new EditorCanvas(eventPropagator);
-	this.controls = new EditorControls(eventPropagator);
+	this.editorCanvas = new EditorCanvas(overlayParent);
+	this.controls = new EditorControls(overlayParent);
 	
 	this.div.appendChild(this.editorCanvas.domElement());
 	this.div.appendChild(this.controls.domElement());
@@ -144,7 +161,7 @@ function EditorOverlay(eventPropagator){
 
 // EditorCanvas class, displays lines that (should) represent beat breakpoints in a song
 	// clicking on the canvas adds notes, wheel scrolling changes the song time
-function EditorCanvas(eventPropagator){
+function EditorCanvas(overlayParent){
 	this.canvas;
 	this.beatInterval; // how long between beats in seconds // !!! get from game every time or store as state?
 	this.groundPosOffset = wasm.ground_pos();
@@ -152,30 +169,24 @@ function EditorCanvas(eventPropagator){
 	this.changeBrickType;
 	this.selectedBrick;
 	this.songData;
-	this.eventPropagator;
+	this.overlayParent;
 	
 	this.mouseDown = false;
 	this.changeBrickType = false;
 	this.selectedBrick = null;
 	this.songData = null;
-	this.eventPropagator = eventPropagator;
+	this.overlayParent = overlayParent;
 	
 	let dims = wasm.game_dimensions();
 	this.canvas = document.createElement("canvas");
 	this.canvas.width = dims.x;
 	this.canvas.height = dims.y;
 	this.canvas.className = "full-sized";
-	
-	this.canvas.addEventListener("mousedown", evt => { this.handleMouseDown(evt); });
-	this.canvas.addEventListener("mouseup", evt => { this.handleMouseUp(evt); });
-	this.canvas.addEventListener("mousemove", evt => { this.handleMouseMove(evt); });
-	this.canvas.addEventListener("wheel", evt => { this.handleWheel(evt); });
-	
 }
 
 // EditorControls class, contains controls which can control EditorCanvas scrolling and game playing/pausing
 // TODO add triplet note button to convert editor canvas's selected brick to triplet note
-function EditorControls(eventPropagator){
+function EditorControls(overlayParent){
 	this.div;
 	this.rangesDiv;
 	this.buttonDiv;
@@ -211,7 +222,7 @@ function EditorControls(eventPropagator){
 	this.playPauseButton = document.createElement("button");
 	this.playPauseButton.innerHTML = "|> / ||";
 	
-	this.rangesDiv.addEventListener("input", evt => {
+	/*this.rangesDiv.addEventListener("input", evt => {
         let t = parseFloat(this.broadRange.value) / 100 * this.songDuration 
 			+ parseFloat(this.preciseRange.value) * this.beatInterval;
 			
@@ -227,7 +238,7 @@ function EditorControls(eventPropagator){
 		if(evt.clientX != 0 || evt.clientY != 0) {
 			eventPropagator.togglePlay();
 		}
-	});
+	});*/
 	
 	this.rangesDiv.appendChild(this.preciseRange);
 	this.rangesDiv.appendChild(this.broadRange);
@@ -244,7 +255,7 @@ function Score(){
 	
 	this.scoreDiv = document.createElement("div");
 	this.scoreDiv.className = "score";
-	this.scoreDiv.style.display = "none";
+	this.scoreDiv.style.display = "block";
 	
 	this.score = 0;
 	this.scoreInner = document.createElement("p");
@@ -263,7 +274,7 @@ function FPS(){
 	
 	this.fpsDiv = document.createElement("div");
 	this.fpsDiv.className = "fps";
-	this.fpsDiv.style.display = "none";
+	this.fpsDiv.style.display = "block";
 	
 	this.fps = 0;
 	this.fpsInner = document.createElement("p");
@@ -274,103 +285,139 @@ function FPS(){
 	document.body.appendChild(this.fpsDiv);
 }
 
-// Menu class, contains the menu div on which menu panels are displayed and contains logic of menu panels and their selections
-function Menu(eventPropagator, controlsMap){
-	this.menuDiv;
-	this.currentDisplayed;
-	this.mainMenu; // each sub div contains an array of selections, each selection contains a select function
-	this.controlsMenu;
-	this.saveLoadMenu;
+// Menu class, contains selections and handles up and down keypresses
+// !!! add support for hiding buttons (making navigation ignore inactive buttons)
+	// !!! once done, make disable editor and enable editor buttons mutually exclusive / non buggy
+function Menu(overlayParent){
+	this.div;
+	this.selections; // the different selections on the menu
+	this.selectionIdx; // the index of the currently highlighted selection
+	this.overlayParent;
+	this.getInputDialog; // optional pop-up dialog to get input from user
 	
-	this.menuDiv = document.createElement("div");
-	this.menuDiv.style.display = "none";
-	this.menuDiv.className = "menu";
-	
-	this.homeMenu = new MenuPanel();
-	this.gameMenu = new MenuPanel();
-	this.masterGameMenu = new MenuPanel();
-	this.controlsMenu = new MenuPanel();
-	this.saveLoadMenu = new MenuPanel();
-	
-	// --- home menu selections ---
-	
-	this.homeMenu.addSelection(() => { 
-		this.currentDisplayed.hide();
-		this.controlsMenu.show();
-		this.currentDisplayed = this.controlsMenu;
+	this.div = document.createElement("div");
+	this.div.className = "menu";
+	this.div.style.display = "block";
+	this.selections = [];
+	this.selectionIdx = 0;
+
+	this.getInputDialog = null;
+
+	this.overlayParent = overlayParent;
+}
+
+// Menu when accessed from the homescreen. Extends Menu class
+function HomeMenu(overlayParent){
+	Menu.call(this, overlayParent);
+
+	this.addSelection(() => { 
+		this.overlayParent.closeMenu();
+		this.overlayParent.openControlsMenu();
+		return null;
+	}, "Controls");
+}
+Object.setPrototypeOf(HomeMenu.prototype, Menu.prototype);
+
+// Menu when accessed from the game. Extends Menu class
+function GameMenu(overlayParent){
+	Menu.call(this, overlayParent);
+
+	this.addSelection(() => { 
+		this.overlayParent.closeMenu();
+		this.overlayParent.openControlsMenu();
+		return null;
 	}, "Controls");
 	
-	// --- game menu selections ---
-	
-	this.gameMenu.addSelection(() => { 
-		this.currentDisplayed.hide();
-		this.controlsMenu.show();
-		this.currentDisplayed = this.controlsMenu;
-	}, "Controls");
-	
-	this.gameMenu.addSelection(() => {
-		let fn = game => { game.restart() }
-		eventPropagator.runOnGame(fn, true);
+	this.addSelection(() => {
+		return "restart-song";
 	}, "Restart song");
 	
-	this.gameMenu.addSelection(() => {
-		eventPropagator.exitToHomeScreen();
+	this.addSelection(() => {
+		this.overlayParent.closeMenu();
+		this.overlayParent.goToHomeScreen();
+		return "stop-loop";
 	}, "Quit song");
-	
-	// --- master game menu selections ---
-	
-	this.masterGameMenu.addSelection(() => { 
-		this.currentDisplayed.hide();
-		this.controlsMenu.show();
-		this.currentDisplayed = this.controlsMenu;
+}
+Object.setPrototypeOf(GameMenu.prototype, Menu.prototype);
+
+// Menu when accessed from the game and toggled to master. Extends Menu class
+function MasterGameMenu(overlayParent){
+	Menu.call(this, overlayParent);
+
+	this.addSelection(() => { 
+		this.overlayParent.closeMenu();
+		this.overlayParent.openControlsMenu();
+		return null;
 	}, "Controls");
-	
-	this.masterGameMenu.addSelection(() => {
-		let fn = game => { game.restart() }
-		eventPropagator.runOnGame(fn, true);
+
+	this.addSelection(() => {
+		return "restart-song";
 	}, "Restart song");
-	
-	this.masterGameMenu.addSelection(() => {
-		eventPropagator.exitToHomeScreen();
+
+	this.addSelection(() => {
+		this.overlayParent.closeMenu();
+		this.overlayDiv.goToHomeScreen();
+		return "stop-loop";
 	}, "Quit song");
-	
-	this.masterGameMenu.addSelection(() => {
-		eventPropagator.enableEditor();
+
+	this.addSelection(() => {
+		let game = this.overlayDiv.getGame();
+		game = game.toEditor();
+
+		this.overlayDiv.goToEditorOverlay();
+		return null;
 	}, "Enable Editor");
-	
-	this.masterGameMenu.addSelection(() => {
-		eventPropagator.disableEditor();
+
+	this.addSelection(() => {
+		let game = this.overlayDiv.getGame();
+		game = game.toGame();
+
+		this.overlayDiv.goToGameOverlay();
+		return null;
 	}, "Disable Editor");
-	
-	this.masterGameMenu.addSelection(() => {
-		this.currentDisplayed.hide();
-		this.saveLoadMenu.show();
-		this.currentDisplayed = this.saveLoadMenu;
+
+	this.addSelection(() => {
+		this.overlayParent.closeMenu();
+		this.overlayParent.openSaveLoadMenu();
+		return null;
 	}, "Save/Load");
+}
+Object.setPrototypeOf(MasterGameMenu.prototype, Menu.prototype);
+
+// Sub-menu accessed from another menu in order to save/load songs. Extends Menu class
+function SaveLoadMenu(overlayParent){
+	Menu.call(this, overlayParent);
 	
-	// --- save/load menu selections ---
-	
-	this.saveLoadMenu.addSelection(() => {
-		saveSongDialog(eventPropagator);
+	this.addSelection(() => {
+		saveSongDialog(overlayParent);
+		return null;
 	}, "Save song");
 	
-	this.saveLoadMenu.addSelection(() => {
-		loadSongDialog(eventPropagator);
+	this.addSelection(() => {
+		loadSongDialog(overlayParent);
+		return null;
 	}, "Load song");
 	
-	this.saveLoadMenu.addSelection(() => {
-		newSongDialog(eventPropagator);
+	this.addSelection(() => {
+		newSongDialog(overlayParent);
+		return null;
 	}, "New song");
 	
-	this.saveLoadMenu.addSelection(() => {
-		uploadMP3Dialog(eventPropagator);
+	this.addSelection(() => {
+		uploadMP3Dialog(overlayParent);
+		return null;
 	}, "Load mp3");
 	
-	this.saveLoadMenu.addSelection(() => {
+	this.addSelection(() => {
 		alert("Not yet implemented"); // !!! load database
+		return null;
 	}, "Load database");
-	
-	// --- controls menu selections ---
+}
+Object.setPrototypeOf(SaveLoadMenu.prototype, Menu.prototype);
+
+// sub-menu accessed from another menu in order to change the controls. Extends Menu class
+function ControlsMenu(overlayParent, controlsMap){
+	Menu.call(this, overlayParent);
 	
 	// add a selection for each possible input
 	let possible_inputs = wasm.Input;
@@ -395,41 +442,19 @@ function Menu(eventPropagator, controlsMap){
 		}
 		
 		// add the selection
-		this.controlsMenu.addSelection(() => { 
-			changeControlDialog(controlsMap, this.controlsMenu, i)
-		}, inputName);
-		
-		// set the selection name
 		let defaultKeyName = g_keyCodeNames[defaultKey] ? g_keyCodeNames[defaultKey] : String.fromCharCode(defaultKey);
-		this.controlsMenu.setSelectionText(i,  inputName + " - " + defaultKeyName);
+		this.addSelection(() => { 
+			this.openDialog(new ChangeControlDialog(this, defaultKeyName, inputName, controlsMap, i));
+			return null;
+		}, inputName);
+		this.setSelectionText(i,  inputName + " - " + defaultKeyName);
 	}
-	
-	this.menuDiv.appendChild(this.homeMenu.domElement());
-	this.menuDiv.appendChild(this.gameMenu.domElement());
-	this.menuDiv.appendChild(this.masterGameMenu.domElement());
-	this.menuDiv.appendChild(this.controlsMenu.domElement());
-	this.menuDiv.appendChild(this.saveLoadMenu.domElement());
 }
-
-// MenuPanel class, contains panel selections and handles up and down keypresses
-// !!! add support for hiding buttons (making navigation ignore inactive buttons)
-	// !!! once done, make disable editor and enable editor buttons mutually exclusive / non buggy
-function MenuPanel(){
-	this.div;
-	this.selections;
-	this.selectionIdx;
-	
-	this.div = document.createElement("div");
-	this.div.className = "menu-panel";
-	this.div.style.display = "none";
-	this.selections = [];
-	this.selectionIdx = 0;
-}
+Object.setPrototypeOf(ControlsMenu.prototype, Menu.prototype);
 
 // MenuSelection class. Controls highlighting style and the selection function
-function MenuSelection(onSelect, value, parentPanelDiv){
+function MenuSelection(onSelect, text, parentDiv){
 	this.div;
-	this.value;
 	this.selectionText;
 	this.onSelect;
 	this.highlighted;
@@ -437,78 +462,265 @@ function MenuSelection(onSelect, value, parentPanelDiv){
 	this.div = document.createElement("div");
 	this.div.className = "menu-selection";
 	
-	this.value = value;
-	
 	this.selectionText = document.createElement("p");
-	this.selectionText.innerHTML = value;
+	this.selectionText.innerHTML = text;
 	
 	this.onSelect = onSelect;
 	this.highlighted = false;
 	
 	this.div.appendChild(this.selectionText);
-	parentPanelDiv.appendChild(this.div);
+	parentDiv.appendChild(this.div);
 }
 
-Overlay.prototype.showElement = function(elementName){
-	if(this[elementName] != undefined){
-		// TODO make sure elements have a show function (base class all elements inherit from and error check)
-		this[elementName].show();
+function GetInputDialog(menuParent){
+	this.menuParent;
+	this.div;
+	this.formDiv;
+	this.buttonsDiv;
+	this.submitButton;
+	this.cancelButton;
+	this.submitFunction; // function to run when the submit button is pressed
+
+	this.menuParent = menuParent;
+
+	this.div = document.createElement("div");
+	this.div.className = "get-input-dialog";
+	this.formDiv = document.createElement("div");
+	this.formDiv.className = ("dialog-form-div");
+	this.buttonsDiv = document.createElement("div");
+	this.buttonsDiv.className = "dialog-buttons-div";
+
+	this.submitButton = document.createElement("button");
+	this.cancelButton = document.createElement("button");
+	this.submitButton.innerHTML = "Submit";
+	this.cancelButton.innerHTML = "Cancel";
+
+	this.div.appendChild(this.formDiv);
+	this.div.appendChild(this.buttonsDiv);
+	this.buttonsDiv.appendChild(this.submitButton);
+	this.buttonsDiv.appendChild(this.cancelButton);
+
+	this.submitFunction = () => {};
+}
+
+function ChangeControlDialog(menuParent, oldKeyName, controlName, controlsMap, inputID){
+	GetInputDialog.call(this, menuParent);
+
+	this.controlLabel;
+	this.oldKeyLabel;
+	this.newKeyLabel;
+	this.newKeyCode;
+	this.submitFunction;
+	
+	this.controlLabel = document.createElement("label");
+	this.oldKeyLabel = document.createElement("label");
+	this.newKeyLabel = document.createElement("label");
+
+	this.controlLabel.innerHTML = "Set key for: " + controlName;
+	this.oldKeyLabel.innerHTML = "Old key: " + oldKeyName;
+	this.newKeyLabel.innerHTML = "Enter a new key";
+	
+	// set the submit function
+	this.submitFunction = () => {
+		// unbind the previous key for this input
+		for (const key in controlsMap){
+			if(controlsMap[key] == inputID){
+				controlsMap[key] = undefined;
+				break;
+			}
+		}
+
+		// if the new key is mapped to a different input, set that input to have no key mapping to it
+		if(controlsMap[this.newKeyCode]){
+			let controlID = controlsMap[this.newKeyCode];
+			let controlName = wasm.Input[controlID];
+			menuParent.setSelectionText(controlID, controlName + " - UNBOUND");
+		}
+
+		controlsMap[this.newKeyCode] = inputID;
+
+		let newKeyName = g_keyCodeNames[this.newKeyCode] ? g_keyCodeNames[this.newKeyCode] : String.fromCharCode(this.newKeyCode);
+		menuParent.setSelectionText(inputID, controlName + " - " + newKeyName);
 	}
-	else{
-		console.log("the overlay does not have member \"" + elementName + "\"");
+
+	this.formDiv.appendChild(this.controlLabel);
+	this.formDiv.appendChild(document.createElement("br"));
+	this.formDiv.appendChild(this.oldKeyLabel);
+	this.formDiv.appendChild(document.createElement("br"));
+	this.formDiv.appendChild(this.newKeyLabel);
+}
+Object.setPrototypeOf(ChangeControlDialog.prototype, GetInputDialog.prototype);
+
+Overlay.prototype.goToGameOverlay = function(){
+	if(this.capturingComponent){
+		throw Error("attempting to go to game while a dom component is still capturing events");
+	}
+	
+	this.removeCurrentOverlay();
+
+	let gameOverlay = new GameOverlay(this);
+	this.overlayDiv.appendChild(gameOverlay.domElement());
+	this.currentOverlay = gameOverlay;
+}
+
+Overlay.prototype.goToEditorOverlay = function(){
+	this.removeCurrentOverlay();
+
+	let editorOverlay = new EditorOverlay(this);
+	this.overlayDiv.appendChild(editorOverlay.domElement());
+	this.setCapturingComponent(editorOverlay);
+	this.currentOverlay = editorOverlay;
+}
+
+Overlay.prototype.goToHomeScreen = function(){
+	this.removeCurrentOverlay();
+
+	let homeScreen = new HomeScreen(this);
+	this.overlayDiv.appendChild(homeScreen.domElement());
+	this.setCapturingComponent(homeScreen);
+	this.currentOverlay = homeScreen;
+}
+
+Overlay.prototype.goToEndGameScreen = function(){
+	this.removeCurrentOverlay();
+
+	let endGameScreen = new EndGameScreen(this);
+	this.overlayDiv.appendChild(endGameScreen.domElement());
+	this.setCapturingComponent(endGameScreen);
+	this.currentOverlay = endGameScreen;
+}
+
+Overlay.prototype.removeCurrentOverlay = function(){
+	this.removeCapturingComponent();
+	if(this.currentOverlay){
+		// TODO make sure currentOverlay has a DOM element and is a child of the parent overlay
+		this.currentOverlay.domElement().remove();
+		this.currentOverlay = null;
 	}
 }
 
-Overlay.prototype.hideElement = function(elementName){
-	if(this[elementName] != undefined){
-		this[elementName].hide();
+Overlay.prototype.openHomeMenu = function(){
+	if(this.menu){
+		throw Error("attempting to open a menu while one is already open");
 	}
-	else{
-		console.log("the overlay does not have member \"" + elementName + "\"");
+
+	this.menu = new HomeMenu(this);
+	this.overlayDiv.appendChild(this.menu.domElement());
+	this.setCapturingComponent(this.menu);
+}
+
+Overlay.prototype.openGameMenu = function(){
+	if(this.menu){
+		throw Error("attempting to open a menu while one is already open");
+	}
+
+	this.menu = new GameMenu(this);
+	this.overlayDiv.appendChild(this.menu.domElement())
+	this.setCapturingComponent(this.menu);
+}
+
+Overlay.prototype.openMasterGameMenu = function(){
+	if(this.menu){
+		throw Error("attempting to open a menu while one is already open");
+	}
+
+	this.menu = new MasterGameMenu(this);
+	this.overlayDiv.appendChild(this.menu.domElement())
+	this.setCapturingComponent(this.menu);
+}
+
+Overlay.prototype.openSaveLoadMenu = function(){
+	if(this.menu){
+		throw Error("attempting to open a menu while one is already open");
+	}
+
+	this.menu = new SaveLoadMenu(this);
+	this.overlayDiv.appendChild(this.menu.domElement())
+	this.setCapturingComponent(this.menu);
+}
+
+Overlay.prototype.openControlsMenu = function(){
+	if(this.menu){
+		throw Error("attempting to open a menu while one is already open");
+	}
+
+	this.menu = new ControlsMenu(this, this.controlsMap);
+	this.overlayDiv.appendChild(this.menu.domElement())
+	this.setCapturingComponent(this.menu);
+}
+
+Overlay.prototype.closeMenu = function(){
+	if(this.menu == this.capturingComponent){
+		this.removeCapturingComponent();
+		if(!(this.currentOverlay instanceof GameOverlay)){
+			this.setCapturingComponent(this.currentOverlay);
+		}
+	} else if(this.menu){
+		console.log("Closing a menu that isn't capturing events");
+		this.menu.domElement().remove();
+	} else {
+		console.log("Attempting to close menu when no menu is open");
+	}
+
+	this.menu = null;
+}
+
+Overlay.prototype.isCapturing = function(){
+	if(this.capturingComponent){
+		return true;
+	} else {
+		return false;
 	}
 }
 
-Overlay.prototype.populateMenu = function(mode){
-	this.menu.populate(mode);
+Overlay.prototype.setCapturingComponent = function(component){
+	// !!! check to make sure component is a child of the overlay?
+	this.capturingComponent = component;
 }
 
-Overlay.prototype.isElementShowing = function(elementName){
-	if(this[elementName] != undefined && typeof this[elementName].domElement == "function"){
-		return this[elementName].domElement().style.display == "block";
+Overlay.prototype.removeCapturingComponent = function(){ 
+	if(this.capturingComponent){
+		this.capturingComponent.domElement().remove();
 	}
+	this.capturingComponent = null;
 }
 
-Overlay.prototype.passEvent = function(elementName, evt){
-	if(this[elementName] != undefined && typeof this[elementName].handleEvent == "function"){
-		this[elementName].handleEvent(evt);
+Overlay.prototype.passEvent = function(evt){
+	if(!this.capturingComponent){
+		throw Error("Attempting to pass an event to overlay when there is no capturing component");
 	}
+	if(!(typeof this.capturingComponent.handleEvent == "function")){
+		throw Error("The capturing component in Overlay does not have a handleEvent function");
+	}
+
+	return this.capturingComponent.handleEvent(evt);
 }
 
 // TODO updating song data should update score?
-Overlay.prototype.updateSongData = function(songData){
-	this.editorOverlay.updateSongData(songData);
-}
+Overlay.prototype.update = function(fps=null){
+	this.currentOverlay.update();
 
-Overlay.prototype.updateScore = function(newScore){
-	this.score.update(newScore);
-}
-
-Overlay.prototype.updateFPS = function(newFPS){
-	this.fps.update(newFPS);
-}
-
-HomeScreen.prototype.show = function(){
-	let retrieveSongs = game => {
-		return game.songs();
+	if(this.currentOverlay instanceof GameOverlay){
+		this.currentOverlay.updateFPS(fps);
 	}
-	let songs = this.eventPropagator.runOnGame(retrieveSongs);
-	this.populateSelections(songs);
-	
-	this.homeScreenDiv.style.display = "block";
 }
 
-HomeScreen.prototype.hide = function(){
-	this.homeScreenDiv.style.display = "none";
+Overlay.prototype.getGame = function(){
+	return this.game;
+}
+
+GameOverlay.prototype.update = function(){
+	let game = this.overlayParent.getGame();
+	
+	this.score.update(game.getScore());
+}
+
+GameOverlay.prototype.updateFPS = function(fps){
+	this.fps.update(fps);
+}
+
+GameOverlay.prototype.domElement = function(){
+	return this.div;
 }
 
 HomeScreen.prototype.domElement = function(){
@@ -516,27 +728,50 @@ HomeScreen.prototype.domElement = function(){
 }
 
 HomeScreen.prototype.handleEvent = function(evt){
-	if(evt.keyCode == 38 && this.selectionIdx > 0){ // up arrow
+	if(evt.type != "keydown"){
+		return null;
+	}
+
+	if(evt.keyCode === 27){ // escape key
+		let overlay = this.overlayParent;
+		overlay.openHomeMenu();
+
+		return null;
+	} 
+	else if(evt.keyCode == 38 && this.selectionIdx > 0){ // up arrow
 		this.songSelections[this.selectionIdx].toggleHighlight();
 		--this.selectionIdx;
 		this.songSelections[this.selectionIdx].toggleHighlight();
+
+		return null;
 	}
 	else if(evt.keyCode == 40 && this.selectionIdx + 1 < this.songSelections.length){ // down arrow
 		this.songSelections[this.selectionIdx].toggleHighlight();
 		++this.selectionIdx;
 		this.songSelections[this.selectionIdx].toggleHighlight();
+
+		return null;
 	}
 	else if(evt.keyCode == 13){ // enter
 		if(this.songSelections[this.selectionIdx]){
 			let songID = this.songSelections[this.selectionIdx].getSongID();
-			let fn = game => game.loadSong(songID);
-			this.eventPropagator.runOnGame(fn);
-			this.eventPropagator.startLoop();
+			let game = this.overlayParent.getGame();
+			game.loadSong(songID);
+
+			this.overlayParent.removeCapturingComponent();
+			this.overlayParent.goToGameOverlay();
+			
+			return("start-loop");
+		}
+		else{
+			throw Error("Home Menu song selection idx out of bounds");
 		}
 	}
 }
 
-HomeScreen.prototype.populateSelections = function(songs){
+HomeScreen.prototype.update = function(){
+	let songs = this.overlayParent.getGame().songs();
+
 	for(let i = 0; i < this.songSelections.length; ++i){
 		this.songSelections[i].domElement().remove();
 	}
@@ -619,40 +854,20 @@ EndGameScreen.prototype.domElement = function(){
 	return this.endScreenDiv;
 }
 
-EndGameScreen.prototype.show = function(){
-	let songData = this.eventPropagator.runOnGame( game => {
-		return game.getSongData();
-	});
-	this.textElement1.innerHTML = songData.name + " - " + songData.artist;
-	this.textElement2.innerHTML = "Difficulty: "+ songData.difficulty + " --- time: " + songData.duration;
-	this.scoreTextElement.innerHTML = "Score: " + songData.gameData.score + " / " + songData.gameData.max_score;
-	
-	this.endScreenDiv.style.display = "block";
-}
-
-EndGameScreen.prototype.hide = function(){
-	this.endScreenDiv.style.display = "none";
-}
-
 EndGameScreen.prototype.handleEvent = function(evt){
-	if(evt.keyCode == 13){ // enter
-		this.eventPropagator.exitToHomeScreen();
+	if(evt.type == "keydown" && evt.keyCode == 13){ // enter
+		this.overlayParent.removeCapturingComponent();
+		this.overlayParent.goToHomeScreen();
 	}
+
+	return null;
 }
 
-EditorOverlay.prototype.show = function(){
-	this.div.style.display = "block";
-}
-
-EditorOverlay.prototype.hide = function(){
-	this.div.style.display = "none";
-}
-
-EditorOverlay.prototype.updateSongData = function(songData){
-	if(this.div.style.display != "none"){
-		this.editorCanvas.updateSongData(songData);
-		this.controls.updateSongData(songData);
-	}
+EditorOverlay.prototype.update = function(){
+	let songData = this.overlayParent.getGame().getSongData();
+	
+	this.editorCanvas.updateSongData(songData);
+	this.controls.updateSongData(songData);
 }
 
 EditorOverlay.prototype.domElement = function(){
@@ -660,7 +875,11 @@ EditorOverlay.prototype.domElement = function(){
 }
 
 EditorOverlay.prototype.handleEvent = function(evt){
-	this.editorCanvas.handleKeyDown(evt);
+	if(evt.type == "keydown" && evt.keyCode == 27){
+		let overlay = this.overlayParent;
+		overlay.openMasterGameMenu();
+	}
+	return this.editorCanvas.handleEvent(evt);
 }
 
 EditorCanvas.prototype.domElement = function(){
@@ -765,23 +984,41 @@ EditorCanvas.prototype.draw = function(){
 	}
 }
 
+EditorCanvas.prototype.handleEvent = function(evt){
+	if(evt.type == "keydown"){
+		return this.handleKeyDown(evt);
+	} else if(evt.type == "mousedown"){
+		return this.handleMouseDown(evt);
+	} else if(evt.type == "mouseup"){
+		return this.handleMouseUp(evt);
+	} else if(evt.type == "mousemove"){
+		return this.handleMouseMove(evt);
+	} else if(evt.type == "wheel"){
+		return this.handleWheel(evt);
+	}
+
+	return null;
+}
+
 EditorCanvas.prototype.handleKeyDown = function(evt){
-	if(evt.keyCode == 32){ // space
-		this.eventPropagator.togglePlay();
+	if(evt.keyCode == 32 || evt.keyCode == 13){ // space or enter
+		return("toggle-play");
 	}
 	
 	if(this.selectedBrick){
 		let brick = this.selectedBrick;
+		let game = this.overlayParent.getGame();
 		
 		if(evt.keyCode == 46 || evt.keyCode == 8) { // delete or backspace
-			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			let game = this.overlayParent.getGame();
+			game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
 			this.selectedBrick = null;
 		}
 		
 		if(evt.keyCode == 38){ // up arrow. delete the old brick, move the brick up and recreate
-			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
 			
 			if(brick.is_trailing){
 				brick.is_trailing = false;
@@ -793,14 +1030,14 @@ EditorCanvas.prototype.handleKeyDown = function(evt){
 				brick.is_leading = true;
 			}
 			
-			this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
-			this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); });
+			game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
+			this.selectedBrick = game.selectBrick(brick.beat_pos, brick.x_pos);
 		}
 		
 		if(evt.keyCode == 40){ // down arrow. delete the old brick, move the brick down and recreate
-			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
 				
 			if(brick.is_leading){
 				brick.is_leading = false;
@@ -812,38 +1049,41 @@ EditorCanvas.prototype.handleKeyDown = function(evt){
 				brick.is_trailing = true;
 			}
 			
-			this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
-			this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); });
+			game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
+			this.selectedBrick = game.selectBrick(brick.beat_pos, brick.x_pos);
 		}
 		
 		if(evt.keyCode == 37){ // left arrow. delete the old brick, move the brick to the left and recreate
-			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
 				
 			brick.x_pos -= brick.x_pos > 0 ? 1 : 0;
 			
-			this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
-			this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); });
+			game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
+			this.selectedBrick = game.selectBrick(brick.beat_pos, brick.x_pos);
 		}
 		
 		if(evt.keyCode == 39){ // right arrow. delete the old brick, move the brick to the right and recreate
-			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
 				
 			brick.x_pos += brick.x_pos + 1 < wasm.max_notes_per_screen_width() ? 1 : 0;
 			
-			this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
-			this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); });
+			game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
+			this.selectedBrick = game.selectBrick(brick.beat_pos, brick.x_pos);
 		}
 	}
 	
 	this.draw();
+	return null;
 }
 
 EditorCanvas.prototype.handleMouseDown = function(evt){
+	console.log("event target: " + evt.target + " event type: " + evt.type);
+	/*
 	let x = evt.clientX - this.canvas.offsetLeft;
 	let y = evt.clientY - this.canvas.offsetTop;
 	
@@ -872,9 +1112,12 @@ EditorCanvas.prototype.handleMouseDown = function(evt){
 	
 	this.mouseDown = true;
 	this.draw();
+	*/
 }
 
 EditorCanvas.prototype.handleMouseUp = function(evt){
+	console.log("event target: " + evt.target + " event type: " + evt.type);
+	/*
 	this.mouseDown = false;
 	if(this.changeBrickType){
 		let brick = this.selectedBrick;
@@ -892,9 +1135,12 @@ EditorCanvas.prototype.handleMouseUp = function(evt){
 		this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); } );
 	}
 	this.draw();
+	*/
 }
 	
 EditorCanvas.prototype.handleMouseMove = function(evt){
+	console.log("event target: " + evt.target + " event type: " + evt.type);
+	/*
 	if(this.mouseDown && this.selectedBrick){
 		let x = evt.clientX - this.canvas.offsetLeft;
 		let y = evt.clientY - this.canvas.offsetTop;
@@ -932,9 +1178,12 @@ EditorCanvas.prototype.handleMouseMove = function(evt){
 		}
 	}
 	this.draw();
+	*/
 }
 
 EditorCanvas.prototype.handleWheel = function(evt){
+	console.log("event target: " + evt.target + " event type: " + evt.type);
+	/*
 	let time;
 	let getTime = game => {
 		return game.getSongData().gameData.time_running;
@@ -947,6 +1196,7 @@ EditorCanvas.prototype.handleWheel = function(evt){
 	time += evt.deltaY / 256;
 	
 	this.eventPropagator.runOnGame(updateTime, true);
+	*/
 }
 
 EditorControls.prototype.domElement = function(){
@@ -966,134 +1216,89 @@ EditorControls.prototype.updateSongData = function(songData){
 	}
 }
 
-MenuPanel.prototype.show = function(){
-	if(this.selectionIdx != 0){
-		this.selections[this.selectionIdx].toggleHighlight();
-		this.selections[0].toggleHighlight();
-		this.selectionIdx = 0;
-	}
-	this.div.style.display = "block";
-}
-
-MenuPanel.prototype.hide = function(){
-	this.div.style.display = "none";
-}
-
-MenuPanel.prototype.addSelection = function(onSelect, selectionText){
+Menu.prototype.addSelection = function(onSelect, selectionText){
 	this.selections.push( new MenuSelection(onSelect, selectionText, this.div) );
 	if(this.selections.length == 1){
 		this.selections[0].toggleHighlight();
 	}
 }
 
-MenuPanel.prototype.domElement = function(){
+Menu.prototype.domElement = function(){
 	return this.div;
 }
 
-MenuPanel.prototype.handleEvent = function(evt){
-	if(evt.keyCode == 38 && this.selectionIdx > 0){ // up arrow
-		this.selections[this.selectionIdx].toggleHighlight();
-		--this.selectionIdx;
-		this.selections[this.selectionIdx].toggleHighlight();
+Menu.prototype.handleEvent = function(evt){
+	if(this.getInputDialog instanceof GetInputDialog){
+		return this.getInputDialog.handleEvent(evt);
 	}
-	else if(evt.keyCode == 40 && this.selectionIdx + 1 < this.selections.length){ // down arrow
-		this.selections[this.selectionIdx].toggleHighlight();
-		++this.selectionIdx;
-		this.selections[this.selectionIdx].toggleHighlight();
-	}
-	else if(evt.keyCode == 13){ // enter
-		if(this.selections[this.selectionIdx]){
-			this.selections[this.selectionIdx].select();
+
+	if(evt.type == "keydown"){
+		if(evt.keyCode == 38 && this.selectionIdx > 0){ // up arrow
+			this.selections[this.selectionIdx].toggleHighlight();
+			--this.selectionIdx;
+			this.selections[this.selectionIdx].toggleHighlight();
+		}
+		else if(evt.keyCode == 40 && this.selectionIdx + 1 < this.selections.length){ // down arrow
+			this.selections[this.selectionIdx].toggleHighlight();
+			++this.selectionIdx;
+			this.selections[this.selectionIdx].toggleHighlight();
+		}
+		else if(evt.keyCode == 13){ // enter
+			if(this.selections[this.selectionIdx]){
+				return this.selections[this.selectionIdx].select();
+			}
+		}
+		else if(evt.keyCode == 27){
+			this.overlayParent.closeMenu();
 		}
 	}
+
+	return null;
 }
 
-Score.prototype.domElement = function(){
-	return this.scoreDiv;
-}
+Menu.prototype.openDialog = function(dialog){
+	if(this.getInputDialog){
+		throw Error("Menu attempting to open a dialog when one is already open")
+	}
 
-Score.prototype.show = function(){
-	this.scoreDiv.style.display = "block";
-}
-
-Score.prototype.hide = function(){
-	this.scoreDiv.style.display = "none";
-}
-
-Score.prototype.update = function(newScore){
-	if(newScore != this.score){
-		this.score = newScore;
-		this.scoreInner.innerHTML = newScore;
+	if(dialog instanceof GetInputDialog){
+		this.getInputDialog = dialog;
+		this.div.appendChild(dialog.domElement());
+		return;
+	}
+	else{
+		console.log("Menu.openDialog called with a non-dialog argument");
 	}
 }
 
-FPS.prototype.domElement = function(){
-	return this.fpsDiv;
-}
-
-FPS.prototype.show = function(){
-	this.fpsDiv.style.display = "block";
-}
-
-FPS.prototype.hide = function(){
-	this.fpsDiv.style.display = "none";
-}
-
-FPS.prototype.update = function(newFPS){
-	if(newFPS != this.fps){
-		this.fps = newFPS;
-		this.fpsInner.innerHTML = newFPS;
+Menu.prototype.removeDialog = function(){
+	if(this.getInputDialog instanceof GetInputDialog){
+		this.getInputDialog.domElement().remove();
+		this.getInputDialog = null;
+		return;
 	}
-}
-	
-Menu.prototype.domElement = function(){
-	return this.menuDiv;
-}
-
-Menu.prototype.show = function(){
-	this.menuDiv.style.display = "block";
-	if(this.currentDisplayed){
-		this.currentDisplayed.hide();
-	}
-	this.currentDisplayed = null;
-}
-
-Menu.prototype.hide = function(){
-	this.menuDiv.style.display = "none";
-	if(this.currentDisplayed){
-		this.currentDisplayed.hide();
-		this.currentDisplayed = null;
+	else{
+		console.log("Menu attempting to close dialog while none is open");
 	}
 }
 
-Menu.prototype.populate = function(menuPanelName){
-	if(this.currentDisplayed){
-		this.currentDisplayed.hide();
-	}
-	
-	if(this[menuPanelName] instanceof MenuPanel){
-		this[menuPanelName].show();
-		this.currentDisplayed = this[menuPanelName];
-	}
-}
-
-Menu.prototype.handleEvent = function(evt){
-	this.currentDisplayed.handleEvent(evt);
-}
-
-MenuPanel.prototype.setSelectionText = function(selectionID, newText){
+Menu.prototype.setSelectionText = function(selectionID, newText){
 	this.selections[selectionID].setText( newText );
 }
 
-MenuPanel.prototype.getSelectionValue = function(selectionID){
-	if(this.selections[selectionID]){
-		return this.selections[selectionID].getValue();
+GameMenu.prototype.handleEvent = function(evt){
+	if(evt.type == "keydown" && evt.keyCode == 27){
+		this.overlayParent.closeMenu();
+		return "toggle-play";
+	} 
+	else {
+		return Menu.prototype.handleEvent.call(this, evt);
 	}
 }
 
 MenuSelection.prototype.select = function(){
 	if(typeof(this.onSelect) == "function"){
-		this.onSelect();
+		return this.onSelect();
 	}
 }
 
@@ -1124,72 +1329,84 @@ MenuSelection.prototype.getValue = function(){
 	return this.value;
 }
 
-function changeControlDialog(controlsMap, controlsMenu, inputID){
-	let enterKeyDiv = document.createElement("div");
-	let enterKeyText = document.createElement("p");
-	
-	enterKeyDiv.className = "change-control-dialog";
-	
-	enterKeyText.innerHTML = "Enter Key";
-	enterKeyText.fontSize = "3.5em";
-	
-	enterKeyDiv.appendChild(enterKeyText);
-	document.body.appendChild(enterKeyDiv);
-	
-	// !!! !!! !!! preventDefault() and {capture: true} do not prevent event from being sent to other event handlers. 
-		// Way to make this temporarily the only even handler for key presses?
-		// Solution:
-			// eventPropagator flag when a dialog is launched (changeControlDialog, loadSongDialog, etc.)
-			// prevents events until the dialog is closed via escape or otherwise
-	document.addEventListener("keydown", evt => {
-		if(evt.keyCode != 27){
-			let keyCode = evt.keyCode;
-		
-			let newKeyName = g_keyCodeNames[keyCode] ? g_keyCodeNames[keyCode] : (evt.key).toUpperCase();
-			
-			// unbind the previous key for this input
-			for (const key in controlsMap){
-				if(controlsMap[key] == inputID){
-					controlsMap[key] = undefined;
-					break;
-				}
-			}
-			
-			// if the new key is mapped to a different input, set that input to have no key mapping to it
-			if(controlsMap[keyCode] != undefined){
-				let controlID = controlsMap[keyCode];
-				let controlName = controlsMenu.getSelectionValue(controlID);
-				controlsMenu.setSelectionText(controlID, "" + controlName + " - UNBOUND");
-			}
-			
-			controlsMap[keyCode] = inputID;
-			
-			let inputName = controlsMenu.getSelectionValue(inputID);
-			controlsMenu.setSelectionText(inputID, inputName + " - " + newKeyName);
-		}
-		
-		enterKeyDiv.remove();
-	},{once: true});
+Score.prototype.domElement = function(){
+	return this.scoreDiv;
 }
 
+Score.prototype.update = function(newScore){
+	if(newScore != this.score){
+		this.score = newScore;
+		this.scoreInner.innerHTML = newScore;
+	}
+}
+
+FPS.prototype.domElement = function(){
+	return this.fpsDiv;
+}
+
+FPS.prototype.update = function(newFPS){
+	if(newFPS != this.fps){
+		this.fps = newFPS;
+		this.fpsInner.innerHTML = newFPS;
+	}
+}
+
+GetInputDialog.prototype.domElement = function(){
+	return this.div;
+}
+
+GetInputDialog.prototype.handleEvent = function(evt){
+	if(evt.type == "keydown"){
+		if(evt.keyCode == 27){
+			this.menuParent.removeDialog();
+		}
+
+		return null;
+	}
+
+	if(evt.type == "click"){
+		if(evt.target == this.submitButton){
+			this.submitFunction();
+			this.menuParent.removeDialog();
+		}
+		else if (evt.target == this.cancelButton){
+			this.menuParent.removeDialog();
+		}
+	}
+}
+
+ChangeControlDialog.prototype.handleEvent = function(evt){
+	if(evt.type == "keydown" && evt.keyCode != 27){
+		this.newKeyCode = evt.keyCode;
+		let newKeyName = g_keyCodeNames[this.newKeyCode] ? g_keyCodeNames[this.newKeyCode] : String.fromCharCode(this.newKeyCode);
+		this.newKeyLabel.innerHTML = "New Key: " + newKeyName;
+
+		return null;
+	}
+
+	GetInputDialog.prototype.handleEvent.call(this, evt);
+}
+
+/* !!! !!! !!! turn these functions into classes with handleEvent functions */
+
 // TODO rename or accept fields
-function newSongDialog(eventPropagator){
-	
-	let songData = eventPropagator.runOnGame( game => {
-		return game.getSongData();
-	})
+function newSongDialog(overlayParent){
+	let game = overlayParent.getGame();
+	let songData = game.getSongData();
+
 	let bpm = songData.gameData.bpm;
 	let songStartOffset = songData.startOffset;
 	let brickSpeed = songData.gameData.brickSpeed;
 	let duration = songData.duration;
 	
-	eventPropagator.runOnGame( game => {
-		game.newSong(bpm, brickSpeed, duration, songStartOffset);
-	}, true);
+	game.newSong(bpm, brickSpeed, duration, songStartOffset);
 }
 
 // TODO less ugly, this and loadSongDialog
-function saveSongDialog(eventPropagator){
+function saveSongDialog(overlayParent){
+	let game = overlayParent.getGame();
+	let songData = game.getSongData();
+
 	let div = document.createElement("div");
 	let saveButton = document.createElement("button");
 	let overwriteButton = document.createElement("button");
@@ -1221,10 +1438,6 @@ function saveSongDialog(eventPropagator){
 	durationLabel.innerHTML = "Song Duration";
 	startOffsetLabel.innerHTML = "Start Offset";
 	filenameLabel.innerHTML = "Song file name";
-	
-	let songData = eventPropagator.runOnGame(game => {
-		return game.getSongData();
-	});
 	
 	nameField.type = "text";
 	nameField.defaultValue = songData.name;
@@ -1313,7 +1526,7 @@ function saveSongDialog(eventPropagator){
 	document.addEventListener("keydown", pressKey);
 }
 
-function loadSongDialog(eventPropagator){
+function loadSongDialog(overlayParent){
 	let div = document.createElement("div");
 	let songSelector = document.createElement("select");
 	let submitButton = document.createElement("button");
@@ -1402,7 +1615,7 @@ function loadSongDialog(eventPropagator){
 	document.addEventListener("keydown", pressKey);
 }
 
-function uploadMP3Dialog(eventPropagator){
+function uploadMP3Dialog(overlayParent){
 	let div = document.createElement("div");
 	let input = document.createElement("input");
 	let mp3File;
@@ -1440,4 +1653,4 @@ function uploadMP3Dialog(eventPropagator){
 	
 	input.addEventListener("change", inputFile);
 	document.addEventListener("keydown", pressKey);
-}
+} 
