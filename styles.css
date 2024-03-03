@@ -175,7 +175,6 @@ canvas{
 	height: 70%;
 	width: 30%;
 	font-size: 3em;
-	z-index: 200;
 	background-color: #9999ff;
 }
 
@@ -198,10 +197,7 @@ canvas{
 	position: absolute;
 	font-size: 1rem;
 	top: 10px;
-	left: 10%;
-	width: 80%;
 	background-color: #aaaaaa;
-	z-index: 300;
 }
 
 .dialog-form-div{

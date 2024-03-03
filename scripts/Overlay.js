@@ -112,7 +112,6 @@ function EndGameScreen(overlayParent){
 	
 	this.endScreenDiv = document.createElement("div");
 	this.endScreenDiv.className = "end-game-screen";
-	this.endScreenDiv.style.display = "block";
 	
 	this.textDiv = document.createElement("div");
 	this.textDiv.className = "end-game-screen-text-div";
@@ -150,7 +149,6 @@ function EditorOverlay(overlayParent){
 	
 	this.div = document.createElement("div");
 	this.div.className = "editor-overlay";
-	this.div.style.display = "block";
 	
 	this.editorCanvas = new EditorCanvas(overlayParent);
 	this.controls = new EditorControls(overlayParent);
@@ -255,7 +253,6 @@ function Score(){
 	
 	this.scoreDiv = document.createElement("div");
 	this.scoreDiv.className = "score";
-	this.scoreDiv.style.display = "block";
 	
 	this.score = 0;
 	this.scoreInner = document.createElement("p");
@@ -274,7 +271,6 @@ function FPS(){
 	
 	this.fpsDiv = document.createElement("div");
 	this.fpsDiv.className = "fps";
-	this.fpsDiv.style.display = "block";
 	
 	this.fps = 0;
 	this.fpsInner = document.createElement("p");
@@ -297,7 +293,6 @@ function Menu(overlayParent){
 	
 	this.div = document.createElement("div");
 	this.div.className = "menu";
-	this.div.style.display = "block";
 	this.selections = [];
 	this.selectionIdx = 0;
 
@@ -321,6 +316,8 @@ Object.setPrototypeOf(HomeMenu.prototype, Menu.prototype);
 // Menu when accessed from the game. Extends Menu class
 function GameMenu(overlayParent){
 	Menu.call(this, overlayParent);
+	
+	this.menuKeyPresses = []; // keep track of key presses for opening master menu
 
 	this.addSelection(() => { 
 		this.overlayParent.closeMenu();
@@ -388,25 +385,30 @@ Object.setPrototypeOf(MasterGameMenu.prototype, Menu.prototype);
 function SaveLoadMenu(overlayParent){
 	Menu.call(this, overlayParent);
 	
-	this.addSelection(() => {
-		saveSongDialog(overlayParent);
+	this.addSelection(() => { 
+		this.openDialog(new NewSongDialog(this.overlayParent, this));
 		return null;
-	}, "Save song");
-	
-	this.addSelection(() => {
-		loadSongDialog(overlayParent);
+	}, "New Song");
+
+	this.addSelection(() => { 
+		this.openDialog(new ModifySongDialog(this.overlayParent, this));
 		return null;
-	}, "Load song");
-	
-	this.addSelection(() => {
-		newSongDialog(overlayParent);
+	}, "Modify Song");
+
+	this.addSelection(() => { 
+		this.openDialog(new SaveSongDialog(this.overlayParent, this));
 		return null;
-	}, "New song");
-	
-	this.addSelection(() => {
-		uploadMP3Dialog(overlayParent);
+	}, "Save Song");
+
+	this.addSelection(() => { 
+		this.openDialog(new OverwriteSongDialog(this.overlayParent, this));
 		return null;
-	}, "Load mp3");
+	}, "Overwrite Song");
+
+	this.addSelection(() => { 
+		this.openDialog(new LoadSongDialog(this.overlayParent, this));
+		return null;
+	}, "Load Song");
 	
 	this.addSelection(() => {
 		alert("Not yet implemented"); // !!! load database
@@ -444,7 +446,7 @@ function ControlsMenu(overlayParent, controlsMap){
 		// add the selection
 		let defaultKeyName = g_keyCodeNames[defaultKey] ? g_keyCodeNames[defaultKey] : String.fromCharCode(defaultKey);
 		this.addSelection(() => { 
-			this.openDialog(new ChangeControlDialog(this, defaultKeyName, inputName, controlsMap, i));
+			this.openDialog(new ChangeControlDialog(this.overlayParent, this, defaultKeyName, inputName, controlsMap, i));
 			return null;
 		}, inputName);
 		this.setSelectionText(i,  inputName + " - " + defaultKeyName);
@@ -472,15 +474,18 @@ function MenuSelection(onSelect, text, parentDiv){
 	parentDiv.appendChild(this.div);
 }
 
-function GetInputDialog(menuParent){
+function GetInputDialog(overlayParent, menuParent){
+	this.overlayParent;
 	this.menuParent;
 	this.div;
 	this.formDiv;
+	this.formTitle;
 	this.buttonsDiv;
 	this.submitButton;
 	this.cancelButton;
 	this.submitFunction; // function to run when the submit button is pressed
 
+	this.overlayParent = overlayParent;
 	this.menuParent = menuParent;
 
 	this.div = document.createElement("div");
@@ -490,21 +495,24 @@ function GetInputDialog(menuParent){
 	this.buttonsDiv = document.createElement("div");
 	this.buttonsDiv.className = "dialog-buttons-div";
 
+	this.formTitle = document.createElement("p");
 	this.submitButton = document.createElement("button");
 	this.cancelButton = document.createElement("button");
 	this.submitButton.innerHTML = "Submit";
 	this.cancelButton.innerHTML = "Cancel";
 
-	this.div.appendChild(this.formDiv);
-	this.div.appendChild(this.buttonsDiv);
+	this.formDiv.appendChild(this.formTitle);
 	this.buttonsDiv.appendChild(this.submitButton);
 	this.buttonsDiv.appendChild(this.cancelButton);
+	this.div.appendChild(this.formDiv);
+	this.div.appendChild(this.buttonsDiv);
 
 	this.submitFunction = () => {};
 }
 
-function ChangeControlDialog(menuParent, oldKeyName, controlName, controlsMap, inputID){
-	GetInputDialog.call(this, menuParent);
+// class for creating a dialog to change the selected control. extends GetInputDialog
+function ChangeControlDialog(overlayParent, menuParent, oldKeyName, controlName, controlsMap, inputID){
+	GetInputDialog.call(this, overlayParent, menuParent);
 
 	this.controlLabel;
 	this.oldKeyLabel;
@@ -512,6 +520,8 @@ function ChangeControlDialog(menuParent, oldKeyName, controlName, controlsMap, i
 	this.newKeyCode;
 	this.submitFunction;
 	
+	this.formTitle.innerHTML = "Change Control";
+
 	this.controlLabel = document.createElement("label");
 	this.oldKeyLabel = document.createElement("label");
 	this.newKeyLabel = document.createElement("label");
@@ -550,6 +560,451 @@ function ChangeControlDialog(menuParent, oldKeyName, controlName, controlsMap, i
 	this.formDiv.appendChild(this.newKeyLabel);
 }
 Object.setPrototypeOf(ChangeControlDialog.prototype, GetInputDialog.prototype);
+
+// class for creating a dialog to create a new song. extends GetInputDialog
+function NewSongDialog(overlayParent, menuParent){
+	GetInputDialog.call(this, overlayParent, menuParent);
+	
+	this.nameLabel;
+	this.nameField;
+	this.artistLabel;
+	this.artistField;
+	this.difficultyLabel;
+	this.difficultyField;
+	this.bpmLabel;
+	this.bpmField;
+	this.brickSpeedLabel;
+	this.brickSpeedField;
+	this.durationLabel;
+	this.durationField;
+	this.songStartOffsetLabel;
+	this.songStartOffsetField;
+	this.fileInput;
+
+	this.formTitle.innerHTML = "New Song";
+
+	let game = overlayParent.getGame();
+	let songData = game.getSongData();
+	let newLine = () => { return document.createElement("br"); }
+
+	this.nameLabel = document.createElement("label");
+	this.nameField = document.createElement("input");
+	this.artistLabel = document.createElement("label");
+	this.artistField = document.createElement("input");
+	this.difficultyLabel = document.createElement("label");
+	this.difficultyField = document.createElement("input");
+	this.bpmLabel = document.createElement("label");
+	this.bpmField = document.createElement("input");
+	this.brickSpeedLabel = document.createElement("label");
+	this.brickSpeedField = document.createElement("input");
+	this.durationLabel = document.createElement("label");
+	this.durationField = document.createElement("input");
+	this.songStartOffsetLabel = document.createElement("label");
+	this.songStartOffsetField = document.createElement("input");
+
+	this.nameLabel.innerHTML = "Name: ";
+	this.artistLabel.innerHTML = "Artist: ";
+	this.difficultyLabel.innerHTML = "Difficulty(0-10): ";
+	this.bpmLabel.innerHTML = "BPM(40-160): ";
+	this.brickSpeedLabel.innerHTML = "Brick Speed(200-2000): ";
+	this.durationLabel.innerHTML = "Duration(0-600): ";
+	this.songStartOffsetLabel.innerHTML = "Song start offset (0 if unknown): ";
+
+	this.nameField.defaultValue = "";
+	this.nameField.type = "text";
+	this.artistField.defaultValue = "";
+	this.artistField.type = "text";
+	this.difficultyField.defaultValue = "";
+	this.difficultyField.type = "text";
+	this.bpmField.defaultValue = "";
+	this.bpmField.type = "text";
+	this.brickSpeedField.defaultValue = "";
+	this.brickSpeedField.type = "text";
+	this.durationField.defaultValue = "";
+	this.durationField.type = "text";
+	this.songStartOffsetField.defaultValue = "";
+	this.songStartOffsetField.type = "text";
+
+	this.fileInput = document.createElement("input");
+	this.fileInput.innerHTML = "song"
+	this.fileInput.type = "file"
+
+	this.submitFunction = () => {
+		// validate data
+		let name = this.nameField.value;
+		let artist = this.artistField.value;
+		let difficulty = parseInt(this.difficultyField.value);
+			if(isNaN(difficulty) || difficulty < 0){
+				difficulty = 0;
+			}
+			else if(difficulty > 10){
+				difficulty = 10;
+			}
+		let bpm = parseInt(this.bpmField.value);
+			if(isNaN(bpm) || bpm < 40){
+				bpm = 40;
+			}
+			else if(bpm > 160){
+				bpm = 160;
+			}
+		let brickSpeed = parseInt(this.brickSpeedField.value);
+			if(isNaN(brickSpeed) || brickSpeed < 200){
+				brickSpeed = 200;
+			}
+			else if(bpm > 2000){
+				brickSpeed = 2000;
+			}
+		let duration = parseInt(this.durationField.value);
+			if(isNaN(duration) || duration < 0){
+				duration = 0;
+			}
+			else if(duration > 600){
+				duration = 600;
+			}
+		let songStartOffset = parseInt(this.songStartOffsetField.value);
+			if(isNaN(songStartOffset) || songStartOffset < 0){
+				songStartOffset = 0;
+			}
+			else if(songStartOffset > 6){
+				songStartOffset = 6;
+			}
+		let file = this.fileInput.files[0];
+		
+		game.newSong(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset);
+		game.loadMP3(file)
+	}
+
+	this.formDiv.appendChild(this.nameLabel);
+	this.formDiv.appendChild(this.nameField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.artistLabel);
+	this.formDiv.appendChild(this.artistField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.difficultyLabel);
+	this.formDiv.appendChild(this.difficultyField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.bpmLabel);
+	this.formDiv.appendChild(this.bpmField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.brickSpeedLabel);
+	this.formDiv.appendChild(this.brickSpeedField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.durationLabel);
+	this.formDiv.appendChild(this.durationField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.songStartOffsetLabel);
+	this.formDiv.appendChild(this.songStartOffsetField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.fileInput);
+}
+Object.setPrototypeOf(NewSongDialog.prototype, GetInputDialog.prototype);
+
+// class for creating a dialog to modify the current song data. extends GetInputDialog
+function ModifySongDialog(overlayParent, menuParent){
+	GetInputDialog.call(this, overlayParent, menuParent);
+	
+	this.nameLabel;
+	this.nameField;
+	this.artistLabel;
+	this.artistField;
+	this.difficultyLabel;
+	this.difficultyField;
+	this.bpmLabel;
+	this.bpmField;
+	this.brickSpeedLabel;
+	this.brickSpeedField;
+	this.durationLabel;
+	this.durationField;
+	this.songStartOffsetLabel;
+	this.songStartOffsetField;
+
+	this.formTitle.innerHTML = "Modify Song";
+
+	let game = overlayParent.getGame();
+	let songData = game.getSongData();
+	let newLine = () => { return document.createElement("br"); }
+
+	this.nameLabel = document.createElement("label");
+	this.nameField = document.createElement("input");
+	this.artistLabel = document.createElement("label");
+	this.artistField = document.createElement("input");
+	this.difficultyLabel = document.createElement("label");
+	this.difficultyField = document.createElement("input");
+	this.bpmLabel = document.createElement("label");
+	this.bpmField = document.createElement("input");
+	this.brickSpeedLabel = document.createElement("label");
+	this.brickSpeedField = document.createElement("input");
+	this.durationLabel = document.createElement("label");
+	this.durationField = document.createElement("input");
+	this.songStartOffsetLabel = document.createElement("label");
+	this.songStartOffsetField = document.createElement("input");
+
+	this.nameLabel.innerHTML = "Name: ";
+	this.artistLabel.innerHTML = "Artist: ";
+	this.difficultyLabel.innerHTML = "Difficulty(0-10): ";
+	this.bpmLabel.innerHTML = "BPM(40-160): ";
+	this.brickSpeedLabel.innerHTML = "Brick Speed(200-2000): ";
+	this.durationLabel.innerHTML = "Duration(0-600): ";
+	this.songStartOffsetLabel.innerHTML = "Song start offset (max of 4 beats at 40 bpm, 6 seconds): ";
+
+	this.nameField.defaultValue = songData.name;
+	this.nameField.type = "text";
+	this.artistField.defaultValue = songData.artist;
+	this.artistField.type = "text";
+	this.difficultyField.defaultValue = songData.difficulty;
+	this.difficultyField.type = "text";
+	this.bpmField.defaultValue = songData.gameData.bpm;
+	this.bpmField.type = "text";
+	this.brickSpeedField.defaultValue = songData.gameData.brick_speed;
+	this.brickSpeedField.type = "text";
+	this.durationField.defaultValue = songData.duration;
+	this.durationField.type = "text";
+	this.songStartOffsetField.defaultValue = songData.startOffset;
+	this.songStartOffsetField.type = "text";
+
+	this.submitFunction = () => {
+		// validate data
+		let name = this.nameField.value;
+		let artist = this.artistField.value;
+		let difficulty = parseInt(this.difficultyField.value);
+			if(isNaN(difficulty) || difficulty < 0){
+				difficulty = 0;
+			}
+			else if(difficulty > 10){
+				difficulty = 10;
+			}
+		let bpm = parseInt(this.bpmField.value);
+			if(isNaN(bpm) || bpm < 40){
+				bpm = 40;
+			}
+			else if(bpm > 160){
+				bpm = 160;
+			}
+		let brickSpeed = parseInt(this.brickSpeedField.value);
+			if(isNaN(brickSpeed) || brickSpeed < 200){
+				brickSpeed = 200;
+			}
+			else if(bpm > 2000){
+				brickSpeed = 2000;
+			}
+		let duration = parseInt(this.durationField.value);
+			if(isNaN(duration) || duration < 0){
+				duration = 0;
+			}
+			else if(duration > 600){
+				duration = 600;
+			}
+		let songStartOffset = parseInt(this.songStartOffsetField.value);
+			if(isNaN(songStartOffset) || songStartOffset < 0){
+				songStartOffset = 0;
+			}
+			else if(songStartOffset > 6){
+				songStartOffset = 6;
+			}
+		
+		game.modifySong(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset);
+	}
+
+	this.formDiv.appendChild(this.nameLabel);
+	this.formDiv.appendChild(this.nameField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.artistLabel);
+	this.formDiv.appendChild(this.artistField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.difficultyLabel);
+	this.formDiv.appendChild(this.difficultyField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.bpmLabel);
+	this.formDiv.appendChild(this.bpmField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.brickSpeedLabel);
+	this.formDiv.appendChild(this.brickSpeedField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.durationLabel);
+	this.formDiv.appendChild(this.durationField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.songStartOffsetLabel);
+	this.formDiv.appendChild(this.songStartOffsetField);
+}
+Object.setPrototypeOf(ModifySongDialog.prototype, GetInputDialog.prototype);
+
+// class for creating a dialog to save the current song to the database. extends GetInputDialog
+function SaveSongDialog(overlayParent, menuParent){
+	GetInputDialog.call(this, overlayParent, menuParent);
+	
+	this.nameLabel;
+	this.artistLabel;
+	this.difficultyLabel;
+	this.bpmLabel;
+	this.brickSpeedLabel;
+	this.durationLabel;
+	this.songStartOffsetLabel;
+
+	this.formTitle.innerHTML = "Save Song";
+
+	let game = overlayParent.getGame();
+	let songData = game.getSongData();
+	let newLine = () => { return document.createElement("br"); }
+
+	this.nameLabel = document.createElement("label");
+	this.artistLabel = document.createElement("label");
+	this.difficultyLabel = document.createElement("label");
+	this.bpmLabel = document.createElement("label");
+	this.brickSpeedLabel = document.createElement("label");
+	this.durationLabel = document.createElement("label");
+	this.songStartOffsetLabel = document.createElement("label");
+
+	this.nameLabel.innerHTML = "Name: " + songData.name;
+	this.artistLabel.innerHTML = "Artist: " + songData.artist;
+	this.difficultyLabel.innerHTML = "Difficulty(0-10): " + songData.difficulty;
+	this.bpmLabel.innerHTML = "BPM(40-160): " + songData.gameData.bpm;
+	this.brickSpeedLabel.innerHTML = "Brick Speed(200-2000): " + songData.gameData.brickSpeed;
+	this.durationLabel.innerHTML = "Duration(0-600): " + songData.duration;
+	this.songStartOffsetLabel.innerHTML = "Song start offset (max of 4 beats at 40 bpm, 6 seconds): " + songData.startOffset;
+
+	this.submitFunction = () => {
+		game.saveSong(songData);
+	}
+
+	this.formDiv.appendChild(this.nameLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.artistLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.difficultyLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.bpmLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.brickSpeedLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.durationLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.songStartOffsetLabel);
+}
+Object.setPrototypeOf(SaveSongDialog.prototype, GetInputDialog.prototype);
+
+// class for creating a dialog to overwrite the current song in the database. extends GetInputDialog
+function OverwriteSongDialog(overlayParent, menuParent){
+	GetInputDialog.call(this, overlayParent, menuParent);
+	
+	this.nameLabel;
+	this.artistLabel;
+	this.difficultyLabel;
+	this.bpmLabel;
+	this.brickSpeedLabel;
+	this.durationLabel;
+	this.songStartOffsetLabel;
+
+	this.formTitle.innerHTML = "Overwrite Song";
+
+	let game = overlayParent.getGame();
+	let songData = game.getSongData();
+	let newLine = () => { return document.createElement("br"); }
+
+	this.nameLabel = document.createElement("label");
+	this.artistLabel = document.createElement("label");
+	this.difficultyLabel = document.createElement("label");
+	this.bpmLabel = document.createElement("label");
+	this.brickSpeedLabel = document.createElement("label");
+	this.durationLabel = document.createElement("label");
+	this.songStartOffsetLabel = document.createElement("label");
+
+	this.nameLabel.innerHTML = "Name: " + songData.name;
+	this.artistLabel.innerHTML = "Artist: " + songData.artist;
+	this.difficultyLabel.innerHTML = "Difficulty(0-10): " + songData.difficulty;
+	this.bpmLabel.innerHTML = "BPM(40-160): " + songData.gameData.bpm;
+	this.brickSpeedLabel.innerHTML = "Brick Speed(200-2000): " + songData.gameData.brickSpeed;
+	this.durationLabel.innerHTML = "Duration(0-600): " + songData.duration;
+	this.songStartOffsetLabel.innerHTML = "Song start offset (max of 4 beats at 40 bpm, 6 seconds): " + songData.startOffset;
+
+	this.submitFunction = () => {
+		game.overwriteSong(songData);
+	}
+
+	this.formDiv.appendChild(this.nameLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.artistLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.difficultyLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.bpmLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.brickSpeedLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.durationLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.songStartOffsetLabel);
+}
+Object.setPrototypeOf(OverwriteSongDialog.prototype, GetInputDialog.prototype);
+
+// class for creating a dialog to load song data from the database. extends GetInputDialog
+function LoadSongDialog(overlayParent, menuParent){
+	GetInputDialog.call(this, overlayParent, menuParent);
+
+	let songSelector;
+	let options;
+
+	let idIDX;
+	let nameIDX;
+	let artistIDX;
+	let difficultyIDX;
+	let durationIDX;
+	let timeCreatedIDX;
+	let timeModifiedIDX;
+
+	this.formTitle.innerHTML = "Load Song";
+
+	songSelector = document.createElement("select");
+	options = [];
+	
+	let game = overlayParent.getGame();
+	let songs = game.songs();
+	
+	if(songs.length != 0){
+		songs[0]["columns"].forEach( (columnName, idx) => {
+			if(columnName.toUpperCase() === "SONGID"){
+				idIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "NAME"){
+				nameIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "ARTIST"){
+				artistIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "DIFFICULTY"){
+				difficultyIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "DURATION"){
+				durationIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "TIMECREATED"){
+				timeCreatedIDX = idx;
+			}
+			else if(columnName.toUpperCase() === "TIMEMODIFIED"){
+				timeModifiedIDX = idx;
+			}
+		});
+		songs[0]["values"].forEach( (song, idx) => {
+			let newOption = document.createElement("option");
+			let timeCreated = new Date(song[timeCreatedIDX]).toString();
+			let timeModified = new Date(song[timeModifiedIDX]).toString();
+			newOption.value = song[idIDX];
+			newOption.innerHTML = `Name: ${song[nameIDX]}, Artist: ${song[artistIDX]}, Difficulty: ${song[difficultyIDX]}, Duration: ${song[durationIDX]}, Time Created: ${timeCreated}, Time Modified: ${timeModified}`;
+			
+			options.push(newOption);
+		});
+	}
+	
+	options.forEach( o => {
+		songSelector.appendChild(o);
+	});
+	
+	this.submitFunction = () => {
+		game.loadSong(songSelector.value);
+	};
+	
+	this.formDiv.appendChild(songSelector);
+}
+Object.setPrototypeOf(LoadSongDialog.prototype, GetInputDialog.prototype);
 
 Overlay.prototype.goToGameOverlay = function(){
 	if(this.capturingComponent){
@@ -1291,9 +1746,23 @@ GameMenu.prototype.handleEvent = function(evt){
 		this.overlayParent.closeMenu();
 		return "toggle-play";
 	} 
-	else {
-		return Menu.prototype.handleEvent.call(this, evt);
-	}
+	else if(evt.type == "keydown"){
+		// master menu
+		this.menuKeyPresses.unshift(evt);
+		if(this.menuKeyPresses.length > 6){
+			this.menuKeyPresses.pop();
+		}
+		if( this.menuKeyPresses.length >= 6 && this.menuKeyPresses[5].keyCode == 77
+		&& this.menuKeyPresses[4].keyCode == 65  && this.menuKeyPresses[3].keyCode == 83 
+		&& this.menuKeyPresses[2].keyCode == 84 && this.menuKeyPresses[1].keyCode == 69 
+		&& this.menuKeyPresses[0].keyCode == 82 ){
+			this.overlayParent.closeMenu();
+			this.overlayParent.openMasterGameMenu();
+			return null;
+		}
+	} 
+
+	return Menu.prototype.handleEvent.call(this, evt);
 }
 
 MenuSelection.prototype.select = function(){
@@ -1386,271 +1855,3 @@ ChangeControlDialog.prototype.handleEvent = function(evt){
 
 	GetInputDialog.prototype.handleEvent.call(this, evt);
 }
-
-/* !!! !!! !!! turn these functions into classes with handleEvent functions */
-
-// TODO rename or accept fields
-function newSongDialog(overlayParent){
-	let game = overlayParent.getGame();
-	let songData = game.getSongData();
-
-	let bpm = songData.gameData.bpm;
-	let songStartOffset = songData.startOffset;
-	let brickSpeed = songData.gameData.brickSpeed;
-	let duration = songData.duration;
-	
-	game.newSong(bpm, brickSpeed, duration, songStartOffset);
-}
-
-// TODO less ugly, this and loadSongDialog
-function saveSongDialog(overlayParent){
-	let game = overlayParent.getGame();
-	let songData = game.getSongData();
-
-	let div = document.createElement("div");
-	let saveButton = document.createElement("button");
-	let overwriteButton = document.createElement("button");
-	let nameLabel = document.createElement("label");
-	let nameField = document.createElement("input");
-	let artistLabel = document.createElement("label");
-	let artistField = document.createElement("input");
-	let difficultyLabel = document.createElement("label");
-	let difficultyField = document.createElement("input");
-	let bpmLabel = document.createElement("label");
-	let bpmField = document.createElement("input");
-	let brickSpeedLabel = document.createElement("label"); // !!! modify brick speed in editor
-	let brickSpeedField = document.createElement("input");
-	let durationLabel = document.createElement("label");
-	let durationField = document.createElement("input");
-	let startOffsetLabel = document.createElement("label");
-	let startOffsetField = document.createElement("input");
-	let filenameLabel = document.createElement("label");
-	let filenameField = document.createElement("input");
-	let newLine = () => { return document.createElement("br"); }
-	
-	div.className = "extra-dialog";
-	
-	nameLabel.innerHTML = "Song name";
-	artistLabel.innerHTML = "Artist";
-	difficultyLabel.innerHTML = "Difficulty";
-	bpmLabel.innerHTML = "BPM";
-	brickSpeedLabel.innerHTML = "Brick Speed";
-	durationLabel.innerHTML = "Song Duration";
-	startOffsetLabel.innerHTML = "Start Offset";
-	filenameLabel.innerHTML = "Song file name";
-	
-	nameField.type = "text";
-	nameField.defaultValue = songData.name;
-	artistField.type = "text";
-	artistField.defaultValue = songData.artist;
-	difficultyField.type = "text";
-	difficultyField.defaultValue = songData.difficulty;
-	bpmField.type = "text";
-	bpmField.defaultValue = songData.gameData.bpm;
-	brickSpeedField.type = "text";
-	brickSpeedField.defaultValue = songData.gameData.brick_speed;
-	durationField.type = "text";
-	durationField.defaultValue = songData.duration;
-	startOffsetField.type = "text";
-	startOffsetField.defaultValue = songData.startOffset;
-	filenameField.type = "text";
-	filenameField.defaultValue = songData.filename;
-	
-	saveButton.innerHTML = "Save";
-	overwriteButton.innerHTML = "Overwrite";
-	
-	div.appendChild(nameLabel);
-	div.appendChild(nameField);
-	div.appendChild(newLine());
-	div.appendChild(artistLabel);
-	div.appendChild(artistField);
-	div.appendChild(newLine());
-	div.appendChild(difficultyLabel);
-	div.appendChild(difficultyField);
-	div.appendChild(newLine());
-	div.appendChild(bpmLabel);
-	div.appendChild(bpmField);
-	div.appendChild(newLine());
-	div.appendChild(brickSpeedLabel);
-	div.appendChild(brickSpeedField);
-	div.appendChild(newLine());
-	div.appendChild(durationLabel);
-	div.appendChild(durationField);
-	div.appendChild(newLine());
-	div.appendChild(startOffsetLabel);
-	div.appendChild(startOffsetField);
-	div.appendChild(newLine());
-	div.appendChild(filenameLabel);
-	div.appendChild(filenameField);
-	div.appendChild(newLine());
-	div.appendChild(saveButton);
-	div.appendChild(overwriteButton);
-	
-	document.body.appendChild(div);
-	
-	let submitForm = evt => {
-		document.removeEventListener("keydown", pressKey);
-		saveButton.removeEventListener("click", submitForm);
-		overwriteButton.removeEventListener("click", submitForm);
-		
-		let overwrite = (evt.target == overwriteButton) ? true : false;
-		
-		songData.name = nameField.value,
-		songData.artist = artistField.value,
-		songData.difficulty = difficultyField.value,
-		songData.bpm = bpmField.value,
-		songData.brickSpeed = brickSpeedField.value,
-		songData.duration = durationField.value,
-		songData.startOffset = startOffsetField.value,
-		songData.filename = filenameField.value
-		
-		let fn = game => {
-			game.saveSong(songData, overwrite);
-		}
-		eventPropagator.runOnGame(fn);
-		
-		div.remove();
-	};
-	let pressKey = evt => {
-		if(evt.keyCode == 27){
-			document.removeEventListener("keydown", pressKey);
-			saveButton.removeEventListener("click", submitForm);
-			overwriteButton.removeEventListener("click", submitForm);
-			
-			div.remove();
-		}
-	}
-	
-	saveButton.addEventListener("click", submitForm);
-	overwriteButton.addEventListener("click", submitForm);
-	document.addEventListener("keydown", pressKey);
-}
-
-function loadSongDialog(overlayParent){
-	let div = document.createElement("div");
-	let songSelector = document.createElement("select");
-	let submitButton = document.createElement("button");
-	let options = [];
-	
-	div.className = "extra-dialog";
-	
-	submitButton.innerHTML = "Load song";
-	
-	let retrieveSongs = game => {
-		return game.songs();
-	}
-	
-	let songs = eventPropagator.runOnGame(retrieveSongs);
-	let idIDX;
-	let nameIDX;
-	let artistIDX;
-	let difficultyIDX;
-	let durationIDX;
-	let timeCreatedIDX;
-	let timeModifiedIDX;
-	
-	if(songs.length != 0){
-		songs[0]["columns"].forEach( (columnName, idx) => {
-			if(columnName.toUpperCase() === "SONGID"){
-				idIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "NAME"){
-				nameIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "ARTIST"){
-				artistIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "DIFFICULTY"){
-				difficultyIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "DURATION"){
-				durationIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "TIMECREATED"){
-				timeCreatedIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "TIMEMODIFIED"){
-				timeModifiedIDX = idx;
-			}
-		});
-		songs[0]["values"].forEach( (song, idx) => {
-			let newOption = document.createElement("option");
-			let timeCreated = new Date(song[timeCreatedIDX]).toString();
-			let timeModified = new Date(song[timeModifiedIDX]).toString();
-			newOption.value = song[idIDX];
-			newOption.innerHTML = `Name: ${song[nameIDX]}, Artist: ${song[artistIDX]}, Difficulty: ${song[difficultyIDX]}, Duration: ${song[durationIDX]}, Time Created: ${timeCreated}, Time Modified: ${timeModified}`;
-			
-			options.push(newOption);
-		});
-	}
-	
-	options.forEach( o => {
-		songSelector.appendChild(o);
-	});
-	div.appendChild(songSelector);
-	div.appendChild(submitButton);
-	document.body.appendChild(div);
-	
-	let submitForm = () => {
-		document.removeEventListener("keydown", pressKey);
-		submitButton.removeEventListener("click", submitForm);
-		
-		let fn = game => {
-			game.loadSong(parseInt(songSelector.value));
-		}
-		eventPropagator.runOnGame(fn, true);
-		
-		div.remove();
-	};
-	let pressKey = evt => {
-		if(evt.keyCode == 27){
-			document.removeEventListener("keydown", pressKey);
-			submitButton.removeEventListener("click", submitForm);
-			
-			div.remove();
-		}
-	}
-	
-	submitButton.addEventListener("click", submitForm);
-	document.addEventListener("keydown", pressKey);
-}
-
-function uploadMP3Dialog(overlayParent){
-	let div = document.createElement("div");
-	let input = document.createElement("input");
-	let mp3File;
-	
-	input.type = "file"
-	
-	div.className = "extra-dialog";
-	
-	div.appendChild(input);
-	document.body.appendChild(div);
-	
-	let pressKey = evt => {
-		if(evt.keyCode == 27){
-			document.removeEventListener("keydown", pressKey);
-			input.removeEventListener("change", inputFile);
-			
-			div.remove();
-		}
-	}
-	
-	let inputFile = evt => {
-		document.removeEventListener("keydown", pressKey);
-		input.removeEventListener("change", inputFile);
-			
-		mp3File = input.files[0];
-		
-		let fn = game => {
-			game.loadMP3(mp3File);
-		}
-		
-		eventPropagator.runOnGame(fn);
-		
-		div.remove();
-	} 
-	
-	input.addEventListener("change", inputFile);
-	document.addEventListener("keydown", pressKey);
-} 

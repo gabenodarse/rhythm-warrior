@@ -245,14 +245,14 @@ Game.prototype.songs = function(){
 	return songs;
 }
 
-// TODO confirmation on deleted data, this and load song
-Game.prototype.newSong = function(bpm, brickSpeed, duration, songStartOffset){
+// !!! confirmation on deleted data, this and other song modification methods
+Game.prototype.newSong = function(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset){
 	this.gameObject = wasm.Game.new(bpm, brickSpeed, duration);
 	this.songData = {
 		songID: null,
-		name: "",
-		artist: "",
-		difficulty: "",
+		name: name,
+		artist: artist,
+		difficulty: difficulty,
 		bpm: bpm, // !!! bpm brick speed and duration all also occur in the wasm Game object, consistency not guaranteed
 		brickSpeed: brickSpeed,
 		duration: duration,
@@ -262,6 +262,38 @@ Game.prototype.newSong = function(bpm, brickSpeed, duration, songStartOffset){
 		filename: "",
 		gameData: this.gameObject.game_data()
 	}
+}
+
+Game.prototype.modifySong = function(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset){
+	let oldSongID = this.songData.songID;
+	let notes = this.gameObject.bricks();
+
+	this.gameObject = wasm.Game.new(bpm, brickSpeed, duration);
+
+	notes.forEach( note =>{
+		this.gameObject.add_brick(wasm.BrickData.new(
+			note.brick_type, note.beat_pos, note.end_beat_pos, note.x_pos, 
+			note.is_triplet, note.is_trailing, note.is_leading, note.is_hold_note));
+	});
+	
+	this.songData = {
+		songID: oldSongID,
+		name: name,
+		artist: artist,
+		difficulty: difficulty,
+		bpm: bpm,
+		brickSpeed: brickSpeed,
+		duration: duration,
+		startOffset: songStartOffset,
+		timeCreated: 0,
+		timeModified: 0,
+		filename: "",
+		gameData: this.gameObject.game_data()
+	}
+
+	this.audioBuffer = null;
+	
+	this.preRender();
 }
 
 Game.prototype.loadSong = function(songID){
@@ -360,13 +392,16 @@ Game.prototype.saveSong = function(songData, overwrite){
 		note.approx_time = wasm.BrickData.approx_time(note.beat_pos, this.songData.bpm);
 	});
 	
+	this.database.saveSong(songData, notes);
+}
+
+Game.prototype.overwriteSong = function(songData, overwrite){
+	let notes = this.gameObject.bricks();
+	notes.forEach( note => {
+		note.approx_time = wasm.BrickData.approx_time(note.beat_pos, this.songData.bpm);
+	});
 	
-	if(overwrite === true && this.songData.songID !== null){
-		this.database.overwriteSong(songData, notes);
-	}
-	else{
-		this.database.saveSong(songData, notes);
-	}
+	this.database.overwriteSong(songData, notes);
 }
 
 Game.prototype.toEditor = function(){

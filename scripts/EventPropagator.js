@@ -1,7 +1,6 @@
 
 import {Game, Editor} from "./Game.js";
 
-let g_menuKeyPresses = [] // TODO needs to be global?
 // !!! resizing resizes both overlay and screen div, prompt "your screen has been resized. OK to adjust"
 	// resizing retains aspect ratio, attempts to size sidebar to accommodate
 	
@@ -56,7 +55,7 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	
 	window.addEventListener("keydown", evt => { this.handleEvent(evt) });
 	window.addEventListener("click", evt => {this.handleEvent(evt)})
-	window.addEventListener("keyup", evt => { this.handleKeyUp(evt) });
+	window.addEventListener("keyup", evt => { this.handleEvent(evt) });
 	window.addEventListener("resize", this.handleResize );
 	window.addEventListener("gameRender", evt => { this.handleGameRender(evt) });
 
@@ -86,26 +85,32 @@ EventPropagator.prototype.handleResize = function(evt){
 	}
 }
 
-EventPropagator.prototype.handleKeyUp = function(evt){
-	if(typeof(this.controls[evt.keyCode]) === "number"){
-		if(this.isRunning){
-			this.game.stopControl(this.controls[evt.keyCode]);
-		} else {
-			let controlID = this.controls[evt.keyCode];
-			this.resumeEvents[ controlID ] = new KeyboardEvent("keyup", { keyCode: evt.keyCode, });
-		}
-	}
-}
-
 EventPropagator.prototype.handleEvent = function(evt){
 	if(this.overlay.isCapturing()){
 		let instruction = this.overlay.passEvent(evt);
 		this.runInstruction(instruction);
+
+		if(evt.type == "keydown" && typeof(this.controls[evt.keyCode]) === "number"){
+			let controlID = this.controls[evt.keyCode];
+			this.resumeEvents[ controlID ] = null;			
+		}
+		else if(evt.type == "keyup" && typeof(this.controls[evt.keyCode]) === "number") {
+			let controlID = this.controls[evt.keyCode];
+			this.resumeEvents[ controlID ] = new KeyboardEvent("keyup", { keyCode: evt.keyCode, });
+		}
+
+
 		return;
 	}
 	
 	if(evt.type == "keydown"){
 		this.handleGameKeyDown(evt);
+		return;
+	}
+
+	if(evt.type === "keyup"){
+		this.handleGameKeyUp(evt);
+		return;
 	}
 	
 }
@@ -118,30 +123,15 @@ EventPropagator.prototype.handleGameKeyDown = function(evt){
 		this.overlay.openGameMenu();
 	} 
 
-	if(typeof(this.controls[evt.keyCode]) === "number"){
-		if(this.isRunning){
-			this.game.startControl(this.controls[evt.keyCode]);
-		} else {
-			let controlID = this.controls[evt.keyCode];
-			this.resumeEvents[ controlID ] = null;			
-		}
+	if(typeof(this.controls[evt.keyCode]) === "number" && this.isRunning){
+		this.game.startControl(this.controls[evt.keyCode]);
 	}
-	
-	/* !!! !!! !!!
-	else if(this.overlay.isElementShowing("menu")){
-		this.overlay.passEvent("menu", evt);
-		
-		// master menu
-		g_menuKeyPresses.unshift(evt);
-		if(g_menuKeyPresses.length > 10){
-			g_menuKeyPresses.pop();
-		}
-		if( g_menuKeyPresses.length >= 6 && !this.overlay.isElementShowing("homeScreen")
-		&& g_menuKeyPresses[5].keyCode == 77 && g_menuKeyPresses[4].keyCode == 65  && g_menuKeyPresses[3].keyCode == 83 
-		&& g_menuKeyPresses[2].keyCode == 84 && g_menuKeyPresses[1].keyCode == 69 && g_menuKeyPresses[0].keyCode == 82 ){
-			this.overlay.populateMenu("masterGameMenu");
-		}
-	} */
+}
+
+EventPropagator.prototype.handleGameKeyUp = function(evt){
+	if(typeof(this.controls[evt.keyCode]) === "number" && this.isRunning){
+		this.game.stopControl(this.controls[evt.keyCode]);
+	}
 }
 
 EventPropagator.prototype.runInstruction = function(instruction){
