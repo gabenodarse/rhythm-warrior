@@ -606,9 +606,9 @@ function NewSongDialog(overlayParent, menuParent){
 	this.artistLabel.innerHTML = "Artist: ";
 	this.difficultyLabel.innerHTML = "Difficulty(0-10): ";
 	this.bpmLabel.innerHTML = "BPM(40-160): ";
-	this.brickSpeedLabel.innerHTML = "Brick Speed(200-2000): ";
+	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): ";
 	this.durationLabel.innerHTML = "Duration(0-600): ";
-	this.songStartOffsetLabel.innerHTML = "Song start offset (0 if unknown): ";
+	this.songStartOffsetLabel.innerHTML = "Song start offset (0-6, use 0 if unknown): ";
 
 	this.nameField.defaultValue = "";
 	this.nameField.type = "text";
@@ -648,11 +648,11 @@ function NewSongDialog(overlayParent, menuParent){
 				bpm = 160;
 			}
 		let brickSpeed = parseInt(this.brickSpeedField.value);
-			if(isNaN(brickSpeed) || brickSpeed < 200){
-				brickSpeed = 200;
+			if(isNaN(brickSpeed) || brickSpeed < 100){
+				brickSpeed = 100;
 			}
-			else if(bpm > 2000){
-				brickSpeed = 2000;
+			else if(brickSpeed > 5000){
+				brickSpeed = 5000;
 			}
 		let duration = parseInt(this.durationField.value);
 			if(isNaN(duration) || duration < 0){
@@ -743,9 +743,9 @@ function ModifySongDialog(overlayParent, menuParent){
 	this.artistLabel.innerHTML = "Artist: ";
 	this.difficultyLabel.innerHTML = "Difficulty(0-10): ";
 	this.bpmLabel.innerHTML = "BPM(40-160): ";
-	this.brickSpeedLabel.innerHTML = "Brick Speed(200-2000): ";
+	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): ";
 	this.durationLabel.innerHTML = "Duration(0-600): ";
-	this.songStartOffsetLabel.innerHTML = "Song start offset (max of 4 beats at 40 bpm, 6 seconds): ";
+	this.songStartOffsetLabel.innerHTML = "Song start offset (0-6): ";
 
 	this.nameField.defaultValue = songData.name;
 	this.nameField.type = "text";
@@ -781,11 +781,11 @@ function ModifySongDialog(overlayParent, menuParent){
 				bpm = 160;
 			}
 		let brickSpeed = parseInt(this.brickSpeedField.value);
-			if(isNaN(brickSpeed) || brickSpeed < 200){
-				brickSpeed = 200;
+			if(isNaN(brickSpeed) || brickSpeed < 100){
+				brickSpeed = 100;
 			}
-			else if(bpm > 2000){
-				brickSpeed = 2000;
+			else if(brickSpeed > 5000){
+				brickSpeed = 5000;
 			}
 		let duration = parseInt(this.durationField.value);
 			if(isNaN(duration) || duration < 0){
@@ -858,9 +858,9 @@ function SaveSongDialog(overlayParent, menuParent){
 	this.artistLabel.innerHTML = "Artist: " + songData.artist;
 	this.difficultyLabel.innerHTML = "Difficulty(0-10): " + songData.difficulty;
 	this.bpmLabel.innerHTML = "BPM(40-160): " + songData.gameData.bpm;
-	this.brickSpeedLabel.innerHTML = "Brick Speed(200-2000): " + songData.gameData.brickSpeed;
+	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): " + songData.gameData.brickSpeed;
 	this.durationLabel.innerHTML = "Duration(0-600): " + songData.duration;
-	this.songStartOffsetLabel.innerHTML = "Song start offset (max of 4 beats at 40 bpm, 6 seconds): " + songData.startOffset;
+	this.songStartOffsetLabel.innerHTML = "Song start offset (0-6): " + songData.startOffset;
 
 	this.submitFunction = () => {
 		game.saveSong(songData);
@@ -912,9 +912,9 @@ function OverwriteSongDialog(overlayParent, menuParent){
 	this.artistLabel.innerHTML = "Artist: " + songData.artist;
 	this.difficultyLabel.innerHTML = "Difficulty(0-10): " + songData.difficulty;
 	this.bpmLabel.innerHTML = "BPM(40-160): " + songData.gameData.bpm;
-	this.brickSpeedLabel.innerHTML = "Brick Speed(200-2000): " + songData.gameData.brickSpeed;
+	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): " + songData.gameData.brickSpeed;
 	this.durationLabel.innerHTML = "Duration(0-600): " + songData.duration;
-	this.songStartOffsetLabel.innerHTML = "Song start offset (max of 4 beats at 40 bpm, 6 seconds): " + songData.startOffset;
+	this.songStartOffsetLabel.innerHTML = "Song start offset (0-6): " + songData.startOffset;
 
 	this.submitFunction = () => {
 		game.overwriteSong(songData);
