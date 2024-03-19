@@ -91,7 +91,8 @@ graphics can be displayed with WebGL or with canvases. WebGL uses the gpu, so is
 data is stored as songs and notes.\
 
 the time notes are meant to be played is described by the "beat position", i.e. the beat value when the note is meant to be played.
-	together with the beats per minute (bpm) value of the song, the beat position describes an exact time to play the note (e.g 4.25 beat pos at 60 bpm is at 4.25 seconds)
+	together with the beats per minute (bpm) value of the song, the beat position describes an exact time to play the note 
+	e.g. a beat pos of 16 means 16 quarter beats since the song start. At 60 bpm this is at 4 seconds
 
 songs contain metadata about the song (song name, artist, time created, time modified, file name, difficulty) \
 	- difficulty meant to be between 0-10

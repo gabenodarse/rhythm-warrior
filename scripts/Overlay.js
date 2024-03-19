@@ -139,67 +139,39 @@ function EndGameScreen(overlayParent){
 	this.overlayParent = overlayParent;
 }
 
-// EditorOverlay class, contains the editor's guiding lines and the editor's controls
+// EditorOverlay class, contains a canvas where editor elements are drawn and the editor's controls
 // !!! range scroller isn't modified when the song is modified
 function EditorOverlay(overlayParent){
-	this.div;
-	this.editorCanvas;
-	this.scroller;
-	this.controls;
-	
-	this.div = document.createElement("div");
-	this.div.className = "editor-overlay";
-	
-	this.editorCanvas = new EditorCanvas(overlayParent);
-	this.controls = new EditorControls(overlayParent);
-	
-	this.div.appendChild(this.editorCanvas.domElement());
-	this.div.appendChild(this.controls.domElement());
-}
-
-// EditorCanvas class, displays lines that (should) represent beat breakpoints in a song
-	// clicking on the canvas adds notes, wheel scrolling changes the song time
-function EditorCanvas(overlayParent){
-	this.canvas;
-	this.beatInterval; // how long between beats in seconds // !!! get from game every time or store as state?
-	this.groundPosOffset = wasm.ground_pos();
-	this.mouseDown;
-	this.changeBrickType;
-	this.selectedBrick;
-	this.songData;
 	this.overlayParent;
-	
-	this.mouseDown = false;
-	this.changeBrickType = false;
-	this.selectedBrick = null;
-	this.songData = null;
-	this.overlayParent = overlayParent;
-	
-	let dims = wasm.game_dimensions();
-	this.canvas = document.createElement("canvas");
-	this.canvas.width = dims.x;
-	this.canvas.height = dims.y;
-	this.canvas.className = "full-sized";
-}
-
-// EditorControls class, contains controls which can control EditorCanvas scrolling and game playing/pausing
-// TODO add triplet note button to convert editor canvas's selected brick to triplet note
-function EditorControls(overlayParent){
 	this.div;
+	this.scroller;
+	this.canvas;
+	this.controlsDiv;
+	
+	// editor controls
 	this.rangesDiv;
 	this.buttonDiv;
 	this.broadRange;
 	this.preciseRange;
 	this.playPauseButton;
-	this.songDuration;
-	this.beatInterval;
+
+	// necessary data
+	this.groundPosOffset;
+	this.mouseDown; // boolean describing if the mouse is down
+	this.changeBrickType; // boolean describing whether to change the brick type
+	this.selectedBrick; // current selected brick
 	
+	// initialize
+	this.overlayParent = overlayParent;
+
 	this.div = document.createElement("div");
-	this.div.className = "editor-controls";
+	this.div.className = "editor-overlay";
 	
+	// controls
+	this.controlsDiv = document.createElement("div");
+	this.controlsDiv.className = "editor-controls";
 	this.rangesDiv = document.createElement("div");
 	this.rangesDiv.className = "editor-ranges-div";
-	
 	this.buttonDiv = document.createElement("div");
 	this.buttonDiv.className = "editor-buttons-div";
 	
@@ -218,32 +190,34 @@ function EditorControls(overlayParent){
 	this.preciseRange.value = 0;
 	
 	this.playPauseButton = document.createElement("button");
-	this.playPauseButton.innerHTML = "|> / ||";
-	
-	/*this.rangesDiv.addEventListener("input", evt => {
-        let t = parseFloat(this.broadRange.value) / 100 * this.songDuration 
-			+ parseFloat(this.preciseRange.value) * this.beatInterval;
-			
-		let fn = game => {
-			game.seek(t);
-		}
-		
-		eventPropagator.runOnGame(fn, true);
-    });
-	
-	this.playPauseButton.addEventListener("click", evt => {
-		// prevent artificial clicks
-		if(evt.clientX != 0 || evt.clientY != 0) {
-			eventPropagator.togglePlay();
-		}
-	});*/
-	
+	this.playPauseButton.innerHTML = "Play/Pause";
+
 	this.rangesDiv.appendChild(this.preciseRange);
 	this.rangesDiv.appendChild(this.broadRange);
 	this.buttonDiv.appendChild(this.playPauseButton);
-	this.div.appendChild(this.rangesDiv);
-	this.div.appendChild(this.buttonDiv);
+	this.controlsDiv.appendChild(this.rangesDiv);
+	this.controlsDiv.appendChild(this.buttonDiv);
+
+	// canvas
+	this.canvas = document.createElement("canvas");
+	let dims = wasm.game_dimensions();
+	this.canvas.width = dims.x;
+	this.canvas.height = dims.y;
+	this.canvas.className = "full-sized";
+	
+	// data
+	this.groundPosOffset = wasm.ground_pos();
+	this.mouseDown = false;
+	this.changeBrickType = false;
+	this.selectedBrick = null;
+
+	this.div.appendChild(this.canvas);
+	this.div.appendChild(this.controlsDiv);
+
+	this.draw();
 }
+
+
 
 // Score class, displays a score which may be updated
 function Score(){
@@ -353,23 +327,24 @@ function MasterGameMenu(overlayParent){
 
 	this.addSelection(() => {
 		this.overlayParent.closeMenu();
-		this.overlayDiv.goToHomeScreen();
+		this.overlayParent.goToHomeScreen();
 		return "stop-loop";
 	}, "Quit song");
 
 	this.addSelection(() => {
-		let game = this.overlayDiv.getGame();
+		let game = this.overlayParent.getGame();
 		game = game.toEditor();
 
-		this.overlayDiv.goToEditorOverlay();
+		this.overlayParent.closeMenu();
+		this.overlayParent.goToEditorOverlay();
 		return null;
 	}, "Enable Editor");
 
 	this.addSelection(() => {
-		let game = this.overlayDiv.getGame();
+		let game = this.overlayParent.getGame();
 		game = game.toGame();
 
-		this.overlayDiv.goToGameOverlay();
+		this.overlayParent.goToGameOverlay();
 		return null;
 	}, "Disable Editor");
 
@@ -858,7 +833,7 @@ function SaveSongDialog(overlayParent, menuParent){
 	this.artistLabel.innerHTML = "Artist: " + songData.artist;
 	this.difficultyLabel.innerHTML = "Difficulty(0-10): " + songData.difficulty;
 	this.bpmLabel.innerHTML = "BPM(40-160): " + songData.gameData.bpm;
-	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): " + songData.gameData.brickSpeed;
+	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): " + songData.gameData.brick_speed;
 	this.durationLabel.innerHTML = "Duration(0-600): " + songData.duration;
 	this.songStartOffsetLabel.innerHTML = "Song start offset (0-6): " + songData.startOffset;
 
@@ -912,7 +887,7 @@ function OverwriteSongDialog(overlayParent, menuParent){
 	this.artistLabel.innerHTML = "Artist: " + songData.artist;
 	this.difficultyLabel.innerHTML = "Difficulty(0-10): " + songData.difficulty;
 	this.bpmLabel.innerHTML = "BPM(40-160): " + songData.gameData.bpm;
-	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): " + songData.gameData.brickSpeed;
+	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): " + songData.gameData.brick_speed;
 	this.durationLabel.innerHTML = "Duration(0-600): " + songData.duration;
 	this.songStartOffsetLabel.innerHTML = "Song start offset (0-6): " + songData.startOffset;
 
@@ -1007,10 +982,6 @@ function LoadSongDialog(overlayParent, menuParent){
 Object.setPrototypeOf(LoadSongDialog.prototype, GetInputDialog.prototype);
 
 Overlay.prototype.goToGameOverlay = function(){
-	if(this.capturingComponent){
-		throw Error("attempting to go to game while a dom component is still capturing events");
-	}
-	
 	this.removeCurrentOverlay();
 
 	let gameOverlay = new GameOverlay(this);
@@ -1046,7 +1017,6 @@ Overlay.prototype.goToEndGameScreen = function(){
 }
 
 Overlay.prototype.removeCurrentOverlay = function(){
-	this.removeCapturingComponent();
 	if(this.currentOverlay){
 		// TODO make sure currentOverlay has a DOM element and is a child of the parent overlay
 		this.currentOverlay.domElement().remove();
@@ -1111,10 +1081,10 @@ Overlay.prototype.closeMenu = function(){
 			this.setCapturingComponent(this.currentOverlay);
 		}
 	} else if(this.menu){
-		console.log("Closing a menu that isn't capturing events");
+		throw Error("Closing a menu that isn't capturing events");
 		this.menu.domElement().remove();
 	} else {
-		console.log("Attempting to close menu when no menu is open");
+		throw Error("Attempting to close menu when no menu is open");
 	}
 
 	this.menu = null;
@@ -1320,58 +1290,59 @@ EndGameScreen.prototype.handleEvent = function(evt){
 
 EditorOverlay.prototype.update = function(){
 	let songData = this.overlayParent.getGame().getSongData();
+
+	let songDuration = songData.gameData.duration;
+	let beatInterval = songData.gameData.beat_interval;
+	let time = songData.gameData.time_running;
 	
-	this.editorCanvas.updateSongData(songData);
-	this.controls.updateSongData(songData);
+	// reset the precise range to 0 if the time has changed since the ranges were used
+	let prevT = parseFloat(this.broadRange.value) / 100 * songDuration 
+		+ parseFloat(this.preciseRange.value) * beatInterval;
+	if(time - prevT > 0.5 || prevT - time > 0.5){
+		this.broadRange.value = time / songDuration * 100;
+		this.preciseRange.value = 0;
+	}
+
+	this.draw();
 }
 
 EditorOverlay.prototype.domElement = function(){
 	return this.div;
 }
 
-EditorOverlay.prototype.handleEvent = function(evt){
-	if(evt.type == "keydown" && evt.keyCode == 27){
-		let overlay = this.overlayParent;
-		overlay.openMasterGameMenu();
-	}
-	return this.editorCanvas.handleEvent(evt);
-}
+EditorOverlay.prototype.timeToY = function(time){
+	let songData = this.overlayParent.getGame().getSongData();
 
-EditorCanvas.prototype.domElement = function(){
-	return this.canvas;
-}
-
-EditorCanvas.prototype.timeToY = function(time){
-	let timeDifference = time - this.songData.gameData.time_running;
+	let timeDifference = time - songData.gameData.time_running;
 	let currentY = wasm.ground_pos() - wasm.player_dimensions().y / 2;
-	let newY = currentY + timeDifference * this.songData.gameData.brick_speed;
+	let newY = currentY + timeDifference * songData.gameData.brick_speed;
 	return newY;
 }
 
-EditorCanvas.prototype.yToTime = function(y){
+EditorOverlay.prototype.yToTime = function(y){
+	let songData = this.overlayParent.getGame().getSongData();
+
 	let currentY = wasm.ground_pos() - wasm.player_dimensions().y / 2;
 	let yDifference = y - currentY;
-	let timeDifference = yDifference / this.songData.gameData.brick_speed;
+	let timeDifference = yDifference / songData.gameData.brick_speed;
 	
-	return this.songData.gameData.time_running + timeDifference;
+	return songData.gameData.time_running + timeDifference;
 }
 
-EditorCanvas.prototype.xToNotePos = function(x){
+EditorOverlay.prototype.xToNotePos = function(x){
 	return Math.floor(x / wasm.brick_dimensions().x);
 }
 
-EditorCanvas.prototype.notePosToX = function(notePos){
+EditorOverlay.prototype.notePosToX = function(notePos){
 	return x * wasm.brick_dimensions().x;
 }
 
-EditorCanvas.prototype.updateSongData = function(songData){
-	this.songData = songData;
-	
-	this.draw();
-}
+EditorOverlay.prototype.draw = function(){
+	let game = this.overlayParent.getGame();
+	let songData = game.getSongData();
 
-EditorCanvas.prototype.draw = function(){
-	let songData = this.songData;
+	game.preRender();
+
 	let ctx = this.canvas.getContext("2d");
 	ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 	
@@ -1439,8 +1410,30 @@ EditorCanvas.prototype.draw = function(){
 	}
 }
 
-EditorCanvas.prototype.handleEvent = function(evt){
-	if(evt.type == "keydown"){
+EditorOverlay.prototype.handleEvent = function(evt){
+	let songData = this.overlayParent.getGame().getSongData();
+
+	if(evt.type == "keydown" && evt.keyCode == 27){
+		let overlay = this.overlayParent;
+		overlay.openMasterGameMenu();
+		return "stop-loop";
+	}
+	
+	else if(evt.type == "input" && (evt.target == this.broadRange || evt.target == this.preciseRange)){
+		let t = parseFloat(this.broadRange.value) / 100 * songData.gameData.duration 
+			+ parseFloat(this.preciseRange.value) * songData.gameData.beat_interval;
+			
+		let game = this.overlayParent.getGame();
+		game.seek(t);
+		this.draw();
+		return "stop-loop"
+	}
+
+	else if(evt.type == "click" && evt.target == this.playPauseButton){
+		return "toggle-play"
+	}
+
+	else if(evt.type == "keydown"){
 		return this.handleKeyDown(evt);
 	} else if(evt.type == "mousedown"){
 		return this.handleMouseDown(evt);
@@ -1455,8 +1448,9 @@ EditorCanvas.prototype.handleEvent = function(evt){
 	return null;
 }
 
-EditorCanvas.prototype.handleKeyDown = function(evt){
+EditorOverlay.prototype.handleKeyDown = function(evt){
 	if(evt.keyCode == 32 || evt.keyCode == 13){ // space or enter
+		this.selectedBrick = null;
 		return("toggle-play");
 	}
 	
@@ -1536,48 +1530,50 @@ EditorCanvas.prototype.handleKeyDown = function(evt){
 	return null;
 }
 
-EditorCanvas.prototype.handleMouseDown = function(evt){
-	console.log("event target: " + evt.target + " event type: " + evt.type);
-	/*
+EditorOverlay.prototype.handleMouseDown = function(evt){
+	if(evt.target != this.canvas){
+		return null;
+	}
+	
+	let game = this.overlayParent.getGame();
+	let songData = game.getSongData();
 	let x = evt.clientX - this.canvas.offsetLeft;
 	let y = evt.clientY - this.canvas.offsetTop;
 	
-	let dimFactors = this.eventPropagator.runOnGame( game => { return game.dimensionFactors(); } );
+	let dimFactors = game.dimensionFactors();
 	x = x / dimFactors.xFactor;
 	y = y / dimFactors.yFactor;
 	let approxTime = this.yToTime(y);
 	let xPos = this.xToNotePos(x);
-	let beatPos = wasm.BrickData.closest_beat_pos(approxTime, this.songData.gameData.bpm);
+	let beatPos = wasm.BrickData.closest_beat_pos(approxTime, songData.gameData.bpm);
 	
-	let brick = this.eventPropagator.runOnGame( game => { return game.selectBrick(beatPos, xPos); } );
+	let brick = game.selectBrick(beatPos, xPos);
 	
 	if(brick){
-		// if clicking on the selected brick, remove the selected brick and recreate it with new brick type
-		if(this.selectedBrick && this.selectedBrick.beat_pos == brick.beat_pos && this.selectedBrick.x_pos == brick.x_pos
-		&& this.selectedBrick.is_leading == brick.is_leading && this.selectedBrick.is_trailing == brick.is_trailing
-		&& this.selectedBrick.is_triplet == brick.is_triplet){
+		// if clicking on an already selected brick, indicate to change the brick type
+		if(this.selectedBrick && this.selectedBrick.beat_pos == brick.beat_pos && this.selectedBrick.x_pos == brick.x_pos){
 			this.changeBrickType = true;
 		}
 	} else {
-		this.eventPropagator.runOnGame( game => { game.createDefaultBrick(beatPos, xPos); } );
-		brick = this.eventPropagator.runOnGame( game => { return game.selectBrick(beatPos, xPos); } );
+		game.createDefaultBrick(beatPos, xPos);
+		brick = game.selectBrick(beatPos, xPos);
 	}
 	
 	this.selectedBrick = brick;
 	
 	this.mouseDown = true;
 	this.draw();
-	*/
+
+	return "stop-loop";
 }
 
-EditorCanvas.prototype.handleMouseUp = function(evt){
-	console.log("event target: " + evt.target + " event type: " + evt.type);
-	/*
+EditorOverlay.prototype.handleMouseUp = function(evt){
 	this.mouseDown = false;
 	if(this.changeBrickType){
+		let game = this.overlayParent.getGame();
 		let brick = this.selectedBrick;
-		this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-			brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+		game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+			brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
 		
 		if(brick.brick_type < 2){
 			brick.brick_type += 1;
@@ -1585,90 +1581,80 @@ EditorCanvas.prototype.handleMouseUp = function(evt){
 			brick.brick_type = 0;
 		}
 		
-		this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-			brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
-		this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(brick.beat_pos, brick.x_pos); } );
+		game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+			brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
+		this.selectedBrick = game.selectBrick(brick.beat_pos, brick.x_pos);
+
+		this.changeBrickType = false;
+
+		this.draw();
 	}
-	this.draw();
-	*/
+
+	return null;
 }
 	
-EditorCanvas.prototype.handleMouseMove = function(evt){
-	console.log("event target: " + evt.target + " event type: " + evt.type);
-	/*
+EditorOverlay.prototype.handleMouseMove = function(evt){
+	if(evt.target != this.canvas){
+		return null;
+	}
+	
 	if(this.mouseDown && this.selectedBrick){
+		let game = this.overlayParent.getGame();
+		let songData = game.getSongData();
 		let x = evt.clientX - this.canvas.offsetLeft;
 		let y = evt.clientY - this.canvas.offsetTop;
 		
-		let dimFactors = this.eventPropagator.runOnGame( game => { return game.dimensionFactors(); } );
+		let dimFactors = game.dimensionFactors();
 		x = x / dimFactors.xFactor;
 		y = y / dimFactors.yFactor;
 		let approxTime = this.yToTime(y);
 		let xPos = this.xToNotePos(x);
-		let beatPos = wasm.BrickData.closest_beat_pos(approxTime, this.songData.gameData.bpm);
+		let beatPos = wasm.BrickData.closest_beat_pos(approxTime, songData.gameData.bpm);
 		
+		// if the beat pos or the x pos has changed, move the brick
 		if(beatPos != this.selectedBrick.end_beat_pos || xPos != this.selectedBrick.x_pos){
 			this.changeBrickType = false;
 			
 			let brick = this.selectedBrick;
-			this.eventPropagator.runOnGame(game => { game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			game.removeBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
 			
 			if(beatPos > brick.beat_pos){
 				brick.is_hold_note = true;
 				brick.end_beat_pos = beatPos;
 			} else {
 				brick.is_hold_note = false;
-				brick.end_beat_pos = brick.beat_pos;
+				brick.beat_pos = beatPos;
+				brick.end_beat_pos = beatPos;
 			}
 			
 			if(xPos != brick.x_pos){
 				brick.x_pos = xPos;
 			}
 			
-			this.eventPropagator.runOnGame(game => { game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
-				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note); });
+			game.createBrick(brick.brick_type, brick.beat_pos, brick.end_beat_pos, brick.x_pos, 
+				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
 				
-			this.selectedBrick = this.eventPropagator.runOnGame( game => { return game.selectBrick(beatPos, xPos); });
+			this.selectedBrick = game.selectBrick(beatPos, xPos);
 		}
+
 	}
 	this.draw();
-	*/
+	
+	return null;
 }
 
-EditorCanvas.prototype.handleWheel = function(evt){
-	console.log("event target: " + evt.target + " event type: " + evt.type);
-	/*
-	let time;
-	let getTime = game => {
-		return game.getSongData().gameData.time_running;
-	}
-	let updateTime = game => {
-		game.seek(time);
-	}
+EditorOverlay.prototype.handleWheel = function(evt){
+	let game = this.overlayParent.getGame();
+	let time = game.getSongData().gameData.time_running;
+	let brickSpeed = game.getSongData().gameData.brick_speed;
 	
-	time = this.eventPropagator.runOnGame(getTime);
-	time += evt.deltaY / 256;
-	
-	this.eventPropagator.runOnGame(updateTime, true);
-	*/
-}
+	time += evt.deltaY / brickSpeed;
+	game.seek(time);
 
-EditorControls.prototype.domElement = function(){
-	return this.div;
-}
+	this.draw();
 
-EditorControls.prototype.updateSongData = function(songData){
-	let songDuration = songData.gameData.duration;
-	let beatInterval = songData.gameData.beat_interval;
-	let time = songData.gameData.time_running;
-	
-	let prevT = parseFloat(this.broadRange.value) / 100 * songDuration 
-		+ parseFloat(this.preciseRange.value) * beatInterval;
-	if(time - prevT > 0.5 || prevT - time > 0.5){
-		this.broadRange.value = time / songDuration * 100;
-		this.preciseRange.value = 0;
-	}
+	return "stop-loop";
 }
 
 Menu.prototype.addSelection = function(onSelect, selectionText){
@@ -1722,7 +1708,7 @@ Menu.prototype.openDialog = function(dialog){
 		return;
 	}
 	else{
-		console.log("Menu.openDialog called with a non-dialog argument");
+		throw Error("Menu.openDialog called with a non-dialog argument");
 	}
 }
 
@@ -1733,7 +1719,7 @@ Menu.prototype.removeDialog = function(){
 		return;
 	}
 	else{
-		console.log("Menu attempting to close dialog while none is open");
+		throw Error("Menu attempting to close dialog while none is open");
 	}
 }
 
@@ -1760,6 +1746,15 @@ GameMenu.prototype.handleEvent = function(evt){
 			this.overlayParent.openMasterGameMenu();
 			return null;
 		}
+	} 
+
+	return Menu.prototype.handleEvent.call(this, evt);
+}
+
+MasterGameMenu.prototype.handleEvent = function(evt){
+	if(evt.type == "keydown" && evt.keyCode == 27){
+		this.overlayParent.closeMenu();
+		return "toggle-play";
 	} 
 
 	return Menu.prototype.handleEvent.call(this, evt);

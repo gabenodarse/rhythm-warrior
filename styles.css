@@ -176,6 +176,7 @@ canvas{
 	width: 30%;
 	font-size: 3em;
 	background-color: #9999ff;
+	z-index: 100;
 }
 
 .menu-selection{
@@ -198,6 +199,7 @@ canvas{
 	font-size: 1rem;
 	top: 10px;
 	background-color: #aaaaaa;
+	z-index: 200;
 }
 
 .dialog-form-div{

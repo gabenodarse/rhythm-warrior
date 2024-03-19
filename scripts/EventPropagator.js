@@ -54,8 +54,13 @@ EventPropagator.prototype.init = function(game, overlay, controls){
 	this.resizeRefresher = true;
 	
 	window.addEventListener("keydown", evt => { this.handleEvent(evt) });
-	window.addEventListener("click", evt => {this.handleEvent(evt)})
 	window.addEventListener("keyup", evt => { this.handleEvent(evt) });
+	window.addEventListener("mousedown", evt => {this.handleEvent(evt)});
+	window.addEventListener("mousemove", evt => {this.handleEvent(evt)});
+	window.addEventListener("mouseup", evt => {this.handleEvent(evt)});
+	window.addEventListener("click", evt => {this.handleEvent(evt)});
+	window.addEventListener("wheel", evt => {this.handleEvent(evt)});
+	window.addEventListener("input", evt => { this.handleEvent(evt) });
 	window.addEventListener("resize", this.handleResize );
 	window.addEventListener("gameRender", evt => { this.handleGameRender(evt) });
 
@@ -69,10 +74,6 @@ EventPropagator.prototype.togglePlay = function(){
 		this.stopFlag = false;
 		this.startLoop();
 	}
-}
-
-EventPropagator.prototype.pause = function(){
-	this.stopFlag = true;
 }
 
 EventPropagator.prototype.handleResize = function(evt){
@@ -118,7 +119,7 @@ EventPropagator.prototype.handleEvent = function(evt){
 EventPropagator.prototype.handleGameKeyDown = function(evt){
 	if(evt.keyCode === 27){ // escape key
 		if(this.isRunning){
-			this.pause();
+			this.stopFlag = true;
 		}
 		this.overlay.openGameMenu();
 	} 
@@ -135,7 +136,6 @@ EventPropagator.prototype.handleGameKeyUp = function(evt){
 }
 
 EventPropagator.prototype.runInstruction = function(instruction){
-	console.log(instruction);
 	if(!instruction) return;
 	if(instruction == "toggle-play"){
 		this.togglePlay();
@@ -180,6 +180,7 @@ EventPropagator.prototype.gameLoop = function(){
 		this.overlay.update(fps);
 
 		requestAnimationFrame(() => {
+			// fps tracking
 			let now = performance.now();
 			let timePassed = now - this.lastFrame;
 			this.lastFrame = now;
