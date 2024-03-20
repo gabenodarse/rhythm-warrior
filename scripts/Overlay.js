@@ -142,6 +142,8 @@ function EndGameScreen(overlayParent){
 // EditorOverlay class, contains a canvas where editor elements are drawn and the editor's controls
 // !!! range scroller isn't modified when the song is modified
 function EditorOverlay(overlayParent){
+	let songData = overlayParent.getGame().getSongData();
+
 	this.overlayParent;
 	this.div;
 	this.scroller;
@@ -160,6 +162,8 @@ function EditorOverlay(overlayParent){
 	this.mouseDown; // boolean describing if the mouse is down
 	this.changeBrickType; // boolean describing whether to change the brick type
 	this.selectedBrick; // current selected brick
+	this.xFactor;
+	this.yFactor;
 	
 	// initialize
 	this.overlayParent = overlayParent;
@@ -180,7 +184,7 @@ function EditorOverlay(overlayParent){
 	this.broadRange.type = "range";
 	this.broadRange.max = 100;
 	this.broadRange.step = 0.1;
-	this.broadRange.value = 0;
+	this.broadRange.value = songData.gameData.time_running / songData.gameData.duration * 100;
 	
 	this.preciseRange = document.createElement("input");
 	this.preciseRange.className = "editor-precise-range";
@@ -210,6 +214,8 @@ function EditorOverlay(overlayParent){
 	this.mouseDown = false;
 	this.changeBrickType = false;
 	this.selectedBrick = null;
+	this.xFactor = 1;
+	this.yFactor = 1;
 
 	this.div.appendChild(this.canvas);
 	this.div.appendChild(this.controlsDiv);
@@ -1122,11 +1128,20 @@ Overlay.prototype.passEvent = function(evt){
 }
 
 // TODO updating song data should update score?
-Overlay.prototype.update = function(fps=null){
+Overlay.prototype.update = function(data=null){
 	this.currentOverlay.update();
 
 	if(this.currentOverlay instanceof GameOverlay){
-		this.currentOverlay.updateFPS(fps);
+		if(data){
+			this.currentOverlay.updateFPS(data.fps);
+		}
+	}
+
+	if(this.currentOverlay instanceof EditorOverlay){
+		if(!data){
+			throw Error("No data to update overlay");
+		}
+		this.currentOverlay.updateDimFactors(data.xFactor, data.yFactor);
 	}
 }
 
@@ -1306,6 +1321,11 @@ EditorOverlay.prototype.update = function(){
 	this.draw();
 }
 
+EditorOverlay.prototype.updateDimFactors = function(xFactor, yFactor){
+	this.xFactor = xFactor;
+	this.yFactor = yFactor;
+}
+
 EditorOverlay.prototype.domElement = function(){
 	return this.div;
 }
@@ -1340,8 +1360,6 @@ EditorOverlay.prototype.notePosToX = function(notePos){
 EditorOverlay.prototype.draw = function(){
 	let game = this.overlayParent.getGame();
 	let songData = game.getSongData();
-
-	game.preRender();
 
 	let ctx = this.canvas.getContext("2d");
 	ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -1540,9 +1558,8 @@ EditorOverlay.prototype.handleMouseDown = function(evt){
 	let x = evt.clientX - this.canvas.offsetLeft;
 	let y = evt.clientY - this.canvas.offsetTop;
 	
-	let dimFactors = game.dimensionFactors();
-	x = x / dimFactors.xFactor;
-	y = y / dimFactors.yFactor;
+	x = x / this.xFactor;
+	y = y / this.yFactor;
 	let approxTime = this.yToTime(y);
 	let xPos = this.xToNotePos(x);
 	let beatPos = wasm.BrickData.closest_beat_pos(approxTime, songData.gameData.bpm);
@@ -1604,9 +1621,8 @@ EditorOverlay.prototype.handleMouseMove = function(evt){
 		let x = evt.clientX - this.canvas.offsetLeft;
 		let y = evt.clientY - this.canvas.offsetTop;
 		
-		let dimFactors = game.dimensionFactors();
-		x = x / dimFactors.xFactor;
-		y = y / dimFactors.yFactor;
+		x = x / this.xFactor;
+		y = y / this.yFactor;
 		let approxTime = this.yToTime(y);
 		let xPos = this.xToNotePos(x);
 		let beatPos = wasm.BrickData.closest_beat_pos(approxTime, songData.gameData.bpm);

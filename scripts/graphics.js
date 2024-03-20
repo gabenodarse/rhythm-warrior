@@ -35,25 +35,6 @@ let fragmentShader;
 export function CanvasGraphics(images, screenDiv){
 	this.canvases // canvases where each canvas may hold 1 graphic
 
-	// pre-render timer
-	this.numPreRenders; // number of pre-renders for each average calculation
-	this.preRenderCounter; // counts number of pre-renders since last average calculation
-	this.preRenderTotalTime; // total pre-render time for the average calculation
-	this.minPreRenderTracker; // minimum pre-render time in this average time calculation
-	this.maxPreRenderTracker; // maximum pre-render time in this average time calculation
-	this.minPreRenderTime;
-	this.maxPreRenderTime;
-	this.averagePreRenderTime;
-
-	this.numPreRenders = 30;
-	this.preRenderCounter = 0;
-	this.preRenderTotalTime = 0;
-	this.minPreRenderTracker = 1000;
-	this.maxPreRenderTracker = 0;
-	this.minPreRenderTime = 0;
-	this.maxPreRenderTime = 0;
-	this.averagePreRenderTime = 0;
-
 	this.canvases = new Array(images.length);
 	// create canvases for each image
 	images.forEach( (imgArray,gIdx) => {
@@ -72,8 +53,6 @@ export function CanvasGraphics(images, screenDiv){
 }
 
 CanvasGraphics.prototype.preRender = function(instructions, xFactor, yFactor){
-	let startTime = performance.now();
-
 	// clear old canvases
 	this.canvases.forEach( graphicGroup => {
 		graphicGroup.forEach( canvasGroup => {
@@ -135,29 +114,6 @@ CanvasGraphics.prototype.preRender = function(instructions, xFactor, yFactor){
 		canvasGroup.canvases[idx].style.visibility = "visible";
 		++canvasGroup.nextCanvasIdx;
 	}
-
-	// pre render time tracking
-	let endTime = performance.now();
-	let preRenderTime = endTime - startTime;
-	this.preRenderTotalTime += preRenderTime;
-	if(preRenderTime < this.minPreRenderTracker){
-		this.minPreRenderTracker = preRenderTime;
-	}
-	if(preRenderTime > this.maxPreRenderTracker){
-		this.maxPreRenderTracker = preRenderTime;
-	}
-	this.preRenderCounter += 1;
-	if(this.preRenderCounter == this.numPreRenders){
-		let averagePreRenderTime = this.preRenderTotalTime / this.numPreRenders;
-		this.averagePreRenderTime = averagePreRenderTime;
-		this.minPreRenderTime = this.minPreRenderTracker;
-		this.maxPreRenderTime = this.maxPreRenderTracker;
-		
-		this.preRenderTotalTime = 0;
-		this.minPreRenderTracker = 1000;
-		this.maxPreRenderTracker = 0;
-		this.preRenderCounter = 0;
-	}
 }
 
 CanvasGraphics.prototype.resize = function(xFactor, yFactor){
@@ -184,25 +140,6 @@ export function WebGLGraphics(images, screenDiv){
 	this.program;
 	this.positionBuffer;
 	this.textures;
-
-	// pre-render timer
-	this.numPreRenders; // number of pre-renders for each average calculation
-	this.preRenderCounter; // counts number of pre-renders since last average calculation
-	this.preRenderTotalTime; // total pre-render time for the average calculation
-	this.minPreRenderTracker; // minimum pre-render time in this average time calculation
-	this.maxPreRenderTracker; // maximum pre-render time in this average time calculation
-	this.minPreRenderTime;
-	this.maxPreRenderTime;
-	this.averagePreRenderTime;
-
-	this.numPreRenders = 30;
-	this.preRenderCounter = 0;
-	this.preRenderTotalTime = 0;
-	this.minPreRenderTracker = 1000;
-	this.maxPreRenderTracker = 0;
-	this.minPreRenderTime = 0;
-	this.maxPreRenderTime = 0;
-	this.averagePreRenderTime = 0;
 
 	this.canvas = document.createElement("canvas");;
 	this.gl = this.canvas.getContext("webgl");;
@@ -306,8 +243,6 @@ WebGLGraphics.prototype.resize = function(xFactor, yFactor){
 }
 
 WebGLGraphics.prototype.preRender = function(instructions, xFactor, yFactor){
-	let startTime = performance.now();
-
 	const gl = this.gl;
 	const positionBuffer = this.positionBuffer;
 	const textures = this.textures;
@@ -361,29 +296,6 @@ WebGLGraphics.prototype.preRender = function(instructions, xFactor, yFactor){
 		gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
 		
 		gl.drawArrays(gl.TRIANGLES, 0, pointCount);
-	}
-
-	// pre render time tracking
-	let endTime = performance.now();
-	let preRenderTime = endTime - startTime;
-	this.preRenderTotalTime += preRenderTime;
-	if(preRenderTime < this.minPreRenderTracker){
-		this.minPreRenderTracker = preRenderTime;
-	}
-	if(preRenderTime > this.maxPreRenderTracker){
-		this.maxPreRenderTracker = preRenderTime;
-	}
-	this.preRenderCounter += 1;
-	if(this.preRenderCounter == this.numPreRenders){
-		let averagePreRenderTime = this.preRenderTotalTime / this.numPreRenders;
-		this.averagePreRenderTime = averagePreRenderTime;
-		this.minPreRenderTime = this.minPreRenderTracker;
-		this.maxPreRenderTime = this.maxPreRenderTracker;
-		
-		this.preRenderTotalTime = 0;
-		this.minPreRenderTracker = 1000;
-		this.maxPreRenderTracker = 0;
-		this.preRenderCounter = 0;
 	}
 
 	return [this.averagePreRenderTime, this.minPreRenderTime, this.maxPreRenderTime];

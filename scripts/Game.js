@@ -4,32 +4,13 @@ import * as wasm from "../pkg/music_mercenary.js";
 import * as load from "./load.js";
 
 export function Game () {
-	//members
-	this.width;
-	this.height;
-	this.xFactor;
-	this.yFactor;
-	
-	this.div;
+	// members
 	this.gameObject;
-	this.graphics;
 	this.database; 
 	this.songData;
 	this.isLoaded;
 	
 	this.lastTick; // time since the game last ticked
-
-	// tick timer
-	this.numTicksPerTickCalc; // number of ticks for each average calculation
-	this.tickCounter; // counts number of ticks since last average calculation
-	this.tickTotalTime; // total tick time for the average calculation
-	this.minTickTracker; // minimum tick time in this average time calculation
-	this.maxTickTracker; // maximum tick time in this average time calculation
-	this.minTickTime;
-	this.maxTickTime;
-	this.averageTickTime;
-
-	this.preRenderTime; // object containing average pre-render time, minimum pre-render time, and maximum pre-render time
 	
 	// audio
 	this.audioContext;
@@ -41,36 +22,15 @@ export function Game () {
 	// set defaults
 	this.isLoaded = false;
 
-	this.numTicksPerTickCalc = 30;
-	this.tickCounter = 0;
-	this.tickTotalTime = 0;
-	this.minTickTracker = 1000;
-	this.maxTickTracker = 0;
-	this.minTickTime = 0;
-	this.maxTickTime = 0;
-	this.averageTickTime = 0;
-
 	// TODO move to init function?
 	this.audioContext = new AudioContext();
 	this.audioTimeSafetyBuffer = 0.15;
-	
-	// initialize screen div
-	this.div = document.createElement("div");
-	this.div.id = "game";
-	document.getElementById("screen").appendChild(this.div);
 }
 
 Game.prototype.init = async function () {
 	if(this.isLoaded){ return; }
 	
 	let loader = new load.Loader();
-	
-	// initialize loader and load graphics
-	// TODO error handling when it takes too long
-	await loader.init()
-		.then( () => loader.loadGraphics("canvases", this.div)) // !!! !!! !!! canvases or webGL. Make just webGL
-		.then( res => this.graphics = res )
-		.catch( rej => { throw Error("Error initializing loader / loading assets: " + rej ) });
 		
 	// load sounds (not songs)
 		// !!! once there are more sound effects move to loader
@@ -86,26 +46,7 @@ Game.prototype.init = async function () {
 	
 	this.gameObject = wasm.Game.new();
 	
-	let gameDim = wasm.game_dimensions();
-	this.width = gameDim.x;
-	this.height = gameDim.y;
-	this.xFactor = 1;
-	this.yFactor = 1;
-	
 	this.isLoaded = true;
-}
-
-Game.prototype.resize = function(){
-	let width = this.div.clientWidth;
-	let height = this.div.clientHeight;
-	let gameDim = wasm.game_dimensions();
-	
-	this.width = width;
-	this.height = height;
-	this.xFactor = width / gameDim.x;
-	this.yFactor = height / gameDim.y;
-	this.graphics.resize(this.xFactor, this.yFactor);
-	this.preRender();
 }
 
 Game.prototype.start = async function (callback) {
@@ -147,13 +88,13 @@ Game.prototype.start = async function (callback) {
 	
 }
 
-Game.prototype.pause = function(){
+Game.prototype.stopAudio = function(){
 	this.audioSource.stop();
 }
 
 Game.prototype.restart = function(){
+	this.stopAudio();
 	this.gameObject.seek(0);
-	this.preRender();
 }
 
 Game.prototype.tick = function(){
@@ -176,29 +117,6 @@ Game.prototype.tick = function(){
 		audioSource.connect(this.audioContext.destination);
 		audioSource.start();
 	}
-
-	// tick time tracking
-	let endTickTime = performance.now();
-	let thisTickTime = endTickTime - now;
-	this.tickTotalTime += thisTickTime;
-	if(thisTickTime < this.minTickTracker){
-		this.minTickTracker = thisTickTime;
-	}
-	if(thisTickTime > this.maxTickTracker){
-		this.maxTickTracker = thisTickTime;
-	}
-	this.tickCounter += 1;
-	if(this.tickCounter == this.numTicksPerTickCalc){
-		let averageTickTime = this.tickTotalTime / this.numTicksPerTickCalc;
-		this.averageTickTime = averageTickTime / 1000; // convert to seconds
-		this.minTickTime = this.minTickTracker;
-		this.maxTickTime = this.maxTickTracker;
-		
-		this.tickTotalTime = 0;
-		this.minTickTracker = 1000;
-		this.maxTickTracker = 0;
-		this.tickCounter = 0;
-	}
 }
 
 Game.prototype.startControl = function(cntrl){
@@ -211,30 +129,14 @@ Game.prototype.stopControl = function(cntrl){
 	this.gameObject.stop_command(cntrl, (now - this.lastTick) / 1000);
 }
 
-Game.prototype.preRender = function(){
-	let instructions = this.gameObject.rendering_instructions();
-	
-	this.graphics.preRender(instructions, this.xFactor, this.yFactor);
-	this.preRenderTime = this.graphics.getPreRenderTime();
+Game.prototype.getRenderingInstructions = function(){
+	return this.gameObject.rendering_instructions();
 }
 
 Game.prototype.getScore = function(){
 	return this.songData.gameData.score;
 }
 
-Game.prototype.getTickTime = function(){
-	return {average: this.averageTickTime,min: this.minTickTime,max: this.maxTickTime};
-}
-
-Game.prototype.getPreRenderTime = function(){
-	return this.preRenderTime;
-}
-
-Game.prototype.dimensionFactors = function(){
-	return {xFactor: this.xFactor, yFactor: this.yFactor};
-}
-
-// TODO songData should contain score?
 Game.prototype.getSongData = function(){
 	return this.songData;
 }
@@ -374,8 +276,6 @@ Game.prototype.loadSong = function(songID){
 	}
 	
 	this.audioBuffer = null;
-	
-	this.preRender();
 }
 
 Game.prototype.loadMP3 = async function(file){

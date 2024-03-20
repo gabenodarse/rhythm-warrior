@@ -22,5 +22,5 @@ export async function run(){
 	overlay = new Overlay(game, controls);
 
 	propagator = new EventPropagator();
-	propagator.init(game, overlay, controls);
+	await propagator.init(game, overlay, controls);
 }
