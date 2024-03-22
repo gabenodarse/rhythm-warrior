@@ -1,6 +1,5 @@
 "use strict";
 
-import {Game, Editor} from "./Game.js";
 import * as load from "./load.js";
 import * as wasm from "../pkg/music_mercenary.js";
 
@@ -25,6 +24,7 @@ export function EventPropagator(){
 	this.isRunning;
 	this.stopFlag;
 	this.isPreRendered; // boolean describing whether the game state is ready to be re-rendered
+	this.isBlocking; // boolean describing whether events are being blocked
 	this.resizeRefresher; // boolean to ensure a maximum of one resize event is handled per frame
 
 	this.resize; // function to fire on resize events
@@ -72,6 +72,7 @@ EventPropagator.prototype.init = async function(game, overlay, controls){
 	this.resumeEvents = [];
 	this.stopFlag = false;
 	this.isRunning = false;
+	this.isBlocking = false;
 	this.resizeRefresher = true;
 
 	// fps
@@ -143,6 +144,140 @@ EventPropagator.prototype.togglePlay = function(){
 	}
 }
 
+EventPropagator.prototype.gameLoop = function(){
+	let songData = this.game.getSongData();
+	if(this.stopFlag){
+		this.stopLoop();
+		return;
+	} else if(songData.gameData.time_running > 60) {
+		this.stopLoop();
+		this.overlay.goToEndGameScreen();
+		return;
+	} else {
+		let startTickTime = performance.now();
+		this.game.tick();
+		let endTickTime = performance.now();
+		this.trackTickTime(endTickTime - startTickTime);
+		
+		this.overlay.update({fps: this.fps, xFactor: this.xFactor, yFactor: this.yFactor});
+
+		requestAnimationFrame(() => {
+			// fps tracking
+			this.trackFPS();
+
+			// if the game is pre-rendered, dispatch an event saying that the render occurred (triggering another pre-render)
+			// (instead of prerendering before the repaint, prerender when the gameRender event or some other event triggers one)
+			if(this.isPreRendered){
+				this.isPreRendered = false;
+				let evt = new Event("gameRender");
+				window.dispatchEvent( evt );
+			}
+			this.loop();
+		});
+	}
+}
+
+// sends the loop to the game as a callback, starting a new loop.
+EventPropagator.prototype.startLoop = function(){
+	if(this.isRunning){
+		throw Error("Attempting to start game when the game is already running");
+	}
+
+	this.isRunning = true;
+	this.stopFlag = false;
+	
+	for(let evt of this.resumeEvents) {
+		if(evt != null){
+			document.dispatchEvent(evt);
+		}
+	}
+	
+	// !!! !!! !!! reset fps tracker variables
+	this.lastFrame = performance.now();
+	this.frameTimes = new Array(this.numFramesPerFPS);
+	this.frameCounter = 0;
+	this.minFrameTracker = 1000;
+	this.maxFrameTracker = 0;
+
+	this.preRender();
+	this.isPreRendered = true;
+
+	this.game.start(this.loop);
+}
+
+// only called from within the asynchronous game/editor loop
+EventPropagator.prototype.stopLoop = function(){
+	this.isRunning = false;
+	this.stopFlag = false;
+	
+	this.game.stopAudio();
+}
+
+
+EventPropagator.prototype.runInstruction = function(instruction){
+	if(!instruction) return;
+	
+	if(instruction == "toggle-play"){
+		this.togglePlay();
+	} else if(instruction == "restart-song"){
+		this.game.restart(); // !!! should synchronize with game loop and pause game
+	} else if(instruction == "stop-loop"){
+		this.stopFlag = true;
+	} else if(instruction == "start-loop"){
+		this.startLoop();
+	} else if(instruction == "start-from-homescreen"){
+		this.startFromHomescreen();
+	} else if (instruction == "wait-song-load"){
+		this.waitSongLoad();
+	} else if (instruction == "pre-render"){
+		this.overlay.update({fps: this.fps, xFactor: this.xFactor, yFactor: this.yFactor});
+	}
+	else {
+		throw Error("EventPropagator.runInstruction, no instruction: " + instruction);
+	}
+
+	this.preRender();
+	this.isPreRendered = true;
+}
+
+EventPropagator.prototype.startFromHomescreen = function(){
+	this.isBlocking = true;
+	
+	if(this.game.getSongLoaded()){
+		this.isBlocking = false;
+		this.startLoop();
+		return;
+	}
+
+	else{
+		requestAnimationFrame(() => {this.startFromHomescreen()});
+		return;
+	}
+}
+
+EventPropagator.prototype.waitSongLoad = function(){
+	this.isBlocking = true;
+
+	if(this.game.getSongLoaded()){
+		this.isBlocking = false;
+		return;
+	}
+
+	else{
+		requestAnimationFrame(() => {this.waitSongLoad()});
+		return;
+	}
+}
+
+EventPropagator.prototype.preRender = function(){
+	let instructions = this.game.getRenderingInstructions();
+	
+	let startTime = performance.now();
+	this.graphics.preRender(instructions, this.xFactor, this.yFactor);
+	let endTime = performance.now();
+	this.trackPreRenderTime(endTime - startTime);
+}
+
 EventPropagator.prototype.handleResize = function(evt){
 	if(this.resizeRefresher){
 		this.resizeRefresher = false;
@@ -156,6 +291,8 @@ EventPropagator.prototype.handleResize = function(evt){
 			this.xFactor = width / gameDim.x;
 			this.yFactor = height / gameDim.y;
 			this.graphics.resize(this.xFactor, this.yFactor);
+			
+			this.overlay.update({fps: this.fps, xFactor: this.xFactor, yFactor: this.yFactor});
 
 			this.preRender();
 			this.resizeRefresher = true;
@@ -164,6 +301,8 @@ EventPropagator.prototype.handleResize = function(evt){
 }
 
 EventPropagator.prototype.handleEvent = function(evt){
+	if(this.isBlocking) return;
+
 	if(this.overlay.isCapturing()){
 		let instruction = this.overlay.passEvent(evt);
 		this.runInstruction(instruction);
@@ -182,18 +321,25 @@ EventPropagator.prototype.handleEvent = function(evt){
 	}
 	
 	if(evt.type == "keydown"){
-		this.handleGameKeyDown(evt);
+		this.gameKeyDown(evt);
 		return;
 	}
 
 	if(evt.type === "keyup"){
-		this.handleGameKeyUp(evt);
+		this.gameKeyUp(evt);
 		return;
 	}
 	
 }
 
-EventPropagator.prototype.handleGameKeyDown = function(evt){
+EventPropagator.prototype.handleGameRender = function(evt){
+	if(this.isPreRendered == false){
+		this.preRender();
+		this.isPreRendered = true;
+	}
+}
+
+EventPropagator.prototype.gameKeyDown = function(evt){
 	if(evt.keyCode === 27){ // escape key
 		if(this.isRunning){
 			this.stopFlag = true;
@@ -206,44 +352,10 @@ EventPropagator.prototype.handleGameKeyDown = function(evt){
 	}
 }
 
-EventPropagator.prototype.handleGameKeyUp = function(evt){
+EventPropagator.prototype.gameKeyUp = function(evt){
 	if(typeof(this.controls[evt.keyCode]) === "number" && this.isRunning){
 		this.game.stopControl(this.controls[evt.keyCode]);
 	}
-}
-
-EventPropagator.prototype.handleGameRender = function(evt){
-	if(this.isPreRendered == false){
-		this.preRender();
-		this.isPreRendered = true;
-	}
-}
-
-EventPropagator.prototype.runInstruction = function(instruction){
-	if(!instruction) return;
-	if(instruction == "toggle-play"){
-		this.togglePlay();
-	} else if(instruction == "restart-song"){
-		this.game.restart(); // !!! should synchronize with game loop and pause game
-	} else if(instruction == "stop-loop"){
-		this.stopFlag = true;
-	} else if(instruction == "start-loop"){
-		this.startLoop();
-	} else {
-		throw Error("EventPropagator.runInstruction, no instruction: " + instruction);
-	}
-
-	this.preRender();
-	this.isPreRendered = true;
-}
-
-EventPropagator.prototype.preRender = function(){
-	let instructions = this.game.getRenderingInstructions();
-	
-	let startTime = performance.now();
-	this.graphics.preRender(instructions, this.xFactor, this.yFactor);
-	let endTime = performance.now();
-	this.trackPreRenderTime(endTime - startTime);
 }
 
 // track how long the most recent frame lasted
@@ -320,76 +432,3 @@ EventPropagator.prototype.trackPreRenderTime = function(timePassed){
 	}
 }
 
-EventPropagator.prototype.gameLoop = function(){
-	let songData = this.game.getSongData();
-	if(this.stopFlag){
-		this.stopLoop();
-		return;
-	} else if(songData.gameData.time_running > 60) {
-		this.stopLoop();
-		this.overlay.goToEndGameScreen();
-		return;
-	} else {
-		let startTickTime = performance.now();
-		this.game.tick();
-		let endTickTime = performance.now();
-		this.trackTickTime(endTickTime - startTickTime);
-		
-		// TODO reduce fps info to just fps
-		let fps = "FPS: " + this.fps + "<br>MIN FRAME TIME (ms): " + this.minFrameTime + "<br>MAX FRAME TIME(ms): " + this.maxFrameTime
-			+ "<br>TICK TIME AVERAGE(ms): " + this.averageTickTime + "<br>MIN: " + this.minTickTime + "<br>MAX: " + this.maxTickTime
-			+ "<br>PRE-RENDER TIME AVERAGE(ms): " + this.averagePreRenderTime + "<br>MIN: " + this.minPreRenderTime + "<br>MAX: " + this.maxPreRenderTime;
-		
-		this.overlay.update({fps: fps, xFactor: this.xFactor, yFactor: this.yFactor});
-
-		requestAnimationFrame(() => {
-			// fps tracking
-			this.trackFPS();
-
-			// if the game is pre-rendered, dispatch an event saying that the render occurred (triggering another pre-render)
-			// (instead of prerendering before the repaint, prerender when the gameRender event or some other event triggers one)
-			if(this.isPreRendered){
-				this.isPreRendered = false;
-				let evt = new Event("gameRender");
-				window.dispatchEvent( evt );
-			}
-			this.loop();
-		});
-	}
-}
-
-// sends the loop to the game as a callback, starting a new loop.
-EventPropagator.prototype.startLoop = function(){
-	if(this.isRunning){
-		throw Error("Attempting to start game when the game is already running");
-	}
-
-	this.isRunning = true;
-	this.stopFlag = false;
-	
-	for(let evt of this.resumeEvents) {
-		if(evt != null){
-			document.dispatchEvent(evt);
-		}
-	}
-	
-	// reset fps tracker variables
-	this.lastFrame = performance.now();
-	this.frameTimes = new Array(this.numFramesPerFPS);
-	this.frameCounter = 0;
-	this.minFrameTracker = 1000;
-	this.maxFrameTracker = 0;
-
-	this.preRender();
-	this.isPreRendered = true;
-
-	this.game.start(this.loop);
-}
-
-// only called from within the asynchronous game/editor loop
-EventPropagator.prototype.stopLoop = function(){
-	this.isRunning = false;
-	this.stopFlag = false;
-	
-	this.game.stopAudio();
-}

@@ -2,6 +2,7 @@
 
 import * as wasm from "../pkg/music_mercenary.js";
 import * as load from "./load.js";
+import {Editor} from "./Editor.js";
 
 export function Game () {
 	// members
@@ -9,6 +10,7 @@ export function Game () {
 	this.database; 
 	this.songData;
 	this.isLoaded;
+	this.isSongLoaded;
 	
 	this.lastTick; // time since the game last ticked
 	
@@ -21,6 +23,7 @@ export function Game () {
 
 	// set defaults
 	this.isLoaded = false;
+	this.isSongLoaded = false;
 
 	// TODO move to init function?
 	this.audioContext = new AudioContext();
@@ -49,25 +52,9 @@ Game.prototype.init = async function () {
 	this.isLoaded = true;
 }
 
-Game.prototype.start = async function (callback) {
-	if(!this.audioBuffer){
-		let {notes, song} = this.database.loadSong(this.songData.songID);
-		
-		let filename;
-		song[0]["columns"].forEach( (columnName, idx) => {
-			if(columnName.toUpperCase() === "FILENAME"){
-				filename = song[0]["values"][0][idx];
-			}
-		});
-		
-		// fetch the mp3
-		// TODO add error handling
-		// !!! if file is not found?
-		await fetch(filename)
-			.then(res => res.arrayBuffer())
-			.then(res => this.audioContext.decodeAudioData(res))
-			.then(res => { this.audioBuffer = res; }
-		);
+Game.prototype.start = function (callback) {
+	if(!this.isSongLoaded){
+		throw Error("Attempting to start a song before load");
 	}
 	
 	// "An AudioBufferSourceNode can only be played once; after each call to start(),
@@ -127,6 +114,10 @@ Game.prototype.startControl = function(cntrl){
 Game.prototype.stopControl = function(cntrl){
 	let now = performance.now();
 	this.gameObject.stop_command(cntrl, (now - this.lastTick) / 1000);
+}
+
+Game.prototype.getSongLoaded = function(){
+	return this.isSongLoaded;
 }
 
 Game.prototype.getRenderingInstructions = function(){
@@ -192,16 +183,14 @@ Game.prototype.modifySong = function(name, artist, difficulty, bpm, brickSpeed, 
 		filename: "",
 		gameData: this.gameObject.game_data()
 	}
-
-	this.audioBuffer = null;
-	
-	this.preRender();
 }
 
-Game.prototype.loadSong = function(songID){
+Game.prototype.loadSong = async function(songID){
 	// !!! check if current song has been saved (modified flag?) 
 		// No need to show a check for regular game usage where songs aren't edited
 	// !!! creating a new game to load a new song? Or create a load_song method? wasm garbage collected?
+	this.isSongLoaded = false;
+
 	let {bricks, song} = this.database.loadSong(songID);
 	
 	let name, artist, difficulty, bpm, brickSpeed, duration, startOffset, timeCreated, timeModified, filename;
@@ -274,16 +263,28 @@ Game.prototype.loadSong = function(songID){
 		filename: filename,
 		gameData: this.gameObject.game_data()
 	}
+
+	// fetch the mp3
+		// !!! add error handling 
+	await fetch(filename)
+		.then(res => res.arrayBuffer())
+		.then(res => this.audioContext.decodeAudioData(res))
+		.then(res => { this.audioBuffer = res; }
+	);
 	
-	this.audioBuffer = null;
+	this.isSongLoaded = true;
 }
 
 Game.prototype.loadMP3 = async function(file){
+	this.isSongLoaded = false;
+
 	// !!! add error handling
 	await file.arrayBuffer()
 		.then(res => this.audioContext.decodeAudioData(res))
 		.then(res => { this.audioBuffer = res; }
 	);
+
+	this.isSongLoaded = true;
 }
 
 Game.prototype.saveSong = function(songData, overwrite){
@@ -314,45 +315,6 @@ Game.prototype.toEditor = function(){
 	
 	// !!! make broken notes reappear
 	Object.setPrototypeOf(this, Editor.prototype);
-	
-	return this;
-}
-
-export function Editor () {
-	Game.call(this);
-}
-
-Object.setPrototypeOf(Editor.prototype, Game.prototype);
-
-Editor.prototype.seek = function(time){
-	this.gameObject.seek(time);
-	this.songData.gameData = this.gameObject.game_data()
-	this.preRender();
-}
-
-Editor.prototype.createDefaultBrick = function(beatPos, xPos){
-	this.gameObject.add_brick(wasm.BrickData.new(0, beatPos, beatPos, xPos, false, false, false, false));
-}
-
-Editor.prototype.createBrick = function(brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote){
-	this.gameObject.add_brick(wasm.BrickData.new(brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote));
-}
-
-Editor.prototype.removeBrick = function(brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote){
-	this.gameObject.remove_brick(wasm.BrickData.new(brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote));
-}
-
-// TODO does not accound for is_trailing is_leading or is_triplet. Ambiguities in the brick selected can lead to bugs.
-Editor.prototype.selectBrick = function(beatPos, xPos){
-	return this.gameObject.select_brick(beatPos, xPos);
-}
-
-Editor.prototype.toGame = function(){
-	if(this.isLoaded == false) {
-		throw Error("game object has not been loaded");
-	}
-	
-	Object.setPrototypeOf(this, Game.prototype);
 	
 	return this;
 }

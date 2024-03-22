@@ -343,7 +343,7 @@ function MasterGameMenu(overlayParent){
 
 		this.overlayParent.closeMenu();
 		this.overlayParent.goToEditorOverlay();
-		return null;
+		return "pre-render";
 	}, "Enable Editor");
 
 	this.addSelection(() => {
@@ -351,7 +351,7 @@ function MasterGameMenu(overlayParent){
 		game = game.toGame();
 
 		this.overlayParent.goToGameOverlay();
-		return null;
+		return "pre-render";
 	}, "Disable Editor");
 
 	this.addSelection(() => {
@@ -652,7 +652,9 @@ function NewSongDialog(overlayParent, menuParent){
 		let file = this.fileInput.files[0];
 		
 		game.newSong(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset);
-		game.loadMP3(file)
+		game.loadMP3(file);
+
+		return "wait-song-load";
 	}
 
 	this.formDiv.appendChild(this.nameLabel);
@@ -784,6 +786,8 @@ function ModifySongDialog(overlayParent, menuParent){
 			}
 		
 		game.modifySong(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset);
+
+		return null;
 	}
 
 	this.formDiv.appendChild(this.nameLabel);
@@ -845,6 +849,7 @@ function SaveSongDialog(overlayParent, menuParent){
 
 	this.submitFunction = () => {
 		game.saveSong(songData);
+		return null;
 	}
 
 	this.formDiv.appendChild(this.nameLabel);
@@ -899,6 +904,7 @@ function OverwriteSongDialog(overlayParent, menuParent){
 
 	this.submitFunction = () => {
 		game.overwriteSong(songData);
+		return null;
 	}
 
 	this.formDiv.appendChild(this.nameLabel);
@@ -980,7 +986,8 @@ function LoadSongDialog(overlayParent, menuParent){
 	});
 	
 	this.submitFunction = () => {
-		game.loadSong(songSelector.value);
+		game.loadSong(parseInt(songSelector.value));
+		return "wait-song-load";
 	};
 	
 	this.formDiv.appendChild(songSelector);
@@ -1201,7 +1208,7 @@ HomeScreen.prototype.handleEvent = function(evt){
 			this.overlayParent.removeCapturingComponent();
 			this.overlayParent.goToGameOverlay();
 			
-			return("start-loop");
+			return("start-from-homescreen");
 		}
 		else{
 			throw Error("Home Menu song selection idx out of bounds");
@@ -1542,9 +1549,11 @@ EditorOverlay.prototype.handleKeyDown = function(evt){
 				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
 			this.selectedBrick = game.selectBrick(brick.beat_pos, brick.x_pos);
 		}
+
+		this.draw();
+		return "pre-render";
 	}
 	
-	this.draw();
 	return null;
 }
 
@@ -1605,6 +1614,7 @@ EditorOverlay.prototype.handleMouseUp = function(evt){
 		this.changeBrickType = false;
 
 		this.draw();
+		return "pre-render";
 	}
 
 	return null;
@@ -1652,10 +1662,11 @@ EditorOverlay.prototype.handleMouseMove = function(evt){
 				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
 				
 			this.selectedBrick = game.selectBrick(beatPos, xPos);
+			
+			this.draw();
+			return "pre-render";
 		}
-
 	}
-	this.draw();
 	
 	return null;
 }
@@ -1846,8 +1857,9 @@ GetInputDialog.prototype.handleEvent = function(evt){
 
 	if(evt.type == "click"){
 		if(evt.target == this.submitButton){
-			this.submitFunction();
+			let instruction = this.submitFunction();
 			this.menuParent.removeDialog();
+			return instruction;
 		}
 		else if (evt.target == this.cancelButton){
 			this.menuParent.removeDialog();
