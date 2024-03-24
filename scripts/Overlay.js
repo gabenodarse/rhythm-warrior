@@ -652,7 +652,13 @@ function NewSongDialog(overlayParent, menuParent){
 		let file = this.fileInput.files[0];
 		
 		game.newSong(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset);
-		game.loadMP3(file);
+
+		if(!file){
+			alert("no audio was uploaded. The previous song's audio will be used.")
+		}
+		else{
+			game.loadMP3(file);
+		}
 
 		return "wait-song-load";
 	}
@@ -700,6 +706,7 @@ function ModifySongDialog(overlayParent, menuParent){
 	this.durationField;
 	this.songStartOffsetLabel;
 	this.songStartOffsetField;
+	this.fileInput;
 
 	this.formTitle.innerHTML = "Modify Song";
 
@@ -745,6 +752,10 @@ function ModifySongDialog(overlayParent, menuParent){
 	this.songStartOffsetField.defaultValue = songData.startOffset;
 	this.songStartOffsetField.type = "text";
 
+	this.fileInput = document.createElement("input");
+	this.fileInput.innerHTML = "song"
+	this.fileInput.type = "file"
+
 	this.submitFunction = () => {
 		// validate data
 		let name = this.nameField.value;
@@ -784,7 +795,12 @@ function ModifySongDialog(overlayParent, menuParent){
 			else if(songStartOffset > 6){
 				songStartOffset = 6;
 			}
-		
+		let file = this.fileInput.files[0];
+
+		if(file){
+			game.loadMP3(file);
+		}
+	
 		game.modifySong(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset);
 
 		return null;

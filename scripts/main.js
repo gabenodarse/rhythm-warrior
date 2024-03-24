@@ -1,6 +1,6 @@
 
 import * as wasm from "../pkg/music_mercenary.js";
-import {Game} from "./Game.js";
+import {GameCore} from "./GameCore.js";
 import {EventPropagator} from "./EventPropagator.js";
 import {Overlay} from "./overlay.js";
 
@@ -16,8 +16,9 @@ export async function run(){
 	controls[87] = wasm.Input.Slash2; // w
 	controls[69] = wasm.Input.Slash3; // e
 	
-	game = new Game();
-	await game.init();
+	let gameCore = new GameCore();
+	await gameCore.init();
+	game = gameCore.toGame();
 
 	overlay = new Overlay(game, controls);
 
