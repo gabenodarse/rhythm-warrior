@@ -53,15 +53,22 @@ function HomeScreen(overlayParent){
 	this.homeScreenDiv;
 	this.songSelections;
 	this.selectionIdx;
+	this.logLink;
+	this.mmTitle;
 	
 	this.overlayParent = overlayParent;
 
 	this.homeScreenDiv = document.createElement("div");
 	this.homeScreenDiv.className = "homescreen";
+
+	this.logLink = document.createElement("button");
+	this.logLink.className = "log-link";
+	this.logLink.innerHTML = "Log";
+	this.homeScreenDiv.appendChild(this.logLink);
 	
-	let mmTitle = document.createElement("h1");
-	mmTitle.innerHTML = "Music Mercenary";
-	this.homeScreenDiv.appendChild(mmTitle);
+	this.mmTitle = document.createElement("h1");
+	this.mmTitle.innerHTML = "Music Mercenary";
+	this.homeScreenDiv.appendChild(this.mmTitle);
 
 	this.songSelections = [];
 	this.update();
@@ -1191,45 +1198,49 @@ HomeScreen.prototype.domElement = function(){
 }
 
 HomeScreen.prototype.handleEvent = function(evt){
-	if(evt.type != "keydown"){
-		return null;
+	if(evt.type == "click" && evt.target == this.logLink){
+		return "download-log";
 	}
 
-	if(evt.keyCode === 27){ // escape key
-		let overlay = this.overlayParent;
-		overlay.openHomeMenu();
-
-		return null;
-	} 
-	else if(evt.keyCode == 38 && this.selectionIdx > 0){ // up arrow
-		this.songSelections[this.selectionIdx].toggleHighlight();
-		--this.selectionIdx;
-		this.songSelections[this.selectionIdx].toggleHighlight();
-
-		return null;
-	}
-	else if(evt.keyCode == 40 && this.selectionIdx + 1 < this.songSelections.length){ // down arrow
-		this.songSelections[this.selectionIdx].toggleHighlight();
-		++this.selectionIdx;
-		this.songSelections[this.selectionIdx].toggleHighlight();
-
-		return null;
-	}
-	else if(evt.keyCode == 13){ // enter
-		if(this.songSelections[this.selectionIdx]){
-			let songID = this.songSelections[this.selectionIdx].getSongID();
-			let game = this.overlayParent.getGame();
-			game.loadSong(songID);
-
-			this.overlayParent.removeCapturingComponent();
-			this.overlayParent.goToGameOverlay();
-			
-			return("start-from-homescreen");
+	if(evt.type == "keydown"){
+		if(evt.keyCode === 27){ // escape key
+			let overlay = this.overlayParent;
+			overlay.openHomeMenu();
+	
+			return null;
+		} 
+		else if(evt.keyCode == 38 && this.selectionIdx > 0){ // up arrow
+			this.songSelections[this.selectionIdx].toggleHighlight();
+			--this.selectionIdx;
+			this.songSelections[this.selectionIdx].toggleHighlight();
+	
+			return null;
 		}
-		else{
-			throw Error("Home Menu song selection idx out of bounds");
+		else if(evt.keyCode == 40 && this.selectionIdx + 1 < this.songSelections.length){ // down arrow
+			this.songSelections[this.selectionIdx].toggleHighlight();
+			++this.selectionIdx;
+			this.songSelections[this.selectionIdx].toggleHighlight();
+	
+			return null;
+		}
+		else if(evt.keyCode == 13){ // enter
+			if(this.songSelections[this.selectionIdx]){
+				let songID = this.songSelections[this.selectionIdx].getSongID();
+				let game = this.overlayParent.getGame();
+				game.loadSong(songID);
+	
+				this.overlayParent.removeCapturingComponent();
+				this.overlayParent.goToGameOverlay();
+				
+				return("start-from-homescreen");
+			}
+			else{
+				throw Error("Home Menu song selection idx out of bounds");
+			}
 		}
 	}
+
+	return null;
 }
 
 HomeScreen.prototype.update = function(){

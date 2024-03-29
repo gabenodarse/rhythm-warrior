@@ -2,6 +2,7 @@
 
 import * as load from "./load.js";
 import * as wasm from "../pkg/music_mercenary.js";
+import {TimeTracker} from "./TimeTracker.js";
 
 // !!! resizing resizes both overlay and screen div, prompt "your screen has been resized. OK to adjust"
 	// resizing retains aspect ratio, attempts to size sidebar to accommodate
@@ -29,36 +30,11 @@ export function EventPropagator(){
 
 	this.resize; // function to fire on resize events
 	
-	// fps timer
-	this.lastFrame; // time of the last frame
-	this.numFramesPerFPS; // number of frames to draw between each fps calculation
-	this.frameTimes; // array of frame times for fps calculation
-	this.frameCounter; // counts number of frames since last fps calculation
-	this.minFrameTracker; // minimum frame time in this fps calculation
-	this.maxFrameTracker; // maximum frame time in this fps calculation
-	this.minFrameTime;
-	this.maxFrameTime;
+	// timers
+	this.tickTimeTracker;
+	this.preRenderTimeTracker;
+	this.frameTimeTracker;
 	this.fps;
-
-	// tick timer
-	this.numTicksPerTickCalc; // number of ticks for each average calculation
-	this.tickCounter; // counts number of ticks since last average calculation
-	this.tickTotalTime; // total tick time for the average calculation
-	this.minTickTracker; // minimum tick time in this average time calculation
-	this.maxTickTracker; // maximum tick time in this average time calculation
-	this.minTickTime;
-	this.maxTickTime;
-	this.averageTickTime;
-
-	// pre-render timer
-	this.numPreRenders; // number of pre-renders for each average calculation
-	this.preRenderCounter; // counts number of pre-renders since last average calculation
-	this.preRenderTotalTime; // total pre-render time for the average calculation
-	this.minPreRenderTracker; // minimum pre-render time in this average time calculation
-	this.maxPreRenderTracker; // maximum pre-render time in this average time calculation
-	this.minPreRenderTime;
-	this.maxPreRenderTime;
-	this.averagePreRenderTime;
 
 	this.loop;
 }
@@ -75,35 +51,11 @@ EventPropagator.prototype.init = async function(game, overlay, controls){
 	this.isBlocking = false;
 	this.resizeRefresher = true;
 
-	// fps
-	this.numFramesPerFPS = 30; 
-	this.frameTimes = new Array(this.numFramesPerFPS); 
-	this.frameCounter = 0; 
-	this.minFrameTracker = 1000;
-	this.maxFrameTracker = 0;
-	this.minFrameTime = 0;
-	this.maxFrameTime = 0;
+	// timers
+	this.tickTimeTracker = new TimeTracker(30);
+	this.preRenderTimeTracker = new TimeTracker(30);
+	this.frameTimeTracker = new TimeTracker(30);
 	this.fps = 0;
-
-	// tick timer
-	this.numTicksPerTickCalc = 30;
-	this.tickCounter = 0;
-	this.tickTotalTime = 0;
-	this.minTickTracker = 1000;
-	this.maxTickTracker = 0;
-	this.minTickTime = 0;
-	this.maxTickTime = 0;
-	this.averageTickTime = 0;
-
-	// pre-render timer
-	this.numPreRenders = 30;
-	this.preRenderCounter = 0;
-	this.preRenderTotalTime = 0;
-	this.minPreRenderTracker = 1000;
-	this.maxPreRenderTracker = 0;
-	this.minPreRenderTime = 0;
-	this.maxPreRenderTime = 0;
-	this.averagePreRenderTime = 0;
 
 	// screen div
 	let gameDim = wasm.game_dimensions();
@@ -149,24 +101,25 @@ EventPropagator.prototype.gameLoop = function(){
 	if(this.stopFlag){
 		this.stopLoop();
 		return;
-	} else if(songData.gameData.time_running > 60) {
+	} else if(songData.gameData.time_running > 60) { // !!! !!! !!! end loop at song end
 		this.stopLoop();
 		this.overlay.goToEndGameScreen();
 		return;
 	} else {
-		let startTickTime = performance.now();
+		this.tickTimeTracker.startTime(performance.now());
 		this.game.tick();
-		let endTickTime = performance.now();
-		this.trackTickTime(endTickTime - startTickTime);
+		this.tickTimeTracker.endTime(performance.now());
 		
 		this.overlay.update({fps: this.fps, xFactor: this.xFactor, yFactor: this.yFactor});
 
 		requestAnimationFrame(() => {
-			// fps tracking
-			this.trackFPS();
+			// fps
+			this.fps = this.frameTimeTracker.getMostRecent().pop().average;
+			this.frameTimeTracker.endTime(performance.now()); // record the end time for last frame before recording the start time of this one
+			this.frameTimeTracker.startTime(performance.now());
 
 			// if the game is pre-rendered, dispatch an event saying that the render occurred (triggering another pre-render)
-			// (instead of prerendering before the repaint, prerender when the gameRender event or some other event triggers one)
+			// (for performance, instead of prerendering before the repaint, prerender when the gameRender event or some other event triggers one)
 			if(this.isPreRendered){
 				this.isPreRendered = false;
 				let evt = new Event("gameRender");
@@ -192,17 +145,15 @@ EventPropagator.prototype.startLoop = function(){
 		}
 	}
 	
-	// !!! !!! !!! reset fps tracker variables
-	this.lastFrame = performance.now();
-	this.frameTimes = new Array(this.numFramesPerFPS);
-	this.frameCounter = 0;
-	this.minFrameTracker = 1000;
-	this.maxFrameTracker = 0;
-
 	this.preRender();
 	this.isPreRendered = true;
 
-	this.game.start(this.loop);
+	this.game.start(() => {
+		// start fps tracker
+		this.frameTimeTracker.startTime(performance.now());
+
+		this.loop();
+	});
 }
 
 // only called from within the asynchronous game/editor loop
@@ -220,17 +171,25 @@ EventPropagator.prototype.runInstruction = function(instruction){
 	if(instruction == "toggle-play"){
 		this.togglePlay();
 	} else if(instruction == "restart-song"){
-		this.game.restart(); // !!! should synchronize with game loop and pause game
+		if(this.isRunning){
+			this.togglePlay();
+		}
+		this.game.restart();
+		this.tickTimeTracker.reset();
+		this.preRenderTimeTracker.reset();
+		this.frameTimeTracker.reset();
 	} else if(instruction == "stop-loop"){
 		this.stopFlag = true;
 	} else if(instruction == "start-loop"){
 		this.startLoop();
 	} else if(instruction == "start-from-homescreen"){
 		this.startFromHomescreen();
-	} else if (instruction == "wait-song-load"){
+	} else if(instruction == "wait-song-load"){
 		this.waitSongLoad();
-	} else if (instruction == "pre-render"){
+	} else if(instruction == "pre-render"){
 		this.overlay.update({fps: this.fps, xFactor: this.xFactor, yFactor: this.yFactor});
+	} else if(instruction == "download-log"){
+		this.downloadLog();
 	}
 	else {
 		throw Error("EventPropagator.runInstruction, no instruction: " + instruction);
@@ -272,10 +231,9 @@ EventPropagator.prototype.waitSongLoad = function(){
 EventPropagator.prototype.preRender = function(){
 	let instructions = this.game.getRenderingInstructions();
 	
-	let startTime = performance.now();
+	this.preRenderTimeTracker.startTime(performance.now());
 	this.graphics.preRender(instructions, this.xFactor, this.yFactor);
-	let endTime = performance.now();
-	this.trackPreRenderTime(endTime - startTime);
+	this.preRenderTimeTracker.endTime(performance.now());
 }
 
 EventPropagator.prototype.handleResize = function(evt){
@@ -358,77 +316,24 @@ EventPropagator.prototype.gameKeyUp = function(evt){
 	}
 }
 
-// track how long the most recent frame lasted
-EventPropagator.prototype.trackFPS = function(){
-	let now = performance.now();
-	let timePassed = now - this.lastFrame;
+EventPropagator.prototype.downloadLog = function(){
+	let fileObj = {};
+	fileObj.tickAggregates = this.tickTimeTracker.getAggregates();
+	fileObj.preRenderAggregates = this.preRenderTimeTracker.getAggregates();
+	fileObj.frameAggregates = this.frameTimeTracker.getAggregates();
+	fileObj.ticksComplete = this.tickTimeTracker.getRecord();
+	fileObj.preRendersComplete = this.preRenderTimeTracker.getRecord();
+	fileObj.framesComplete = this.frameTimeTracker.getRecord();
 
-	this.frameTimes[this.frameCounter] = now; 
-	this.frameCounter += 1;
-	if(timePassed < this.minFrameTracker){
-		this.minFrameTracker = timePassed;
-	}
-	if(timePassed > this.maxFrameTracker){
-		this.maxFrameTracker = timePassed;
-	}
-	if(this.frameCounter == this.numFramesPerFPS){
-		let averageFrameTime = (this.frameTimes[this.numFramesPerFPS - 1] - this.frameTimes[0]) / this.numFramesPerFPS;
-		averageFrameTime = averageFrameTime / 1000; // convert to seconds
-		this.fps = 1 / averageFrameTime;
-		this.minFrameTime = this.minFrameTracker;
-		this.maxFrameTime = this.maxFrameTracker;
+	let fileStr = JSON.stringify(fileObj, null, 4);
+	let file = new Blob([fileStr], { type: 'text/plain' });
 
-		this.minFrameTracker = 1000;
-		this.maxFrameTracker = 0;
-		this.frameCounter = 0;
-	}
-
-	this.lastFrame = now;
-}
-
-// track how long ticks take
-EventPropagator.prototype.trackTickTime = function(timePassed){
-	this.tickTotalTime += timePassed;
-	if(timePassed < this.minTickTracker){
-		this.minTickTracker = timePassed;
-	}
-	if(timePassed > this.maxTickTracker){
-		this.maxTickTracker = timePassed;
-	}
-	this.tickCounter += 1;
-	if(this.tickCounter == this.numTicksPerTickCalc){
-		let averageTickTime = this.tickTotalTime / this.numTicksPerTickCalc;
-		this.averageTickTime = averageTickTime / 1000; // convert to seconds
-		this.minTickTime = this.minTickTracker;
-		this.maxTickTime = this.maxTickTracker;
-		
-		this.tickTotalTime = 0;
-		this.minTickTracker = 1000;
-		this.maxTickTracker = 0;
-		this.tickCounter = 0;
-	}
-}
-
-// track how long pre-renders take
-EventPropagator.prototype.trackPreRenderTime = function(timePassed){
-	this.preRenderTotalTime += timePassed;
-	if(timePassed < this.minPreRenderTracker){
-		this.minPreRenderTracker = timePassed;
-	}
-	if(timePassed > this.maxPreRenderTracker){
-		this.maxPreRenderTracker = timePassed;
-	}
-	this.preRenderCounter += 1;
-	if(this.preRenderCounter == this.numPreRenders){
-		let averagePreRenderTime = this.preRenderTotalTime / this.numPreRenders;
-		this.averagePreRenderTime = averagePreRenderTime;
-		this.minPreRenderTime = this.minPreRenderTracker;
-		this.maxPreRenderTime = this.maxPreRenderTracker;
-		
-		this.preRenderTotalTime = 0;
-		this.minPreRenderTracker = 1000;
-		this.maxPreRenderTracker = 0;
-		this.preRenderCounter = 0;
-	}
+	let a = document.createElement('a')
+	a.href = URL.createObjectURL(file);
+	a.download = "log.txt";
+	
+	document.body.appendChild(a)
+	a.click()
+	document.body.removeChild(a)
 }
 

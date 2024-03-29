@@ -56,6 +56,12 @@ canvas{
 	font-size: 6em;
 }
 
+.log-link{
+	position: absolute;
+	right: 4%;
+	bottom: 4%;
+}
+
 .home-selection{
 	margin: 2% 4% 0 0;
 	height: 25%;
