@@ -122,7 +122,7 @@ TimeTracker.prototype.getAggregates = function(){
 
 TimeTracker.prototype.getMostRecent = function(){
 	if(this.record.length == 0){
-		return [{average: null, min: null, max: null}]; // dummy values so function works even if no record is present
+		return [{}]; // dummy value so function works even if no record is present
 	}
 
 	else{

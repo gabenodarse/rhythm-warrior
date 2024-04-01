@@ -14,124 +14,8 @@ function SizedTexture(texture, width, height){
 	this.height = height;
 }
 
-function CanvasGroup(fullsizeCanvas, numCanvases, screenDiv){
-	this.fullsize = fullsizeCanvas;
-	this.nextCanvasIdx = 0; // the index of the next canvas of the group to make visible
-	this.canvases = new Array(numCanvases);
-	
-	for(let i = 0; i < numCanvases; ++i){
-		this.canvases[i] = document.createElement("canvas");
-		this.canvases[i].width = fullsizeCanvas.width;
-		this.canvases[i].height = fullsizeCanvas.height;
-		this.canvases[i].getContext("2d").drawImage(fullsizeCanvas, 0, 0, fullsizeCanvas.width, fullsizeCanvas.height);
-		this.canvases[i].style.visibility = "hidden";
-		screenDiv.appendChild( this.canvases[i] );
-	}
-}
-
-let vertexShader;
-let fragmentShader;
-
-export function CanvasGraphics(images, screenDiv){
-	this.canvases // canvases where each canvas may hold 1 graphic
-
-	this.canvases = new Array(images.length);
-	// create canvases for each image
-	images.forEach( (imgArray,gIdx) => {
-		let dimensions = wasm.graphic_size(gIdx);
-		let numCanvases = wasm.max_graphics(gIdx);
-		this.canvases[gIdx] = [];
-		imgArray.forEach( (img, gSubID) => {
-			let fullsize = document.createElement("canvas");
-			fullsize.width = dimensions.x;
-			fullsize.height = dimensions.y;
-			fullsize.getContext("2d").drawImage(img, 0, 0, dimensions.x, dimensions.y);
-			
-			this.canvases[gIdx][gSubID] = new CanvasGroup(fullsize, numCanvases, screenDiv);
-		});
-	});
-}
-
-CanvasGraphics.prototype.preRender = function(instructions, xFactor, yFactor){
-	// clear old canvases
-	this.canvases.forEach( graphicGroup => {
-		graphicGroup.forEach( canvasGroup => {
-			if(canvasGroup.nextCanvasIdx != 0){
-				for(let i = canvasGroup.nextCanvasIdx - 1; i >= 0; --i){
-					canvasGroup.canvases[i].style.visibility = "hidden";
-					canvasGroup.canvases[i].style.opacity = 1.0;
-				}
-				canvasGroup.nextCanvasIdx = 0;
-			}
-		});
-	});
-	
-	// move and make canvases visible
-	let len = instructions.num_graphics * 3; // 3 32bit data chunks per graphic
-	let f32buf = new Float32Array(wasmMemory().buffer, instructions.graphics_ptr, len);
-	let u8buf = new Uint8Array(wasmMemory().buffer, instructions.graphics_ptr, len*4);
-	let i = 0;
-	while(i < len){
-		let graphicIdx = u8buf[i*4];
-		let graphicFrame = u8buf[i*4 + 1];
-		let graphicFlags = u8buf[i*4 + 2];
-		let graphicArg = u8buf[i*4 + 3];
-		++i;
-		let x = f32buf[i];
-		++i;
-		let y = f32buf[i];
-		++i;
-		
-		let numFrames = this.canvases[graphicIdx].length;
-		let graphicSubID = graphicFrame % numFrames;
-		let canvasGroup = this.canvases[graphicIdx][graphicSubID];
-		let idx = canvasGroup.nextCanvasIdx;
-		
-		// check if the canvas exists
-		if(canvasGroup.canvases[idx] == undefined) {
-			console.log("not enough canvases for graphicGroup indexed by: " + graphicIdx);
-			return;
-		}
-		
-		canvasGroup.canvases[idx].style.left = x * xFactor + "px";
-		canvasGroup.canvases[idx].style.top = y * yFactor + "px";
-		if(graphicFlags != 0){
-			canvasGroup.canvases[idx].style.transform = "";
-			if(graphicFlags & wasm.GraphicFlags.HorizontalFlip){
-				canvasGroup.canvases[idx].style.transform += "scaleX(-1) ";
-			}
-			if(graphicFlags & wasm.GraphicFlags.VerticalFlip){
-				canvasGroup.canvases[idx].style.transform += "scaleY(-1) ";
-			}
-			if(graphicFlags & wasm.GraphicFlags.Opacity){
-				canvasGroup.canvases[idx].style.opacity = graphicArg / 255;
-			}
-		}
-		else {
-			canvasGroup.canvases[idx].style.transform = "";
-		}
-		
-		canvasGroup.canvases[idx].style.visibility = "visible";
-		++canvasGroup.nextCanvasIdx;
-	}
-}
-
-CanvasGraphics.prototype.resize = function(xFactor, yFactor){
-	this.canvases.forEach( (graphicGroup, gID) => {
-		let dimensions = wasm.graphic_size(gID);
-		graphicGroup.forEach( (canvasGroup, gIdx) => {
-			let fullsize = canvasGroup.fullsize;
-			canvasGroup.canvases.forEach( canvas => {
-				canvas.style.width = dimensions.x * xFactor + "px";
-				canvas.style.height = dimensions.y * yFactor + "px";
-			})
-		});
-	});
-}
-
-CanvasGraphics.prototype.getPreRenderTime = function(){
-	return {average: this.averagePreRenderTime,min: this.minPreRenderTime,max: this.maxPreRenderTime};
-}
+let vertexShaderSource;
+let fragementShaderSource;
 
 export function WebGLGraphics(images, screenDiv){
 	// members
@@ -139,10 +23,12 @@ export function WebGLGraphics(images, screenDiv){
 	this.gl;
 	this.program;
 	this.positionBuffer;
+	this.texCoordBuffer;
+	this.vao;
 	this.textures;
 
 	this.canvas = document.createElement("canvas");;
-	this.gl = this.canvas.getContext("webgl");;
+	this.gl = this.canvas.getContext("webgl2", { premultipliedAlpha: false });
 	this.program;
 	this.positionBuffer;
 	this.textures = new Array(images.length);
@@ -150,9 +36,8 @@ export function WebGLGraphics(images, screenDiv){
 	const canvas = this.canvas;
 	const gl = this.gl;
 	let gameDim = wasm.game_dimensions();
-	canvas.width = gameDim.x;;
+	canvas.width = gameDim.x;
 	canvas.height = gameDim.y;
-	canvas.style.position = "absolute";
 	screenDiv.appendChild(canvas);
 	
 	if(!gl){ // !!! move error and checking to when a choice between canvases and webGL is made
@@ -162,40 +47,38 @@ export function WebGLGraphics(images, screenDiv){
 	gl.clearColor(0.0, 0.0, 0.0, 0.0);
 	gl.clear(gl.COLOR_BUFFER_BIT);
 	
-	const program = initShaderProgram(gl, vertexShader, fragmentShader);
+	const program = initShaderProgram(gl, vertexShaderSource, fragementShaderSource);
 	const positionLoc = gl.getAttribLocation(program, 'a_position');
 	const texLoc = gl.getAttribLocation(program, 'a_texCoord');
 	
 	gl.useProgram(program);
-	gl.enableVertexAttribArray(positionLoc);
-	gl.enableVertexAttribArray(texLoc);
-	
-	// set view port to convert clip space to pixels
+
+	// set view port and resolution
+	let resolutionUniformLocation = gl.getUniformLocation(program, "u_resolution");
+	gl.uniform2f(resolutionUniformLocation, gameDim.x, gameDim.y);
 	gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 	
 	// enable alpha channel
 	// TODO does it calculate 1-alpha for each pixel rendered? if so, how about setting alpha beforehand when loading texture?
-	gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); 
+	gl.clearColor(1.0, 1.0, 1.0, 1.0);
+	gl.clear(gl.COLOR_BUFFER_BIT);
 	gl.enable(gl.BLEND);
+	gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); 
 	
-	// create a buffer to put the points of two triangles which will comprise the rectangle to be rendered
+	// create a position buffer to put the points of two triangles which will comprise the rectangle to be rendered
+	// create a texture coordinate buffer to hold the coordinates of where color is being extracted from
 	this.positionBuffer = gl.createBuffer();
-	const positionBuffer = this.positionBuffer;
+	this.texCoordBuffer = gl.createBuffer();
 	
-	// create a buffer to put texture coordinates
-	var texcoordBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
-	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-		0.0,  0.0,
-		1.0,  0.0,
-		0.0,  1.0,
-		0.0,  1.0,
-		1.0,  0.0,
-		1.0,  1.0,
-	]), gl.STATIC_DRAW);
+	// set up the vertex array object (which holds the state of attributes, records which buffer each attribute uses, and how to pull data out of those buffers)
+		// enable the attributes
+	this.vao = gl.createVertexArray();
+	gl.bindVertexArray(this.vao);
+	gl.enableVertexAttribArray(positionLoc);
+	gl.enableVertexAttribArray(texLoc);
 	
 	// Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
-	gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+	gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
 	var size = 2;          // 2 components per iteration
 	var type = gl.FLOAT;   // the data is 32bit floats
 	var normalize = false; // don't normalize the data
@@ -204,8 +87,8 @@ export function WebGLGraphics(images, screenDiv){
 	gl.vertexAttribPointer( positionLoc, size, type, normalize, stride, offset);
 	
 	// Tell the texcoord attribute how to get data out of texcoordBuffer (ARRAY_BUFFER)
-	gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
-	var size = 2;          // 2 components per iteration
+	gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
+	var size = 3;          // 2 components per iteration
 	var type = gl.FLOAT;   // the data is 32bit floats
 	var normalize = false; // don't normalize the data
 	var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
@@ -242,90 +125,115 @@ WebGLGraphics.prototype.resize = function(xFactor, yFactor){
 	this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 }
 
-WebGLGraphics.prototype.preRender = function(instructions, xFactor, yFactor){
+WebGLGraphics.prototype.preRender = function(instructions){
 	const gl = this.gl;
 	const positionBuffer = this.positionBuffer;
 	const textures = this.textures;
 	const pointCount = 6; // Always drawing 2 triangles to make a rectangle (6 points)
 	
-	gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+	// set up for the draws
+	gl.bindVertexArray(this.vao);
 	let positions = new Float32Array(12);
-	
+	let texCoordinates = new Float32Array(18);
+
 	// move and make textures visible
-	let end = instructions.num_graphics * 3;
-	let i32buf = new Int32Array(wasmMemory().buffer, instructions.graphics_ptr, end);
-	let u8buf = new Uint8Array(wasmMemory().buffer, instructions.graphics_ptr, end*4);
+	let len = instructions.num_graphics * 3;
+	let f32buf = new Float32Array(wasmMemory().buffer, instructions.graphics_ptr, len);
+	let u8buf = new Uint8Array(wasmMemory().buffer, instructions.graphics_ptr, len*4);
 	let i = 0;
-	while(i < end){
-		let x = i32buf[i];
-		++i;
-		let y = i32buf[i];
-		++i;
+	while(i < len){
 		let graphicIdx = u8buf[i*4];
 		let graphicFrame = u8buf[i*4 + 1];
 		let graphicFlags = u8buf[i*4 + 2];
+		let graphicArg = u8buf[i*4 + 3];
+
+		++i;
+		let x = f32buf[i];
+		++i;
+		let y = f32buf[i];
 		++i;
 		
 		let numFrames = textures[graphicIdx].length;
 		let graphicSubID = graphicFrame % numFrames;
 		let sizedTexture = textures[graphicIdx][graphicSubID];
 		
-		gl.bindTexture(gl.TEXTURE_2D, sizedTexture.texture);
-		let startX = x * xFactor / this.canvas.width * 2.0 - 1.0;
-		let startY = -(y * yFactor / this.canvas.height * 2.0 - 1.0);
-		let endX = startX + sizedTexture.width * xFactor / this.canvas.width * 2.0;
-		let endY = startY - sizedTexture.height * yFactor / this.canvas.height * 2.0;
+		let startX = x;
+		let startY = y;
+		let endX = x + sizedTexture.width;
+		let endY = y + sizedTexture.height;
 		
-		if(graphicFlags != 0){
-			// !!! have to use a different shader to flip?
-			if(graphicFlags & wasm.GraphicFlags.HorizontalFlip){
-			
-			}
-			if(graphicFlags & wasm.GraphicFlags.VerticalFlip){
-				
-			}
+		if(graphicFlags & wasm.GraphicFlags.HorizontalFlip){
+			startX = endX;
+			endX = x;
 		}
+		if(graphicFlags & wasm.GraphicFlags.VerticalFlip){
+			startY = endY;
+			endY = y;
+		}
+
+		// set the data of the texture coordinate buffer
+		let alpha = 1.0;
+		if(graphicFlags & wasm.GraphicFlags.Opacity){
+			alpha = graphicArg / 255;
+		}
+		gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
+		texCoordinates[0] = 0.0; texCoordinates[1] = 0.0; texCoordinates[2] = alpha;
+		texCoordinates[3] = 1.0; texCoordinates[4] = 0.0; texCoordinates[5] = alpha;
+		texCoordinates[6] = 0.0; texCoordinates[7] = 1.0; texCoordinates[8] = alpha;
+		texCoordinates[9] = 0.0; texCoordinates[10] = 1.0; texCoordinates[11] = alpha;
+		texCoordinates[12] = 1.0; texCoordinates[13] = 0.0; texCoordinates[14] = alpha;
+		texCoordinates[15] = 1.0; texCoordinates[16] = 1.0; texCoordinates[17] = alpha;
+		gl.bufferData(gl.ARRAY_BUFFER, texCoordinates, gl.STATIC_DRAW);
+
+		// set the data of the position buffer
+		gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 		positions[0] = startX; positions[1] = startY;
 		positions[2] = endX;   positions[3] = startY;
 		positions[4] = startX; positions[5] = endY;
 		positions[6] = startX; positions[7] = endY;
 		positions[8] = endX;   positions[9] = startY;
 		positions[10] = endX;  positions[11] = endY;
-		
-		
 		gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+		gl.bindTexture(gl.TEXTURE_2D, sizedTexture.texture);
 		
 		gl.drawArrays(gl.TRIANGLES, 0, pointCount);
 	}
-
-	return [this.averagePreRenderTime, this.minPreRenderTime, this.maxPreRenderTime];
 }
 
-WebGLGraphics.prototype.getPreRenderTime = function(){
-	return {average: this.averagePreRenderTime,min: this.minPreRenderTime,max: this.maxPreRenderTime};
-}
-
-vertexShader = `
-    attribute vec2 a_position;
-	attribute vec2 a_texCoord;
+vertexShaderSource = `#version 300 es
+    in vec2 a_position;
+	in vec3 a_texCoord;
 	
-	varying vec2 v_texCoord;
+	out vec3 v_texCoord;
+
+	uniform vec2 u_resolution;
      
     void main() {
-		gl_Position = vec4(a_position, 0.0, 1.0);
+		// convert from pixels to clipspace
+		vec2 tmp = a_position / u_resolution;
+		vec2 tmp2 = tmp * 2.0;
+		vec2 clipSpacePos = tmp2 - 1.0;
+	  
+		gl_Position = vec4(clipSpacePos * vec2(1, -1), 0, 1);
 		
-		// update v_texCoord for fragment shader
+		// update varyings for fragment shader
 		v_texCoord = a_texCoord;
     }
 `;
-fragmentShader = `
-	// fragment shaders don't have a default precision so we need to pick one
-	precision mediump float;
+fragementShaderSource = `#version 300 es
+	// set a default precision
+	precision highp float;
+
 	uniform sampler2D u_image;
-	varying vec2 v_texCoord;
+
+	in vec3 v_texCoord;
+
+	out vec4 outColor;
 
 	void main() {
-		gl_FragColor = texture2D(u_image, v_texCoord);
+		vec4 texture = texture(u_image, v_texCoord.xy);
+		outColor = vec4(texture.rgb,texture.a * v_texCoord.z);
 	}
 `;
 

@@ -43,7 +43,6 @@ Game.prototype.restart = function(){
 Game.prototype.tick = function(){
 	let now = performance.now();
 	// !!! handle if there's too long a time between ticks (pause game?)
-	// !!! log fps and tick times and preRender times
 	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
 	this.lastTick = now;
 	

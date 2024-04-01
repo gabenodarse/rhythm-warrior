@@ -1,7 +1,7 @@
 import * as MIDIReader from "./read-MIDI.js";
 import * as sqljs from "../sql-wasm.js";
 import * as wasm from "../pkg/music_mercenary.js";
-import {WebGLGraphics, CanvasGraphics} from "./graphics.js";
+import {WebGLGraphics} from "./graphics.js";
 
 export function MMDatabase(database){
 	this.database = database;
@@ -168,14 +168,10 @@ Loader.prototype.loadDatabase = async function(dbFilename){
 
 // load all images from files before returning a WebGLGraphics object from those images
 // !!! add error handling (timeout on image loading?)
-Loader.prototype.loadGraphics = async function(type, screenDiv){
+Loader.prototype.loadGraphics = async function(screenDiv){
 	
 	if(!this.resourceLocations){
 		throw Error("unknown (unloaded) resource locations");
-	}
-	
-	if(type != "canvases" && type != "webGL"){
-		throw Error("unspecified graphics type");
 	}
 	
 	let resourceLocations = this.resourceLocations;
@@ -197,23 +193,24 @@ Loader.prototype.loadGraphics = async function(type, screenDiv){
 	let imgLoaded = function(){
 		++numLoaded;
 		if(numLoaded == totalImages){
-			if(type == "webGL"){
-				done(new WebGLGraphics(images, screenDiv));
-			}
-			else if(type == "canvases"){
-				done(new CanvasGraphics(images, screenDiv));
-			}
-			else{ throw Error(); }
+			done(new WebGLGraphics(images, screenDiv));
 		}
 	}
 	
+	// track how many images need to load
+	for(const resourcesKey in resourceLocations){
+		for(let i = 0; i < resourceLocations[resourcesKey].length; ++i){
+			++totalImages;
+		}
+	}
+
+	// load images
 	// !!! creates a new image for every file in resources... many files in resources are duplicates and should not take more data
 		// (animations repeating frames)
 	for(const resourcesKey in resourceLocations){
 		let graphicGroup = wasm.GraphicGroup[resourcesKey];
 		images[ graphicGroup ] = [];
 		for(let i = 0; i < resourceLocations[resourcesKey].length; ++i){
-			++totalImages;
 			images[ graphicGroup ][i] = new Image();
 			images[ graphicGroup ][i].onload = imgLoaded;
 			images[ graphicGroup ][i].src = "./assets/images/" + resourceLocations[resourcesKey][i];

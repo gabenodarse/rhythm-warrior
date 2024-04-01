@@ -15,8 +15,6 @@ export function EventPropagator(){
 	
 	// screen where everything is added
 	this.screenDiv;
-	this.width;
-	this.height;
 	this.xFactor;
 	this.yFactor;
 
@@ -55,21 +53,19 @@ EventPropagator.prototype.init = async function(game, overlay, controls){
 	this.tickTimeTracker = new TimeTracker(30);
 	this.preRenderTimeTracker = new TimeTracker(30);
 	this.frameTimeTracker = new TimeTracker(30);
-	this.fps = 0;
+	this.fps = "fps 0";
 
 	// screen div
 	let gameDim = wasm.game_dimensions();
 	this.screenDiv = document.getElementById("screen");
-	this.width = this.screenDiv.clientWidth;
-	this.height = this.screenDiv.clientHeight;
-	this.xFactor = this.width / gameDim.x;
-	this.yFactor = this.height / gameDim.y;
+	this.xFactor = this.screenDiv.clientWidth / gameDim.x;
+	this.yFactor = this.screenDiv.clientHeight / gameDim.y;
 
 	// initialize loader and load graphics
 	// TODO error handling when it takes too long
 	let loader = new load.Loader();
 	await loader.init()
-		.then( () => loader.loadGraphics("canvases", this.screenDiv)) // !!! !!! !!! canvases or webGL. Make just webGL
+		.then( () => loader.loadGraphics(this.screenDiv))
 		.then( res => this.graphics = res )
 		.catch( rej => { throw Error("Error initializing loader / loading assets: " + rej ) });
 	
@@ -114,7 +110,7 @@ EventPropagator.prototype.gameLoop = function(){
 
 		requestAnimationFrame(() => {
 			// fps
-			this.fps = this.frameTimeTracker.getMostRecent().pop().average;
+			this.fps = "fps " + Math.round(1000 / this.frameTimeTracker.getMostRecent().pop().average);
 			this.frameTimeTracker.endTime(performance.now()); // record the end time for last frame before recording the start time of this one
 			this.frameTimeTracker.startTime(performance.now());
 
@@ -170,27 +166,45 @@ EventPropagator.prototype.runInstruction = function(instruction){
 	
 	if(instruction == "toggle-play"){
 		this.togglePlay();
-	} else if(instruction == "restart-song"){
+	} 
+	
+	else if(instruction == "restart-song"){
 		if(this.isRunning){
 			this.togglePlay();
 		}
-		this.game.restart();
 		this.tickTimeTracker.reset();
 		this.preRenderTimeTracker.reset();
 		this.frameTimeTracker.reset();
-	} else if(instruction == "stop-loop"){
+		this.game.restart();
+	} 
+	
+	else if(instruction == "stop-loop"){
 		this.stopFlag = true;
-	} else if(instruction == "start-loop"){
+	} 
+	
+	else if(instruction == "start-loop"){
 		this.startLoop();
-	} else if(instruction == "start-from-homescreen"){
+	} 
+	
+	else if(instruction == "start-from-homescreen"){
+		this.tickTimeTracker.reset();
+		this.preRenderTimeTracker.reset();
+		this.frameTimeTracker.reset();
 		this.startFromHomescreen();
-	} else if(instruction == "wait-song-load"){
+	} 
+	
+	else if(instruction == "wait-song-load"){
 		this.waitSongLoad();
-	} else if(instruction == "pre-render"){
+	} 
+	
+	else if(instruction == "pre-render"){
 		this.overlay.update({fps: this.fps, xFactor: this.xFactor, yFactor: this.yFactor});
-	} else if(instruction == "download-log"){
+	} 
+	
+	else if(instruction == "download-log"){
 		this.downloadLog();
 	}
+
 	else {
 		throw Error("EventPropagator.runInstruction, no instruction: " + instruction);
 	}
@@ -232,7 +246,7 @@ EventPropagator.prototype.preRender = function(){
 	let instructions = this.game.getRenderingInstructions();
 	
 	this.preRenderTimeTracker.startTime(performance.now());
-	this.graphics.preRender(instructions, this.xFactor, this.yFactor);
+	this.graphics.preRender(instructions);
 	this.preRenderTimeTracker.endTime(performance.now());
 }
 
@@ -244,8 +258,6 @@ EventPropagator.prototype.handleResize = function(evt){
 			let height = this.screenDiv.clientHeight;
 			let gameDim = wasm.game_dimensions();
 			
-			this.width = width;
-			this.height = height;
 			this.xFactor = width / gameDim.x;
 			this.yFactor = height / gameDim.y;
 			this.graphics.resize(this.xFactor, this.yFactor);
