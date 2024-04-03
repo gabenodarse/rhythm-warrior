@@ -1368,7 +1368,7 @@ EditorOverlay.prototype.timeToY = function(time){
 	let songData = this.overlayParent.getGame().getSongData();
 
 	let timeDifference = time - songData.gameData.time_running;
-	let currentY = wasm.ground_pos() - wasm.player_dimensions().y / 2;
+	let currentY = wasm.time_zero_brick_pos();
 	let newY = currentY + timeDifference * songData.gameData.brick_speed;
 	return newY;
 }
@@ -1376,7 +1376,7 @@ EditorOverlay.prototype.timeToY = function(time){
 EditorOverlay.prototype.yToTime = function(y){
 	let songData = this.overlayParent.getGame().getSongData();
 
-	let currentY = wasm.ground_pos() - wasm.player_dimensions().y / 2;
+	let currentY = wasm.time_zero_brick_pos();
 	let yDifference = y - currentY;
 	let timeDifference = yDifference / songData.gameData.brick_speed;
 	
@@ -1410,7 +1410,7 @@ EditorOverlay.prototype.draw = function(){
 	// draw lines at the specified beat positions
 	for(let i = beginningBeatPos; i < endBeatPos; ++i) {
 		let beatTime = wasm.BrickData.approx_time(i, songData.gameData.bpm);
-		let y = this.timeToY(beatTime);
+		let y = this.timeToY(beatTime) + wasm.brick_dimensions().y / 2;
 		if(i % 4 == 0){
 			ctx.fillRect(0, y-1, this.canvas.width, 3);
 			for(let x = 0; x <= screenWidth; x+=wasm.brick_dimensions().x){
@@ -1434,8 +1434,8 @@ EditorOverlay.prototype.draw = function(){
 		let startX = this.selectedBrick.x_pos * brickDims.x;
 		let startTime = wasm.BrickData.approx_time(this.selectedBrick.beat_pos, songData.gameData.bpm);
 		let endTime = wasm.BrickData.approx_time(this.selectedBrick.end_beat_pos, songData.gameData.bpm);
-		let startY = this.timeToY(startTime) - brickDims.y / 2;
-		let endY = this.timeToY(endTime) + brickDims.y / 2;
+		let startY = this.timeToY(startTime);
+		let endY = this.timeToY(endTime) + wasm.brick_dimensions().y;
 		if(this.selectedBrick.is_leading || this.selectedBrick.is_trailing){
 			let minutesPerBeat = 1 / songData.gameData.bpm;
 			let secondsPerBeat = 60 * minutesPerBeat;

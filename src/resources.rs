@@ -12,6 +12,7 @@ use crate::Position;
 #[derive(Clone, Copy, Debug, EnumVariantCount)]
 pub enum GraphicGroup {
 	Background,
+	Standing,
 	Walking,
 	Running,
 	Slashing1,
@@ -41,6 +42,7 @@ pub enum GraphicGroup {
 // !!! more robust way to determine the size of GraphicGroup than the (maybe) last enumeration + 1
 pub const GRAPHIC_OFFSETS: [Position; GraphicGroup::Hold3 as usize + 1] = [
 	Position {x: 0.0, y: 0.0},// Background,
+	Position {x: 50.0, y: 25.0}, // Standing
 	Position {x: 50.0, y: 25.0},// Walking,
 	Position {x: 50.0, y: 25.0},// Running,
 	Position {x: 80.0, y: 55.0},// Slashing1,
@@ -72,20 +74,23 @@ pub const GRAPHIC_SIZES: [Position; GraphicGroup::Hold3 as usize + 1] = [
 		x: crate::GAME_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Background as usize].x, 
 		y: crate::GAME_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Background as usize].y},// Background,
 	Position {
+		x: objects::PLAYER_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Standing as usize].x, 
+		y: objects::PLAYER_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Standing as usize].y},// Standing,
+	Position {
 		x: objects::PLAYER_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Walking as usize].x, 
 		y: objects::PLAYER_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Walking as usize].y},// Walking,
 	Position {
 		x: objects::PLAYER_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Running as usize].x, 
 		y: objects::PLAYER_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Running as usize].y},// Running,
 	Position {
-		x: objects::PLAYER_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Slashing1 as usize].x, 
-		y: objects::PLAYER_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Slashing1 as usize].y},// Slashing1,
+		x: objects::SLASH_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Slashing1 as usize].x, 
+		y: objects::SLASH_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Slashing1 as usize].y},// Slashing1,
 	Position {
-		x: objects::PLAYER_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Slashing2 as usize].x, 
-		y: objects::PLAYER_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Slashing2 as usize].y},// Slashing2,
+		x: objects::SLASH_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Slashing2 as usize].x, 
+		y: objects::SLASH_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Slashing2 as usize].y},// Slashing2,
 	Position {
-		x: objects::PLAYER_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Slashing3 as usize].x, 
-		y: objects::PLAYER_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Slashing3 as usize].y},// Slashing3,
+		x: objects::SLASH_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Slashing3 as usize].x, 
+		y: objects::SLASH_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Slashing3 as usize].y},// Slashing3,
 	Position {
 		x: objects::BRICK_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick1 as usize].x, 
 		y: objects::BRICK_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick1 as usize].y},// Brick1,
@@ -150,8 +155,9 @@ pub const GRAPHIC_SIZES: [Position; GraphicGroup::Hold3 as usize + 1] = [
 pub fn max_graphics(g: GraphicGroup) -> u32 {
 	match g {
 		GraphicGroup::Background => 1,
-		GraphicGroup::Walking => 24,
-		GraphicGroup::Running => 24,
+		GraphicGroup::Standing => 1,
+		GraphicGroup::Walking => 1,
+		GraphicGroup::Running => 1,
 		GraphicGroup::Slashing1 | GraphicGroup::Slashing2 | GraphicGroup::Slashing3 => 1,
 		GraphicGroup::Brick1 | GraphicGroup::Brick2 | GraphicGroup::Brick3 => 32,
 		GraphicGroup::Brick1Segment | GraphicGroup::Brick2Segment | GraphicGroup::Brick3Segment => 128,

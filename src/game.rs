@@ -37,7 +37,7 @@ struct UpcomingBrick {
 	brick_type: BrickType,
 	x: f32,
 	// the y value at which the note should appear. At time = 0 the top of the screen is y = 0
-		// and a note that should be hit at time = 0 has appearance_y of GROUND_POS - BRICK_HEIGHT
+		// and a note that should be hit at time = 0 has appearance_y of TIME_ZERO_BRICK_POS
 		// notes off the bottom of the screen have appearance_y's corresponding to how much has to be scrolled before they show up
 	appearance_y: f32, 
 	height: f32,

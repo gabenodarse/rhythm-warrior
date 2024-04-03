@@ -28,6 +28,7 @@
 // !!! fix and extend midi-reader / song converter
 // !!! are as casts what I want / are they idiomatic Rust? Also, types seem to be arbitrary...
 	// (define floats and integer forms of constants so casting isn't needed?)
+	// why are objects (in objects.rs) and GAME_WIDTH and GAME_HEIGHT integers while most everythings else are floats?
 
 mod objects;
 mod resources;
@@ -50,7 +51,8 @@ const LEFT_BOUNDARY: f32 = 0.0;
 const RIGHT_BOUNDARY: f32 = LEFT_BOUNDARY + GAME_WIDTH as f32;
 const TOP_BOUNDARY: f32 = 0.0;
 const GROUND_POS: f32 = TOP_BOUNDARY + 240.0; // !!! associate with the graphic for the ground
-const FRAME_TIME: f32 = 0.00833; // 60 fps
+const TIME_ZERO_BRICK_POS: f32 = GROUND_POS - (objects::PLAYER_HEIGHT as f32 / 2.0) - (objects::BRICK_HEIGHT as f32 / 2.0);
+const FRAME_TIME: f32 = 0.00833; // 120 fps
 
 const F32_ZERO: f32 = 0.000001; // approximately zero for f32. any num between -F32_ZERO and +F32_ZERO is essentially 0
 
@@ -146,6 +148,11 @@ pub fn max_notes_per_screen_width() -> u8 {
 }
 
 #[wasm_bindgen]
+pub fn time_zero_brick_pos() -> f32 {
+	return TIME_ZERO_BRICK_POS;
+}
+
+#[wasm_bindgen]
 pub fn game_dimensions() -> Position {
 	Position {
 		x: GAME_WIDTH as f32,
@@ -238,7 +245,7 @@ impl BrickData {
 	}
 	
 	// the y value at which the note should appear. At time = 0 the top of the screen is y = 0
-		// and a note that should be hit at time = 0 has appearance_y of GROUND_POS - BRICK_HEIGHT
+		// and a note that should be hit at time = 0 has appearance_y of TIME_ZERO_BRICK_POS
 		// notes off the bottom of the screen have appearance_y's corresponding to how much has to be scrolled before they show up
 	pub fn appearance_y(&self, bpm: f32, brick_speed: f32) -> f32 {
 		let minutes_per_beat = 1.0 / bpm;
@@ -255,7 +262,7 @@ impl BrickData {
 			
 		}
 		
-		return pixels_passed + GROUND_POS - objects::BRICK_HEIGHT as f32;
+		return pixels_passed + TIME_ZERO_BRICK_POS;
 	}
 	
 	pub fn end_appearance_y(&self, bpm: f32, brick_speed: f32) -> f32 {
@@ -266,7 +273,7 @@ impl BrickData {
 		
 		let pixels_passed = pixels_per_beat * beats_passed;
 		
-		return pixels_passed + GROUND_POS - objects::BRICK_HEIGHT as f32;
+		return pixels_passed + TIME_ZERO_BRICK_POS;
 	}
 	
 	pub fn x(&self) -> f32 {
@@ -286,7 +293,7 @@ impl BrickData {
 		
 		let num_beats_passed = time / seconds_per_beat;
 		let beat_pos_passed = num_beats_passed * 4.0;
-		return (beat_pos_passed + 0.5).floor() as i32;
+		return beat_pos_passed.floor() as i32;
 	}
 }
 
