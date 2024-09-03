@@ -6,6 +6,7 @@ use std::collections::VecDeque;
 use std::cmp::Ordering;
 
 use crate::objects;
+use crate::player;
 
 use crate::player::Player;
 use crate::brick::Brick;
@@ -19,29 +20,49 @@ use crate::RenderingInstructions;
 use objects::Object;
 use objects::BrickType;
 use objects::ObjectBounds;
+use objects::Direction;
+use objects::PLAYER_WIDTH;
+use objects::PLAYER_HEIGHT;
 
 use wasm_bindgen::prelude::*;
 use js_sys::Array;
 
 use crate::GAME_HEIGHT;
 use crate::GAME_WIDTH;
+use crate::GROUND_POS;
 use objects::BRICK_HEIGHT;
 use objects::BRICK_SEGMENT_HEIGHT;
 use objects::BRICK_WIDTH;
+use objects::HOLD_HITBOX_WIDTH;
+use player::RUN_SPEED;
+use player::MAX_BOOST_DISTANCE;
 
 const MAX_TIME_BETWEEN_TICKS: f32 = 0.025;
 
 #[derive(Clone, Copy)]
 struct UpcomingBrick {
-	graphic_group: GraphicGroup,
 	brick_type: BrickType,
 	x: f32,
 	// the y value at which the note should appear. At time = 0 the top of the screen is y = 0
 		// and a note that should be hit at time = 0 has appearance_y of TIME_ZERO_BRICK_POS
 		// notes off the bottom of the screen have appearance_y's corresponding to how much has to be scrolled before they show up
-	appearance_y: f32, 
-	height: f32,
-	is_hold_note: bool
+	appearance_y: f32, // y value (including amount needed to scroll) of the brick
+	end_y: f32, // y value (including amount needed to scroll) of the bottom of the brick and its hold segments
+	hold_segments: u8
+}
+
+#[derive(Clone)]
+pub struct TargetInfo {
+	pub appearance_y: f32,
+	pub end_y: f32,
+	pub dest_x: f32, // where the player left_x should be
+	pub post_hit_x: f32,
+	pub is_hold_note: bool,
+	pub hit_dir: Direction, // direction player must slash in order to hit targets once he arrives at dest_x
+	pub boost_to_target: bool, // whether the player should boost in order to reach dest_x on time
+	pub dash_to_target: bool, // whether the player should dash in order to reach dest_x on time
+	pub hittable_time: f32,
+	pub passed_time: f32
 }
 
 #[wasm_bindgen]
@@ -49,13 +70,15 @@ pub struct Game {
 	player: Player,
 	// !!! better data structures than VecDeques. Indexable BTrees
 	bricks: VecDeque<UpcomingBrick>, // all bricks of the song, ordered
+	targets: VecDeque<TargetInfo>, // all targets of the song, ordered
+	upcoming_brick_idx: usize,
+	target_idx: usize,
 	// uses a vec instead of a btree because std lib btreeset is unindexable
 	current_bricks: VecDeque<Brick>, // current bricks that are on screen or about to appear on screen, ordered
-	upcoming_brick_idx: usize,
 	scrolled_y: f32,
-	end_appearance_y: f32,
+	end_y: f32,
 	game_data: GameData, 
-	notes: BTreeSet<BrickData>,
+	notes: BTreeSet<BrickData>, // all notes of the song before conversion into bricks
 	graphics: Vec<PositionedGraphic>,
 	bricks_broken: u8
 }
@@ -68,10 +91,12 @@ impl Game {
 		return Game {
 			player: Player::new((BRICK_WIDTH * 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0),
 			bricks: VecDeque::new(), // bricks on screen, ordered by time they are meant to be played
-			current_bricks: VecDeque::new(),
+			targets: VecDeque::new(),
 			upcoming_brick_idx: 0,
+			target_idx: 0,
+			current_bricks: VecDeque::new(),
 			scrolled_y: 0.0,
-			end_appearance_y: Game::end_appearance_y(0.0, brick_speed),
+			end_y: Game::end_y(0.0, brick_speed),
 			game_data: GameData {
 				bpm,
 				beat_interval: 60.0 / bpm as f32,
@@ -99,14 +124,17 @@ impl Game {
 		let delta_y = seconds_passed * self.game_data.brick_speed;
 		self.game_data.time_running += seconds_passed;
 		self.scrolled_y += delta_y;
-		self.end_appearance_y += delta_y;
+		self.end_y += delta_y;
 		
-		let bricks_iter = self.current_bricks.iter();
-		self.player.tick(seconds_passed, bricks_iter, &self.game_data);
-		
+		// tick all current bricks
+		for brick in &mut self.current_bricks {
+			brick.bounds.top_y -= delta_y;
+			brick.bounds.bottom_y -= delta_y;
+		}
+
 		// discard any bricks that are offscreen
 		loop {
-			if self.current_bricks.len() > 0 && self.current_bricks[0].bounds().bottom_y < 0.0 {
+			if self.current_bricks.len() > 0 && self.current_bricks[0].end_y < self.scrolled_y {
 				self.current_bricks.pop_front();
 				continue;
 			} else {
@@ -114,34 +142,84 @@ impl Game {
 			}
 		}
 		
-		// tick all current bricks
-		for brick in &mut self.current_bricks {
-			brick.bounds.top_y -= delta_y;
-			brick.bounds.bottom_y -= delta_y;
+		// !!! !!! !!! if target has passed without being destroyed, stun player
+		//if self.targets[self.target_idx].passed_time > self.game_data.time_running {
+		//} 
+
+		let hold_positions = self.find_hold_positions();
+
+		// tick player
+			// if target is on screen and target has not already passed, pass target info to player
+		if let Some(target) = self.targets.get(self.target_idx){
+			if target.appearance_y < self.end_y && target.passed_time >= self.game_data.time_running {
+				self.player.tick(seconds_passed, &self.game_data, Some(target.clone()), hold_positions);
+			} else {
+				self.player.tick(seconds_passed, &self.game_data, None, hold_positions);
+			}
+		} else {
+			self.player.tick(seconds_passed, &self.game_data, None, hold_positions);
 		}
-		
+
 		// check for brick destruction 
-		// TODO might be a little faster to do as bricks are updated
-		// TODO more efficient way than checking all bricks, check only bricks that have reached a threshold height
-		let score = &mut self.game_data.score;
-		let bricks = &mut self.current_bricks;
-		let bricks_broken = &mut self.bricks_broken;
-		for hitbox in self.player.hitboxes() {
-			bricks.retain(|&brick| -> bool {
-				if hitbox.brick_type == brick.brick_type() {
-					let intersect = objects::intersect(&hitbox.bounds, &brick.bounds());
-					if intersect {
-						*score += 100;
-						*bricks_broken += 1;
-						return false;
-					}
-					return true;
-				}
-				return true;
-			});
-		}
+		self.destroy_bricks();
 		
 		self.add_to_current_bricks();
+
+		// if there are no bricks remaining in the target, set the target to the next target
+		if let Some(highest_brick) = self.current_bricks.get(0) {
+			loop {
+				if self.target_idx >= self.targets.len() {
+					break;
+				}
+
+				if highest_brick.appearance_y <= self.targets[self.target_idx].appearance_y {
+					break;
+				}
+
+				self.target_idx += 1;
+
+				// !!! !!! !!!
+				if let Some(ti) = self.targets.get(self.target_idx) {
+					let hit_dir = match ti.hit_dir {
+						Direction::Left => "left",
+						Direction::Right => "right"
+					};
+					let out = format!(
+						"Target --- Appearance y: {}, end y: {}, dest x: {}, post hit x: {}, is hold note: {},
+						hit dir: {}, boost to target: {}, dash to target: {}, hittable time:{}, passed time: {}",
+						ti.appearance_y, ti.end_y, ti.dest_x, ti.post_hit_x, ti.is_hold_note,
+						hit_dir, ti.boost_to_target, ti.dash_to_target, ti.hittable_time, ti.passed_time);
+					crate::log(&out);
+				}
+				
+				continue;
+			}
+		} else {
+			// set the target to the first target beyond the games end y
+			loop {
+				if self.target_idx >= self.targets.len() {
+					break;
+				} else if self.targets[self.target_idx].appearance_y >= self.end_y {
+					break;
+				} else {
+					self.target_idx += 1;
+
+					// !!! !!! !!!
+					if let Some(ti) = self.targets.get(self.target_idx) {
+						let hit_dir = match ti.hit_dir {
+							Direction::Left => "left",
+							Direction::Right => "right"
+						};
+						let out = format!(
+							"Off screen target --- Appearance y: {}, end y: {}, dest x: {}, post hit x: {}, is hold note: {},
+							hit dir: {}, boost to target: {}, dash to target: {}, hittable time:{}, passed time: {}",
+							ti.appearance_y, ti.end_y, ti.dest_x, ti.post_hit_x, ti.is_hold_note,
+							hit_dir, ti.boost_to_target, ti.dash_to_target, ti.hittable_time, ti.passed_time);
+						crate::log(&out);
+					}
+				}
+			}
+		}
 	}
 	
 	// updates the displayed graphics and returns rendering instructions in the form of a pointer
@@ -156,8 +234,12 @@ impl Game {
 		
 		graphics.append(&mut self.player.rendering_instructions(self.game_data.time_running));
 		
+		let minutes_per_beat = 1.0 / self.game_data.bpm;
+		let seconds_per_beat = 60.0 * minutes_per_beat;
+		let pixels_per_beat = self.game_data.brick_speed * seconds_per_beat;
+		let beat_pos_pixels = pixels_per_beat / 4.0;
 		for brick in &self.current_bricks {
-			graphics.push(brick.rendering_instruction());
+			graphics.append(&mut brick.rendering_instructions());
 		}
 		
 		graphics.append(&mut self.player.lg_rendering_instructions(self.game_data.time_running));
@@ -241,111 +323,278 @@ impl Game {
 	
 	fn prepare_song(&mut self) {
 		self.bricks = VecDeque::new();
-		// reverse ordered vec containing the component bricks of hold notes which have appeared.
-			// hold notes are stored here temporarily so that self.bricks can retain its order as bricks are added
-			// e.g. if there are two hold notes appearing at the same time, instead of adding all of 1 hold note
-			// and then all of the other, they can be added alternating 1 brick at a time, the tops of each added first
-		let mut hold_notes: Vec<UpcomingBrick> = Vec::new(); 
+		self.targets = VecDeque::new();
+
+		// data for target info
+		let mut player_start_x = 0.0;
+		let mut player_start_time = 0.0;
+		let mut group_appearance_y;
+		let mut group_end_appearance_y;
+		let mut group_leftmost;
+		let mut group_rightmost;
+		let mut group_hold;
+		
+		match self.notes.first() {
+			Some(brick_data) => {
+				group_appearance_y = brick_data.appearance_y(self.game_data.bpm, self.game_data.brick_speed);
+				group_end_appearance_y = brick_data.end_appearance_y(self.game_data.bpm, self.game_data.brick_speed);
+				group_leftmost = brick_data.x_pos;
+				group_rightmost = brick_data.x_pos;
+				group_hold = brick_data.is_hold_note;
+			}
+			None => { 
+				self.game_data.max_score = 0;
+				return; 
+			}
+		}
 		
 		for brick_data in &self.notes {
 			let appearance_y = brick_data.appearance_y(self.game_data.bpm, self.game_data.brick_speed);
-			
-			// add hold notes which have passed
-			while let Some(upcoming_brick) = hold_notes.last() {
-				if upcoming_brick.appearance_y < appearance_y {
-					self.bricks.push_back(hold_notes.pop().unwrap());
-				} else {
-					break;
-				}
+			let end_appearance_y = brick_data.end_appearance_y(self.game_data.bpm, self.game_data.brick_speed);
+			let hold_segments;
+
+			if brick_data.is_hold_note {
+				// hold length from the bottom of the starting note 
+					// to the bottom of the ending note, if there was a note at the end beat pos
+				let hold_length_pixels = end_appearance_y - appearance_y;
+				// how many brick segments fit into the hold length, floored to a u8
+				hold_segments = (hold_length_pixels / (objects::BRICK_SEGMENT_HEIGHT + objects::BRICK_SEGMENT_GAP) as f32) as u8;
+			} 
+			else {
+				hold_segments = 0;
 			}
 			
-			let (graphic_group, hold_graphic_group) = match brick_data.brick_type {
-				BrickType::Type1 => (GraphicGroup::Brick1, GraphicGroup::Brick1Segment),
-				BrickType::Type2 => (GraphicGroup::Brick2, GraphicGroup::Brick2Segment),
-				BrickType::Type3 => (GraphicGroup::Brick3, GraphicGroup::Brick3Segment)
-			};
-			
+			// set brick group info
+				// if the appearance y of this brick does not match the appearance y of the brick group,
+				// push to target info and start a new brick group
+			if appearance_y == group_appearance_y {
+				let hold_length = brick_data.end_beat_pos - brick_data.beat_pos;
+				group_leftmost = if brick_data.x_pos < group_leftmost { brick_data.x_pos } else { group_leftmost };
+				group_rightmost = if brick_data.x_pos > group_rightmost { brick_data.x_pos } else { group_rightmost };
+				group_hold = if brick_data.is_hold_note { true } else { group_hold };
+				group_end_appearance_y = if end_appearance_y > group_end_appearance_y { end_appearance_y } else { group_end_appearance_y };
+			}
+			else {
+				let ti = self.create_target_info(player_start_x, player_start_time, group_appearance_y, group_leftmost, group_rightmost, group_hold, group_end_appearance_y);
+
+				// start new group
+				player_start_x = ti.post_hit_x;
+				player_start_time = ti.passed_time;
+				group_appearance_y = appearance_y;
+				group_end_appearance_y = end_appearance_y;
+				group_leftmost = brick_data.x_pos;
+				group_rightmost = brick_data.x_pos;
+				group_hold = brick_data.is_hold_note;
+
+				self.targets.push_back(ti);
+			}
+
 			self.bricks.push_back( UpcomingBrick {
-				graphic_group,
 				brick_type: brick_data.brick_type, 
 				x: brick_data.x(),
 				appearance_y,
-				height: BRICK_HEIGHT as f32,
-				is_hold_note: brick_data.is_hold_note
+				end_y: end_appearance_y + BRICK_HEIGHT as f32,
+				hold_segments
 			});
 			
-			if brick_data.is_hold_note && brick_data.end_beat_pos > brick_data.beat_pos {
-				let end_appearance_y = brick_data.end_appearance_y(self.game_data.bpm, self.game_data.brick_speed);
-				let end_y = end_appearance_y + BRICK_HEIGHT as f32 - BRICK_SEGMENT_HEIGHT as f32;
-				let mut appearance_y = appearance_y + BRICK_HEIGHT as f32;
-				
-				while(appearance_y < end_y) {
-					hold_notes.push( UpcomingBrick {
-						graphic_group: hold_graphic_group,
-						brick_type: brick_data.brick_type, 
-						x: brick_data.x(),
-						appearance_y,
-						height: BRICK_SEGMENT_HEIGHT as f32,
-						is_hold_note: true
-					});
-					appearance_y += 50.0;
-				}
-				
-				hold_notes.push( UpcomingBrick {
-					graphic_group: hold_graphic_group,
-					brick_type: brick_data.brick_type, 
-					x: brick_data.x(),
-					appearance_y: end_y,
-					height: BRICK_SEGMENT_HEIGHT as f32,
-					is_hold_note: true
-				});
-				
-				hold_notes.sort_by(|a, b| b.cmp(a)); // sort in reverse order
-			}
 		}
-		
-		// add any remaining bricks from hold notes
-		while let Some(upcoming_brick) = hold_notes.last() {
-			self.bricks.push_back(hold_notes.pop().unwrap());
-		}
+
+		// push last target
+		let ti = self.create_target_info(player_start_x, player_start_time, group_appearance_y, group_leftmost, group_rightmost, group_hold, group_end_appearance_y);
+		self.targets.push_back(ti);
 		
 		for i in 1 .. self.bricks.len() {
 			assert!(self.bricks[i-1] <= self.bricks[i]);
 		}
+
+		for i in 1 .. self.targets.len() {
+			assert!(self.targets[i-1] < self.targets[i]);
+		}
+
+		// !!! !!! !!!
+		if let Some(ti) = self.targets.get(0) {
+			let hit_dir = match ti.hit_dir {
+				Direction::Left => "left",
+				Direction::Right => "right"
+			};
+			let out = format!(
+				"First target --- Appearance y: {}, end y: {}, dest x: {}, post hit x: {}, is hold note: {},
+				hit dir: {}, boost to target: {}, dash to target: {}, hittable time:{}, passed time: {}",
+				ti.appearance_y, ti.end_y, ti.dest_x, ti.post_hit_x, ti.is_hold_note,
+				hit_dir, ti.boost_to_target, ti.dash_to_target, ti.hittable_time, ti.passed_time);
+			crate::log(&out);
+		}
+
+		// !!! !!! !!! correct max score
 		self.game_data.max_score = self.notes.len() as i32 * 100;
+	}
+
+	fn create_target_info(&self, player_start_x: f32, player_start_time: f32, group_appearance_y: f32,
+	group_leftmost: i32, group_rightmost: i32, group_hold: bool, group_end_appearance_y: f32) -> TargetInfo {
+		// variables to fill for target info
+		let target_hit_dir;
+		let dash_to_target;
+		let boost_to_target;
+		let left_target_x = (group_leftmost - 1) as f32 * BRICK_WIDTH as f32 + (BRICK_WIDTH - PLAYER_WIDTH) as f32;
+		let right_target_x = (group_rightmost + 1) as f32 * BRICK_WIDTH as f32;
+		let dest_x;
+		let post_hit_x;
+		let end_y = group_end_appearance_y + BRICK_HEIGHT as f32;
+		let hittable_time;
+		let passed_time;
+
+		// if left of target, right of target, in between targets
+		let distance_to_target;
+		if left_target_x - player_start_x >= 0.0 {
+			target_hit_dir = Direction::Right;
+			dest_x = left_target_x;
+			distance_to_target = left_target_x - player_start_x;
+		} else if player_start_x - right_target_x >= 0.0 {
+			target_hit_dir = Direction::Left;
+			dest_x = right_target_x;
+			distance_to_target = player_start_x - right_target_x;
+		} else if player_start_x - left_target_x < right_target_x - player_start_x {
+			target_hit_dir = Direction::Left;
+			dest_x = right_target_x;
+			distance_to_target = player_start_x - left_target_x;
+		} else {
+			target_hit_dir = Direction::Right;
+			dest_x = left_target_x;
+			distance_to_target = right_target_x - player_start_x;
+		}
+
+		let player_height_time = PLAYER_HEIGHT as f32 / self.game_data.brick_speed;
+		let ground_pos_time = GROUND_POS as f32 / self.game_data.brick_speed;
+		hittable_time = group_appearance_y / self.game_data.brick_speed - ground_pos_time; // brick rises above ground
+		passed_time = end_y / self.game_data.brick_speed - ground_pos_time + player_height_time; // brick rises above player head
+		let time_until_target = hittable_time - player_start_time;
+		let max_run_distance = time_until_target * RUN_SPEED;
+
+		if distance_to_target > max_run_distance + MAX_BOOST_DISTANCE {
+			dash_to_target = true;
+			boost_to_target = true;
+		}
+		else if distance_to_target > max_run_distance {
+			dash_to_target = false;
+			boost_to_target = true;
+		}
+		else {
+			dash_to_target = false;
+			boost_to_target = false;
+		}
+
+		match target_hit_dir {
+			Direction::Left => { 
+				post_hit_x = if group_rightmost - group_leftmost > 0 { left_target_x } else { right_target_x };
+			},
+			Direction::Right => { 
+				post_hit_x = if group_rightmost - group_leftmost > 0 { right_target_x } else { left_target_x };
+			}
+		};
+
+		let target_info = TargetInfo { appearance_y: group_appearance_y, end_y, dest_x, post_hit_x,
+			is_hold_note: group_hold, 
+			hit_dir: target_hit_dir, 
+			boost_to_target, dash_to_target,
+			hittable_time, passed_time };
+
+		return target_info;
 	}
 	
 	// add bricks to current_bricks
 	fn add_to_current_bricks(&mut self) {
 		while(self.upcoming_brick_idx < self.bricks.len()) {
 			let idx = self.upcoming_brick_idx;
-			if self.bricks[idx].appearance_y < self.end_appearance_y {
-				let graphic_group = self.bricks[idx].graphic_group;
+			if self.bricks[idx].appearance_y < self.end_y {
 				let brick_type = self.bricks[idx].brick_type;
+				let hold_segments = self.bricks[idx].hold_segments;
 
 				let x = self.bricks[idx].x;
 				let y = self.bricks[idx].appearance_y - self.scrolled_y;
-				let bounds = ObjectBounds { left_x: x, top_y: y, right_x: x + BRICK_WIDTH as f32, bottom_y: y + self.bricks[idx].height };
+				let appearance_y = self.bricks[idx].appearance_y;
+				let end_y = self.bricks[idx].end_y;
+				let bounds = ObjectBounds { left_x: x, top_y: y, right_x: x + BRICK_WIDTH as f32, bottom_y: y + BRICK_HEIGHT as f32 };
 				
-				let is_hold_note = self.bricks[idx].is_hold_note;
-				
-				self.current_bricks.push_back( Brick::new(graphic_group, brick_type, bounds, is_hold_note) );
+				self.current_bricks.push_back( Brick::new(brick_type, bounds, appearance_y, end_y, hold_segments) );
 				self.upcoming_brick_idx += 1;
 			} else {
 				break;
 			}
 		}
 	}
+
+	// find the hold positions of the current target
+	fn find_hold_positions(&self) -> Vec<f32> {
+		let mut hold_positions = Vec::with_capacity(32);
+		if let Some(target) = self.targets.get(self.target_idx) {
+			let appearance_y = target.appearance_y;
+			let mut bricks_iter = self.current_bricks.iter();
+
+			loop {
+				if let Some(brick) = bricks_iter.next() {
+					if brick.appearance_y > appearance_y {
+						break;
+					} else if brick.appearance_y == appearance_y && brick.is_hold_note() {
+						let hold_position = brick.bounds.left_x + (BRICK_WIDTH as f32 / 2.0) - (HOLD_HITBOX_WIDTH as f32 / 2.0);
+						hold_positions.push(hold_position);
+					}
+				} else {
+					break;
+				}
+			}
+		}
+
+		return hold_positions;
+	}
+
+	// destroy any bricks that overlap with player slash/hold hitboxes
+	fn destroy_bricks(&mut self) {
+		// TODO might be a little faster to do as bricks are updated
+		// TODO more efficient way than checking all bricks, check only bricks that have reached a threshold height
+		let score = &mut self.game_data.score;
+		let bricks = &mut self.current_bricks;
+		let bricks_broken = &mut self.bricks_broken;
+		let hitboxes = self.player.hitboxes();
+		let hold_hitboxes = self.player.hold_hitboxes();
+		bricks.retain_mut(|brick| -> bool {
+				let brick_type = brick.brick_type();
+				if brick.is_hold_segment() {
+					for hitbox in &hold_hitboxes {
+						if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &brick.bounds()) {
+							*score += 100;
+							*bricks_broken += 1;
+							if brick.attempt_break() {
+								return false;
+							}
+							return true;
+						}
+					}
+				} else {
+					for hitbox in &hitboxes {
+						if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &brick.bounds()) {
+							*score += 100;
+							*bricks_broken += 1;
+							if brick.attempt_break() {
+								return false;
+							}
+							return true;
+						}
+					}
+				}
+			return true;
+		});
+	}
 	
 	// seeks (changes the song time) to the time specified. resets song
 	pub fn seek(&mut self, time: f32) {
 		self.player = Player::new((BRICK_WIDTH * 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0);
 		self.scrolled_y = self.game_data.brick_speed * time;
-		self.end_appearance_y = Game::end_appearance_y(self.scrolled_y, self.game_data.brick_speed);
+		self.end_y = Game::end_y(self.scrolled_y, self.game_data.brick_speed);
 		self.game_data.time_running = time;
 		self.game_data.score = 0;
 		self.bricks_broken = 0;
 		
+		// set current bricks and upcoming brick idx
 		self.current_bricks = VecDeque::new();
 		self.upcoming_brick_idx = 0;
 		let mut i = 0;
@@ -359,9 +608,20 @@ impl Game {
 			i += 1;
 			self.upcoming_brick_idx = i;
 		}
+
+		// set target idx
+		self.target_idx = 0;
+		while(self.target_idx < self.targets.len()) {
+			// if the target can still be hit, let it be the current target
+			if self.targets[self.target_idx].passed_time > time {
+				break;
+			}
+			
+			self.target_idx += 1;
+		}
 	}
 	
-	fn end_appearance_y(scrolled_y: f32, brick_speed: f32) -> f32 {
+	fn end_y(scrolled_y: f32, brick_speed: f32) -> f32 {
 		return scrolled_y + GAME_HEIGHT as f32 + brick_speed * 2.0; // 2 second window after bricks are off the screen
 	}
 }
@@ -383,6 +643,28 @@ impl PartialOrd for UpcomingBrick {
 
 impl Ord for UpcomingBrick {
 	fn cmp(&self, other: &UpcomingBrick) -> Ordering {
+		if self.appearance_y < other.appearance_y { Ordering::Less }
+		else if self.appearance_y == other.appearance_y { Ordering::Equal }
+		else { Ordering::Greater }
+	}
+}
+
+// Equality and Order are determined only on the appearance y of bricks
+impl PartialEq for TargetInfo {
+	fn eq(&self, other: &TargetInfo) -> bool {
+		return self.appearance_y == other.appearance_y;
+	}
+}
+impl Eq for TargetInfo {}
+
+impl PartialOrd for TargetInfo {
+	fn partial_cmp(&self, other: &TargetInfo) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for TargetInfo {
+	fn cmp(&self, other: &TargetInfo) -> Ordering {
 		if self.appearance_y < other.appearance_y { Ordering::Less }
 		else if self.appearance_y == other.appearance_y { Ordering::Equal }
 		else { Ordering::Greater }

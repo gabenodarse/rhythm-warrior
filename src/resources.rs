@@ -101,13 +101,13 @@ pub const GRAPHIC_SIZES: [Position; GraphicGroup::Hold3 as usize + 1] = [
 		x: objects::BRICK_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick3 as usize].x, 
 		y: objects::BRICK_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick3 as usize].y},// Brick3,
 	Position {
-		x: objects::BRICK_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick1Segment as usize].x, 
+		x: objects::BRICK_SEGMENT_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick1Segment as usize].x, 
 		y: objects::BRICK_SEGMENT_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick1Segment as usize].y},// Brick1Segment,
 	Position {
-		x: objects::BRICK_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick2Segment as usize].x, 
+		x: objects::BRICK_SEGMENT_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick2Segment as usize].x, 
 		y: objects::BRICK_SEGMENT_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick2Segment as usize].y},// Brick2Segment,
 	Position {
-		x: objects::BRICK_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick3Segment as usize].x, 
+		x: objects::BRICK_SEGMENT_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick3Segment as usize].x, 
 		y: objects::BRICK_SEGMENT_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Brick3Segment as usize].y},// Brick3Segment,
 	Position {
 		x: objects::MIN_DASH_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Dash0 as usize].x, 

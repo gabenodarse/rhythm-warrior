@@ -215,7 +215,7 @@ impl PartialOrd for BrickData {
 }
 
 impl Ord for BrickData {
-	fn cmp(&self, other: &BrickData) -> Ordering {
+	fn cmp(&self, other: &BrickData) -> Ordering { // !!! !!! !!! why use appearance y rather than beat_pos?
 		let self_top_y = self.appearance_y(60.0, 100.0); // dummy bpm and brick speed values
 		let other_top_y = other.appearance_y(60.0, 100.0);
 		if self_top_y < other_top_y { Ordering::Less }
@@ -271,6 +271,7 @@ impl BrickData {
 		let pixels_per_beat = brick_speed * seconds_per_beat;
 		let beats_passed = self.end_beat_pos as f32 / 4.0;
 		
+		// don't account for whether the note is a leading note or not, end on the last beat pos
 		let pixels_passed = pixels_per_beat * beats_passed;
 		
 		return pixels_passed + TIME_ZERO_BRICK_POS;

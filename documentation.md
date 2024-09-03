@@ -71,6 +71,7 @@ to add a graphic or animation, add the key to the resources.json file and create
 then, modify resources.rs such that: \
 	- keys have a corresponding GraphicGroup. Names must be identical\
 	- the offset dimensions of the graphic are specified\
+	- the size of the graphic is specified\
 	- max count of the new graphic/animation are specified\
 The offset dimensions define how much offset the graphic has from the object it represents. \
 	- For example, if a graphic represents a person, the offset defines how much space around the person is also included in the graphic\
