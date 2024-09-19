@@ -88,7 +88,14 @@ impl Brick {
 		}
 		self.bounds.bottom_y += (BRICK_SEGMENT_HEIGHT + BRICK_SEGMENT_GAP) as f32;
 		self.bounds.top_y = self.bounds.bottom_y - BRICK_SEGMENT_HEIGHT as f32;
-		// !!! !!! !!! left x and right x
+
+		if self.parts_destroyed == 1 {
+			let x_diff = (BRICK_WIDTH - BRICK_SEGMENT_WIDTH) / 2;
+			let x_diff = x_diff as f32;
+			self.bounds.left_x += x_diff;
+			self.bounds.right_x -= x_diff;
+		}
+		
 		return false;
 	}
 	
@@ -117,7 +124,9 @@ impl Brick {
 		let mut y = 
 			if self.parts_destroyed == 0 { self.bounds.bottom_y + BRICK_SEGMENT_GAP as f32 }
 			else { self.bounds.top_y };
-		let x = self.bounds.left_x + (BRICK_WIDTH - BRICK_SEGMENT_WIDTH) as f32 / 2.0;
+		let x = 
+			if self.parts_destroyed == 0 { self.bounds.left_x + (BRICK_WIDTH - BRICK_SEGMENT_WIDTH) as f32 / 2.0 }
+			else { self.bounds.left_x };
 		let segment_graphic = Graphic { g: segment_graphic_group, frame: 0, flags: 0, arg: 0 };
 		while num_brick_segments > 0 {
 			positioned_graphics.push(PositionedGraphic::new(segment_graphic, x, y));

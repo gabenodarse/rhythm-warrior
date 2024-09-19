@@ -215,7 +215,7 @@ impl PartialOrd for BrickData {
 }
 
 impl Ord for BrickData {
-	fn cmp(&self, other: &BrickData) -> Ordering { // !!! !!! !!! why use appearance y rather than beat_pos?
+	fn cmp(&self, other: &BrickData) -> Ordering {
 		let self_top_y = self.appearance_y(60.0, 100.0); // dummy bpm and brick speed values
 		let other_top_y = other.appearance_y(60.0, 100.0);
 		if self_top_y < other_top_y { Ordering::Less }

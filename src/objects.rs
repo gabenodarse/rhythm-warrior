@@ -18,7 +18,7 @@ pub const SLASH_HEIGHT: i32 = PLAYER_HEIGHT;
 pub const MIN_DASH_WIDTH: i32 = 50;
 pub const DASH_HEIGHT: i32 = PLAYER_HEIGHT;
 pub const HOLD_HITBOX_WIDTH: i32 = 20;
-pub const HOLD_HITBOX_HEIGHT: i32 = PLAYER_HEIGHT;
+pub const HOLD_HITBOX_HEIGHT: i32 = 60;
 
 pub const DASH_CD: f32 = 0.12;
 pub const BRICK_DATA_BUFFER_SIZE: usize = 4;
