@@ -2,7 +2,7 @@
 import * as wasm from "../pkg/music_mercenary.js";
 import {GameCore} from "./GameCore.js";
 import {EventPropagator} from "./EventPropagator.js";
-import {Overlay} from "./overlay.js";
+import {Overlay} from "./Overlay.js";
 
 export async function run(){
 	let controls;

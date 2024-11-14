@@ -51,7 +51,6 @@ pub const WALK_SPEED: f32 = 250.0; // in pixels per second
 
 pub const MAX_BOOST_DISTANCE: f32 = 4.0 * PLAYER_WIDTH as f32;
 pub const BOOST_GRAPHIC_OFFSET: f32 = PLAYER_WIDTH as f32 / 10.0; // how close the boost graphics are to one another
-pub const HITBOX_FORGIVENESS_MARGIN: f32 = 10.0;
 
 pub struct Player {
 	state: TaggedState,
@@ -130,6 +129,25 @@ impl Player {
 		}
 	}
 	
+	pub fn check_action(&self, post_tick_time: f32) -> Option<f32> {
+		let state_time = self.state.time;
+		
+		match self.state.state {
+			PlayerState::PreSlash | PlayerState::PreSlashDash => {
+				let action_time = state_time + PRE_SLASH_TIME;
+				
+				if action_time < post_tick_time {
+					return Some(action_time);
+				} else {
+					return None;
+				}
+			},
+			_ => {
+				return None;
+			}
+		}
+	}
+	
 	// tick the player's state
 	pub fn tick(&mut self, seconds_passed: f32, game_data: &GameData, target: Option<TargetInfo>, target_hold_positions: Vec<f32>) {
 		self.target = target;
@@ -139,6 +157,152 @@ impl Player {
 		// TODO would prefer if cloning the lingering graphics before removing them was unnecessary
 		let new_set: Vec<LingeringGraphic> = self.lingering_graphics.iter().filter(|lg| lg.end_t > game_data.time_running).cloned().collect();
 		self.lingering_graphics = new_set;
+	}
+	
+	// perform a slash or slash dash if the state is correct (in preslash or preslashdash), returns hitbox and updates state
+	pub fn action_tick (&mut self, game_data: &GameData, target: Option<TargetInfo>, target_hold_positions: Vec<f32>) -> HitBox {
+		self.target = target;
+		let hitbox;
+		let time_running = game_data.time_running;
+		let t = self.state.time;
+
+		match self.state.state {
+			PlayerState::PreSlash => {
+				// boost if in range of target
+				if let Some(ti) = &self.target {
+					let pos_difference = self.bounds.left_x - ti.dest_x;
+					if pos_difference > -MAX_BOOST_DISTANCE && pos_difference < MAX_BOOST_DISTANCE && !ti.dash_to_target {
+						self.boost(time_running);
+					}
+				}
+
+				// get hitbox
+				let brick_type = if let Some(bt) = self.hit_type {bt} else {panic!()};
+				let hitbox_x = match self.hit_dir {
+					Direction::Right => self.bounds.right_x,
+					Direction::Left => self.bounds.left_x - SLASH_WIDTH as f32
+				};
+				let hitbox_bounds = ObjectBounds { 
+					left_x: hitbox_x, 
+					right_x: hitbox_x + SLASH_WIDTH as f32, 
+					top_y: self.bounds.top_y,
+					bottom_y: self.bounds.bottom_y
+				};
+				
+				hitbox = HitBox { bounds: hitbox_bounds, brick_type };
+					
+				self.state = TaggedState { state: PlayerState::Slash, time: time_running };
+			},
+			PlayerState::PreSlashDash => {
+				// boost if in range of target
+				if let Some(ti) = &self.target {
+					let pos_difference = self.bounds.left_x - ti.dest_x;
+					if pos_difference > -MAX_BOOST_DISTANCE && pos_difference < MAX_BOOST_DISTANCE && !ti.dash_to_target {
+						self.boost(time_running);
+					}
+				}
+				
+				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
+				
+				let dash_left_x;
+				let dash_right_x;
+				if let Some(ti) = &self.target { 
+					self.bounds.left_x = ti.post_hit_x;
+					self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+					match self.hit_dir {
+						Direction::Right => {
+							dash_left_x = ti.dest_x + PLAYER_WIDTH as f32;
+							dash_right_x = ti.post_hit_x;
+							self.face_dir = Direction::Right;
+						},
+						Direction::Left => {
+							dash_left_x = ti.post_hit_x + PLAYER_WIDTH as f32;
+							dash_right_x = ti.dest_x;
+							self.face_dir = Direction::Left;
+						}
+					}
+				} else { 
+					match self.hit_dir {
+						Direction::Right => {
+							self.bounds.left_x = self.bounds.left_x + MIN_DASH_WIDTH as f32;
+							self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+							dash_left_x = self.bounds.left_x - MIN_DASH_WIDTH as f32;
+							dash_right_x = self.bounds.left_x;
+							self.face_dir = Direction::Right;
+						},
+						Direction::Left => {
+							self.bounds.left_x = self.bounds.left_x - MIN_DASH_WIDTH as f32;
+							self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+							dash_left_x = self.bounds.right_x;
+							dash_right_x = self.bounds.right_x + MIN_DASH_WIDTH as f32;
+							self.face_dir = Direction::Left;
+						}
+					}
+				}
+				
+				// get graphic groups based on brick type
+				let dash_graphic_group = match brick_type {
+					BrickType::Type1 => { GraphicGroup::Dash1 },
+					BrickType::Type2 => { GraphicGroup::Dash2 },
+					BrickType::Type3 => { GraphicGroup::Dash3 }
+				};
+				
+				// push dash to lingering graphics
+				let dash_graphic = Graphic { g: dash_graphic_group, frame: 0, flags: 0, arg: 0 };
+				let mut dash_graphic_x = dash_left_x;
+				let mut remaining_dash_distance = dash_right_x - dash_left_x;
+				while remaining_dash_distance >= MIN_DASH_WIDTH as f32 {
+					self.lingering_graphics.push( LingeringGraphic {
+						positioned_graphic: PositionedGraphic::new(dash_graphic, dash_graphic_x, self.bounds.top_y),
+						start_t: time_running,
+						end_t: time_running + DASH_LINGER_TIME
+					});
+					dash_graphic_x += MIN_DASH_WIDTH as f32;
+					remaining_dash_distance -= MIN_DASH_WIDTH as f32;
+				}
+				
+				// get hitbox
+				let left_x;
+				let right_x;
+				if let Some(ti) = &self.target { 
+					match self.hit_dir {
+						Direction::Right => {
+							left_x = ti.dest_x;
+							right_x = ti.post_hit_x + PLAYER_WIDTH as f32 + SLASH_WIDTH as f32;
+						},
+						Direction::Left => {
+							left_x = ti.post_hit_x - SLASH_WIDTH as f32;
+							right_x = ti.dest_x + PLAYER_WIDTH as f32;
+						}
+					}
+				} else { 
+					match self.hit_dir {
+						Direction::Right => {
+							left_x = self.bounds.left_x - MIN_DASH_WIDTH as f32;
+							right_x = self.bounds.right_x + SLASH_WIDTH as f32;
+						},
+						Direction::Left => {
+							left_x = self.bounds.left_x - SLASH_WIDTH as f32;
+							right_x = self.bounds.right_x + MIN_DASH_WIDTH as f32;
+						}
+					}
+				}
+				
+				let hitbox_bounds = ObjectBounds { 
+					left_x, 
+					right_x,
+					top_y: self.bounds.top_y,
+					bottom_y: self.bounds.bottom_y
+				};
+				
+				hitbox = HitBox { bounds: hitbox_bounds, brick_type };
+				
+				self.state = TaggedState { state: PlayerState::SlashDash, time: time_running };
+			},
+			_ => panic!()
+		}
+	
+		return hitbox;
 	}
 	
 	// accept an input, handle it only if it isn't already down
@@ -167,9 +331,9 @@ impl Player {
 			}
 		}
 	}
-	
+
 	// inputs a slash command, updating player state
-	pub fn input_slash (&mut self, brick_type: BrickType, time_running: f32) {
+	fn input_slash (&mut self, brick_type: BrickType, time_running: f32) {
 		match self.state.state {
 			PlayerState::PreSlash => (),
 			PlayerState::PreDash => {
@@ -186,7 +350,7 @@ impl Player {
 	}
 	
 	// inputs a dash command, updating player state
-	pub fn input_dash (&mut self, time_running: f32) {
+	fn input_dash (&mut self, time_running: f32) {
 		match self.state.state {
 			PlayerState::PreDash => (),
 			PlayerState::PreSlash => {
@@ -196,69 +360,6 @@ impl Player {
 				self.state = TaggedState {time: time_running, state: PlayerState::PreDash};
 			}
 		}
-	}
-	
-	pub fn hitboxes (&self) -> Vec<HitBox> {
-		let mut hitboxes = Vec::new();
-		match self.state.state {
-			PlayerState::Standing | PlayerState::Walking | PlayerState::Running | PlayerState::PreSlash
-			| PlayerState::PreSlashDash | PlayerState::PreDash | PlayerState::Dash | PlayerState::PostSlash
-			| PlayerState::Hold => {},
-			PlayerState::Slash => {
-				let brick_type = if let Some(bt) = self.hit_type {bt} else {panic!()};
-				let hitbox_x = match self.hit_dir {
-					Direction::Right => self.bounds.right_x,
-					Direction::Left => self.bounds.left_x - SLASH_WIDTH as f32
-				};
-				
-				let bounds = ObjectBounds { 
-					left_x: hitbox_x, 
-					right_x: hitbox_x + SLASH_WIDTH as f32, 
-					top_y: self.bounds.top_y - HITBOX_FORGIVENESS_MARGIN,
-					bottom_y: self.bounds.bottom_y + HITBOX_FORGIVENESS_MARGIN
-				};
-				hitboxes.push(HitBox { bounds, brick_type });
-			},
-			PlayerState::SlashDash => {
-				let brick_type = if let Some(bt) = self.hit_type {bt} else {panic!()};
-				let left_x;
-				let right_x;
-				if let Some(ti) = &self.target { 
-					match self.hit_dir {
-						Direction::Right => {
-							left_x = ti.dest_x;
-							right_x = ti.post_hit_x + SLASH_WIDTH as f32;
-						},
-						Direction::Left => {
-							left_x = ti.post_hit_x - SLASH_WIDTH as f32;
-							right_x = ti.dest_x;
-						}
-					}
-				} else { 
-					match self.hit_dir {
-						Direction::Right => {
-							left_x = self.bounds.right_x - MIN_DASH_WIDTH as f32;
-							right_x = self.bounds.right_x + SLASH_WIDTH as f32;
-						},
-						Direction::Left => {
-							left_x = self.bounds.left_x - SLASH_WIDTH as f32;
-							right_x = self.bounds.left_x + MIN_DASH_WIDTH as f32;
-						}
-					}
-				}
-				
-				let bounds = ObjectBounds { 
-					left_x, 
-					right_x,
-					top_y: self.bounds.top_y - HITBOX_FORGIVENESS_MARGIN,
-					bottom_y: self.bounds.bottom_y + HITBOX_FORGIVENESS_MARGIN
-				};
-				hitboxes.push(HitBox { bounds, brick_type });
-			}
-			
-		}
-		
-		return hitboxes;
 	}
 	
 	pub fn hold_hitboxes(&self) -> Vec<HitBox> {
@@ -296,6 +397,7 @@ impl Player {
 
 		return hitboxes;
 	}
+	
 	// boost from current position to next to target, if close enough
 	fn boost(&mut self, time_running: f32) {
 		let target = if let Some(t) = &self.target { t } else { return; };
@@ -448,19 +550,9 @@ impl Player {
 				return;
 			},
 			PlayerState::PreSlash => {
-				if time_running - t <= PRE_SLASH_TIME {
-					return;
+				if time_running - t > PRE_SLASH_TIME {
+					panic!(); // pre slashes turning into slashes should be handled in action_tick
 				}
-
-				// boost if in range of target
-				if let Some(ti) = &self.target {
-					let pos_difference = self.bounds.left_x - ti.dest_x;
-					if pos_difference > -MAX_BOOST_DISTANCE && pos_difference < MAX_BOOST_DISTANCE && !ti.dash_to_target {
-						self.boost(time_running);
-					}
-				}
-
-				self.state = TaggedState { state: PlayerState::Slash, time: time_running };
 				return;
 			},
 			PlayerState::PreDash => {
@@ -515,78 +607,9 @@ impl Player {
 				return;
 			},
 			PlayerState::PreSlashDash => {
-				if time_running - t <= PRE_SLASH_TIME {
-					return;
+				if time_running - t > PRE_SLASH_TIME {
+					panic!(); // preSlashDash turning into slashDash should be handled in action_tick
 				}
-				
-				// boost if in range of target
-				if let Some(ti) = &self.target {
-					let pos_difference = self.bounds.left_x - ti.dest_x;
-					if pos_difference > -MAX_BOOST_DISTANCE && pos_difference < MAX_BOOST_DISTANCE && !ti.dash_to_target {
-						self.boost(time_running);
-					}
-				}
-				
-				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
-				
-				let dash_left_x;
-				let dash_right_x;
-				if let Some(ti) = &self.target { 
-					self.bounds.left_x = ti.post_hit_x;
-					self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
-					match self.hit_dir {
-						Direction::Right => {
-							dash_left_x = ti.dest_x + PLAYER_WIDTH as f32;
-							dash_right_x = ti.post_hit_x;
-							self.face_dir = Direction::Right;
-						},
-						Direction::Left => {
-							dash_left_x = ti.post_hit_x + PLAYER_WIDTH as f32;
-							dash_right_x = ti.dest_x;
-							self.face_dir = Direction::Left;
-						}
-					}
-				} else { 
-					match self.hit_dir {
-						Direction::Right => {
-							self.bounds.left_x = self.bounds.left_x + MIN_DASH_WIDTH as f32;
-							self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
-							dash_left_x = self.bounds.left_x - MIN_DASH_WIDTH as f32;
-							dash_right_x = self.bounds.left_x;
-							self.face_dir = Direction::Right;
-						},
-						Direction::Left => {
-							self.bounds.left_x = self.bounds.left_x - MIN_DASH_WIDTH as f32;
-							self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
-							dash_left_x = self.bounds.right_x;
-							dash_right_x = self.bounds.right_x + MIN_DASH_WIDTH as f32;
-							self.face_dir = Direction::Left;
-						}
-					}
-				}
-				
-				// get graphic groups based on brick type
-				let dash_graphic_group = match brick_type {
-					BrickType::Type1 => { GraphicGroup::Dash1 },
-					BrickType::Type2 => { GraphicGroup::Dash2 },
-					BrickType::Type3 => { GraphicGroup::Dash3 }
-				};
-				
-				// push dash to lingering graphics
-				let dash_graphic = Graphic { g: dash_graphic_group, frame: 0, flags: 0, arg: 0 };
-				let mut dash_graphic_x = dash_left_x;
-				let mut remaining_dash_distance = dash_right_x - dash_left_x;
-				while remaining_dash_distance >= MIN_DASH_WIDTH as f32 {
-					self.lingering_graphics.push( LingeringGraphic {
-						positioned_graphic: PositionedGraphic::new(dash_graphic, dash_graphic_x, self.bounds.top_y),
-						start_t: time_running,
-						end_t: time_running + DASH_LINGER_TIME
-					});
-					dash_graphic_x += MIN_DASH_WIDTH as f32;
-					remaining_dash_distance -= MIN_DASH_WIDTH as f32;
-				}
-				
-				self.state = TaggedState { state: PlayerState::SlashDash, time: time_running };
 
 				return;
 			},

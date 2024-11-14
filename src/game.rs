@@ -18,6 +18,7 @@ use crate::Graphic;
 use crate::PositionedGraphic;
 use crate::RenderingInstructions;
 use objects::Object;
+use objects::HitBox;
 use objects::BrickType;
 use objects::ObjectBounds;
 use objects::Direction;
@@ -57,8 +58,8 @@ struct UpcomingBrick {
 pub struct TargetInfo {
 	pub appearance_y: f32,
 	pub end_y: f32,
-	pub dest_x: f32, // where the player left_x should be
-	pub post_hit_x: f32,
+	pub dest_x: f32, // where the player left_x should be to hit the target
+	pub post_hit_x: f32, // where the player left_x should be after hitting the target
 	pub is_hold_note: bool,
 	pub hit_dir: Direction, // direction player must slash in order to hit targets once he arrives at dest_x
 	pub boost_to_target: bool, // whether the player should boost in order to reach dest_x on time
@@ -123,32 +124,63 @@ impl Game {
 			seconds_passed = MAX_TIME_BETWEEN_TICKS;
 		}
 		
-		let delta_y = seconds_passed * self.game_data.brick_speed;
-		self.game_data.time_running += seconds_passed;
-		self.scrolled_y += delta_y;
-		self.end_y += delta_y;
-
-		let hold_positions = self.find_hold_positions();
-
-		// tick player
-			// if target is on screen and target has not already passed, pass target info to player
-		if let Some(target) = self.targets.get(self.target_idx){
-			if target.appearance_y < self.end_y && target.passed_time >= self.game_data.time_running {
-				self.player.tick(seconds_passed, &self.game_data, Some(target.clone()), hold_positions);
+		let mut target = None; 
+		// if target is on screen and target has not already passed, pass target info to player
+		if let Some(target_unwrapped) = self.targets.get(self.target_idx) {
+			if target_unwrapped.appearance_y > self.end_y && target_unwrapped.passed_time < self.game_data.time_running {
+				target = None; // !!! !!! !!! missed target
 			} else {
-				self.player.tick(seconds_passed, &self.game_data, None, hold_positions);
+				target = Some(target_unwrapped.clone());
+			}
+		}
+		
+		let hold_positions = self.find_hold_positions(); // !!! !!! !!! breaking the tops of hold notes populates hold positions
+		
+		// check for hold brick destruction (first of two times, to account for hold notes which may sneak past hitbox)
+		self.destroy_holds();
+		
+		// check for any actions that happened mid tick. Either action_tick (if the player is slashing) or regular tick
+		let end_tick_time = self.game_data.time_running + seconds_passed;
+		if let Some(action_time) = self.player.check_action(end_tick_time) {
+			let pre_action_time = action_time - self.game_data.time_running;
+			let post_action_time = seconds_passed - pre_action_time;
+			
+			// scroll bricks to the time of action
+			let delta_y = pre_action_time * self.game_data.brick_speed;
+			self.scrolled_y += delta_y;
+			self.end_y += delta_y;
+			self.game_data.time_running += pre_action_time;
+			for brick in &mut self.current_bricks {
+				brick.bounds.top_y -= delta_y;
+				brick.bounds.bottom_y -= delta_y;
+			}
+			
+			// action tick the player, check for brick destruction
+			let hitbox = self.player.action_tick(&self.game_data, target, hold_positions);
+			self.destroy_bricks(hitbox);
+			
+			// scroll bricks the rest of the tick time
+			let delta_y = post_action_time * self.game_data.brick_speed;
+			self.scrolled_y += delta_y;
+			self.end_y += delta_y;
+			self.game_data.time_running += post_action_time;
+			for brick in &mut self.current_bricks {
+				brick.bounds.top_y -= delta_y;
+				brick.bounds.bottom_y -= delta_y;
 			}
 		} else {
-			self.player.tick(seconds_passed, &self.game_data, None, hold_positions);
-		}
-
-		// check for brick destruction (first of two times, to account for hold notes which may sneak past hitbox)
-		self.destroy_bricks();
-
-		// tick all current bricks
-		for brick in &mut self.current_bricks {
-			brick.bounds.top_y -= delta_y;
-			brick.bounds.bottom_y -= delta_y;
+			// scroll bricks
+			let delta_y = seconds_passed * self.game_data.brick_speed;
+			self.scrolled_y += delta_y;
+			self.end_y += delta_y;
+			self.game_data.time_running += seconds_passed;
+			for brick in &mut self.current_bricks {
+				brick.bounds.top_y -= delta_y;
+				brick.bounds.bottom_y -= delta_y;
+			}
+			
+			// tick the player
+			self.player.tick(seconds_passed, &self.game_data, target, hold_positions);
 		}
 
 		// discard any bricks that are offscreen
@@ -161,8 +193,8 @@ impl Game {
 			}
 		}
 		
-		// check for brick destruction (second of two times)
-		self.destroy_bricks();
+		// check for hold brick destruction (second of two times)
+		self.destroy_holds();
 		
 		self.add_to_current_bricks();
 
@@ -248,8 +280,9 @@ impl Game {
 	}
 	
 	// takes an input command and passes it forward to be handled
-	pub fn input_command (&mut self, input: Input) {
-		self.player.input(input, self.game_data.time_running);
+	pub fn input_command (&mut self, input: Input, time_since_tick: f32) {
+		let input_time = self.game_data.time_running + time_since_tick;
+		self.player.input(input, input_time);
 	}
 	
 	// takes key release command and passes it forward to be handled
@@ -510,77 +543,78 @@ impl Game {
 		return hold_positions;
 	}
 
-	// destroy any bricks that overlap with player slash/hold hitboxes
-	fn destroy_bricks(&mut self) {
+	// destroy any bricks that overlap with passed  hitboxes
+	fn destroy_bricks(&mut self, hitbox: HitBox) {
 		// TODO might be a little faster to do as bricks are updated
 		// TODO more efficient way than checking all bricks, check only bricks that have reached a threshold height
 		let score = &mut self.game_data.score;
 		let bricks = &mut self.current_bricks;
 		let bricks_broken = &mut self.bricks_broken;
-		let hitboxes = self.player.hitboxes();
-		let hold_hitboxes = self.player.hold_hitboxes();
 		bricks.retain_mut(|brick| -> bool {
 				let brick_type = brick.brick_type();
 
-				// if not a hold segment check for intersection with regular hitboxes
+				// if not a hold segment check for intersection with hitbox
 				if ! brick.is_hold_segment() {
 					let mut is_hold_note = false;
-					for hitbox in &hitboxes {
-						if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &brick.bounds()) {
-							*score += BRICK_SCORE;
-							*bricks_broken += 1;
-							if brick.attempt_break() {
-								return false;
-							}
-
-							is_hold_note = true;
+					
+					if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &brick.bounds()) {
+						*score += BRICK_SCORE;
+						*bricks_broken += 1;
+						if brick.attempt_break() {
+							return false;
 						}
+
+						is_hold_note = true;
 					}
 
-					// if it's a hold note, break any hold segments which also intersect with hitboxes
+					// if it's a hold note, break any hold segments which also intersect with the hitbox
 						// (when the top of a hold is broken, also break any hold segments which are hit 
 						// so that the hold portion begins strictly after the initial hit)
 					if is_hold_note {
-						'allhitboxes: loop {
-							for hitbox in &hitboxes {
-								if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &brick.bounds()) {
-									*score += HOLD_SEGMENT_SCORE;
-									*bricks_broken += 1;
-									if brick.attempt_break() {
-										return false;
-									}
-
-									continue 'allhitboxes;
+						loop {
+							if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &brick.bounds()) {
+								*score += HOLD_SEGMENT_SCORE;
+								*bricks_broken += 1;
+								if brick.attempt_break() {
+									return false;
 								}
+
+								continue;
 							}
 
-							for hitbox in &hold_hitboxes {
-								if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &brick.bounds()) {
-									*score += HOLD_SEGMENT_SCORE;
-									*bricks_broken += 1;
-									if brick.attempt_break() {
-										return false;
-									}
-
-									continue 'allhitboxes;
-								}
-							}
-
-							break 'allhitboxes;
+							break;
 						}
 					}
-				} else { // else check for intersection with hold hitboxes
-					for hitbox in &hold_hitboxes {
-						if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &brick.bounds()) {
-							*score += HOLD_SEGMENT_SCORE;
-							*bricks_broken += 1;
-							if brick.attempt_break() {
-								return false;
-							}
+				} 
+					
+			return true;
+		});
+	}
+	
+	// destroy any hold segments that overlap with player hold hitboxes
+	fn destroy_holds(&mut self) {
+		// TODO might be a little faster to do as bricks are updated
+		// TODO more efficient way than checking all bricks, check only bricks that have reached a threshold height
+		let score = &mut self.game_data.score;
+		let bricks = &mut self.current_bricks;
+		let bricks_broken = &mut self.bricks_broken;
+		let hold_hitboxes = self.player.hold_hitboxes();
+		bricks.retain_mut(|brick| -> bool {
+			let brick_type = brick.brick_type();
+
+			// if not a hold segment check for intersection with regular hitboxes
+			if brick.is_hold_segment() { // else check for intersection with hold hitboxes
+				for hitbox in &hold_hitboxes {
+					if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &brick.bounds()) {
+						*score += HOLD_SEGMENT_SCORE;
+						*bricks_broken += 1;
+						if brick.attempt_break() {
+							return false;
 						}
 					}
 				}
-					
+			}
+				
 			return true;
 		});
 	}
