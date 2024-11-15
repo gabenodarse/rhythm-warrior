@@ -134,8 +134,6 @@ impl Game {
 			}
 		}
 		
-		let hold_positions = self.find_hold_positions(); // !!! !!! !!! breaking the tops of hold notes populates hold positions
-		
 		// check for hold brick destruction (first of two times, to account for hold notes which may sneak past hitbox)
 		self.destroy_holds();
 		
@@ -156,7 +154,7 @@ impl Game {
 			}
 			
 			// action tick the player, check for brick destruction
-			let hitbox = self.player.action_tick(&self.game_data, target, hold_positions);
+			let hitbox = self.player.action_tick(&self.game_data, target);
 			self.destroy_bricks(hitbox);
 			
 			// scroll bricks the rest of the tick time
@@ -180,7 +178,7 @@ impl Game {
 			}
 			
 			// tick the player
-			self.player.tick(seconds_passed, &self.game_data, target, hold_positions);
+			self.player.tick(seconds_passed, &self.game_data, target);
 		}
 
 		// discard any bricks that are offscreen
@@ -519,30 +517,6 @@ impl Game {
 		}
 	}
 
-	// find the hold positions of the current target
-	fn find_hold_positions(&self) -> Vec<f32> {
-		let mut hold_positions = Vec::with_capacity(32);
-		if let Some(target) = self.targets.get(self.target_idx) {
-			let appearance_y = target.appearance_y;
-			let mut bricks_iter = self.current_bricks.iter();
-
-			loop {
-				if let Some(brick) = bricks_iter.next() {
-					if brick.appearance_y > appearance_y {
-						break;
-					} else if brick.appearance_y == appearance_y && brick.is_hold_note() {
-						let hold_position = brick.bounds.left_x + (BRICK_WIDTH as f32 / 2.0) - (HOLD_HITBOX_WIDTH as f32 / 2.0);
-						hold_positions.push(hold_position);
-					}
-				} else {
-					break;
-				}
-			}
-		}
-
-		return hold_positions;
-	}
-
 	// destroy any bricks that overlap with passed  hitboxes
 	fn destroy_bricks(&mut self, hitbox: HitBox) {
 		// TODO might be a little faster to do as bricks are updated
@@ -550,6 +524,8 @@ impl Game {
 		let score = &mut self.game_data.score;
 		let bricks = &mut self.current_bricks;
 		let bricks_broken = &mut self.bricks_broken;
+		
+		let mut new_hold_positions = Vec::new();
 		bricks.retain_mut(|brick| -> bool {
 				let brick_type = brick.brick_type();
 
@@ -558,12 +534,18 @@ impl Game {
 					let mut is_hold_note = false;
 					
 					if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &brick.bounds()) {
+						let brick_x = &brick.bounds().left_x;
 						*score += BRICK_SCORE;
 						*bricks_broken += 1;
+						
 						if brick.attempt_break() {
 							return false;
 						}
-
+						
+						// any broken hold notes are added to the Game's hold positions
+						let hold_position = brick_x + (BRICK_WIDTH as f32 / 2.0) - (HOLD_HITBOX_WIDTH as f32 / 2.0);
+						new_hold_positions.push(hold_position);
+						
 						is_hold_note = true;
 					}
 
@@ -573,6 +555,7 @@ impl Game {
 					if is_hold_note {
 						loop {
 							if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &brick.bounds()) {
+								
 								*score += HOLD_SEGMENT_SCORE;
 								*bricks_broken += 1;
 								if brick.attempt_break() {
@@ -589,6 +572,8 @@ impl Game {
 					
 			return true;
 		});
+		
+		self.player.update_hold_positions(new_hold_positions);
 	}
 	
 	// destroy any hold segments that overlap with player hold hitboxes

@@ -69,8 +69,6 @@ pub struct Player {
 	// flag indicating whether to go into a hold (false) or end the slash regularly without holding (true)
 		// set to false when the slash input is taken, set to true when the key up end input is received
 	stop_hold: bool, 
-	// flag indicating whether the hold hitbox should hit multiple bricks or just the immediate. set to true after a slashdash
-	multi_note_hold: bool,
 	
 	lingering_graphics: Vec<LingeringGraphic>
 }
@@ -123,20 +121,19 @@ impl Player {
 			hold_positions : Vec::new(),
 			
 			stop_hold: false,
-			multi_note_hold: false,
 			
 			lingering_graphics: Vec::new() // graphics for objects no longer present but still showing, e.g. slashes/dashes that have executed
 		}
 	}
 	
-	pub fn check_action(&self, post_tick_time: f32) -> Option<f32> {
+	pub fn check_action(&self, end_tick_time: f32) -> Option<f32> {
 		let state_time = self.state.time;
 		
 		match self.state.state {
 			PlayerState::PreSlash | PlayerState::PreSlashDash => {
 				let action_time = state_time + PRE_SLASH_TIME;
 				
-				if action_time < post_tick_time {
+				if action_time <= end_tick_time {
 					return Some(action_time);
 				} else {
 					return None;
@@ -149,10 +146,10 @@ impl Player {
 	}
 	
 	// tick the player's state
-	pub fn tick(&mut self, seconds_passed: f32, game_data: &GameData, target: Option<TargetInfo>, target_hold_positions: Vec<f32>) {
+	pub fn tick(&mut self, seconds_passed: f32, game_data: &GameData, target: Option<TargetInfo>) {
 		self.target = target;
 
-		self.update_state(seconds_passed, game_data, target_hold_positions);
+		self.update_state(seconds_passed, game_data);
 		
 		// TODO would prefer if cloning the lingering graphics before removing them was unnecessary
 		let new_set: Vec<LingeringGraphic> = self.lingering_graphics.iter().filter(|lg| lg.end_t > game_data.time_running).cloned().collect();
@@ -160,8 +157,9 @@ impl Player {
 	}
 	
 	// perform a slash or slash dash if the state is correct (in preslash or preslashdash), returns hitbox and updates state
-	pub fn action_tick (&mut self, game_data: &GameData, target: Option<TargetInfo>, target_hold_positions: Vec<f32>) -> HitBox {
+	pub fn action_tick (&mut self, game_data: &GameData, target: Option<TargetInfo>) -> HitBox {
 		self.target = target;
+		
 		let hitbox;
 		let time_running = game_data.time_running;
 		let t = self.state.time;
@@ -305,6 +303,10 @@ impl Player {
 		return hitbox;
 	}
 	
+	pub fn update_hold_positions(&mut self, new_hold_positions: Vec<f32>) {
+		self.hold_positions = new_hold_positions;
+	}
+	
 	// accept an input, handle it only if it isn't already down
 	pub fn input(&mut self, input: Input, time_running: f32) {
 		if self.inputs_down[input as usize] == false {
@@ -320,13 +322,20 @@ impl Player {
 	
 	pub fn end_input(&mut self, input: Input) {
 		self.inputs_down[input as usize] = false;
-		if let Input::Dash = input {
-			self.multi_note_hold = false;
-		} else if let Some(hit_type) = self.hit_type {
+		if let Some(hit_type) = self.hit_type {
 			match (input, hit_type) {
-				(Input::Slash1, BrickType::Type1) => self.stop_hold = true,
-				(Input::Slash2, BrickType::Type2) => self.stop_hold = true,
-				(Input::Slash3, BrickType::Type3) => self.stop_hold = true,
+				(Input::Slash1, BrickType::Type1) => {
+					self.stop_hold = true;
+					self.hold_positions = Vec::new();
+				},
+				(Input::Slash2, BrickType::Type2) => {
+					self.stop_hold = true;
+					self.hold_positions = Vec::new();
+				},
+				(Input::Slash3, BrickType::Type3) => {
+					self.stop_hold = true;
+					self.hold_positions = Vec::new();
+				}
 				_ => ()
 			}
 		}
@@ -367,7 +376,7 @@ impl Player {
 		if let PlayerState::Hold = self.state.state {
 			let brick_type = if let Some(bt) = self.hit_type {bt} else {panic!()};
 			
-			if self.multi_note_hold && self.hold_positions.len() > 0 {
+			if self.hold_positions.len() > 0 {
 				for hp in &self.hold_positions {
 					let bounds = ObjectBounds { 
 						left_x: *hp, 
@@ -530,7 +539,7 @@ impl Player {
 	}
 	
 	// updates the state and performs any other consequent updates to player position or lingering graphics
-	fn update_state(&mut self, seconds_passed: f32, game_data: &GameData, target_hold_positions: Vec<f32>) {
+	fn update_state(&mut self, seconds_passed: f32, game_data: &GameData) {
 		let time_running = game_data.time_running;
 		let t = self.state.time;
 		match self.state.state {
@@ -614,8 +623,6 @@ impl Player {
 				return;
 			},
 			PlayerState::Slash => {
-				self.multi_note_hold = false;
-				self.hold_positions = target_hold_positions;
 				
 				if self.hold_positions.len() > 0 && !self.stop_hold {
 					self.state = TaggedState {state:PlayerState::Hold, time: time_running};
@@ -631,8 +638,6 @@ impl Player {
 				return;
 			},
 			PlayerState::SlashDash => {
-				self.multi_note_hold = true;
-				self.hold_positions = target_hold_positions;
 				
 				if self.hold_positions.len() > 0 && !self.stop_hold {
 					self.state = TaggedState {state:PlayerState::Hold, time: time_running};
@@ -672,7 +677,6 @@ impl Player {
 				} 
 
 				self.face_dir = self.hit_dir;
-				self.multi_note_hold = false;
 				self.state = TaggedState { state: PlayerState::Standing, time: time_running };
 				return;
 			}
@@ -769,7 +773,7 @@ impl Player {
 					BrickType::Type3 => GraphicGroup::Hold3
 				};
 				
-				if self.multi_note_hold && self.hold_positions.len() > 0 {
+				if self.hold_positions.len() > 0 {
 					for hp in &self.hold_positions {
 						let graphic = Graphic {g: hitbox_graphic_group, frame: 0, flags: 0, arg: 0};
 						positioned_graphics.push(PositionedGraphic::new(graphic, *hp, GROUND_POS));

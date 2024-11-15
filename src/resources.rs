@@ -64,9 +64,9 @@ pub const GRAPHIC_OFFSETS: [Position; GraphicGroup::Hold3 as usize + 1] = [
 	Position {x: 50.0, y: 50.0},// Holding1,
 	Position {x: 50.0, y: 50.0},// Holding2,
 	Position {x: 50.0, y: 50.0},// Holding3,
-	Position {x: 50.0, y: 50.0},// Hold1,
-	Position {x: 50.0, y: 50.0},// Hold2,
-	Position {x: 50.0, y: 50.0},// Hold3
+	Position {x: 50.0, y: 30.0},// Hold1,
+	Position {x: 50.0, y: 30.0},// Hold2,
+	Position {x: 50.0, y: 30.0},// Hold3
 ];
 
 pub const GRAPHIC_SIZES: [Position; GraphicGroup::Hold3 as usize + 1] = [
