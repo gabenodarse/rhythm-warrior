@@ -3,6 +3,7 @@ use wasm_bindgen::prelude::*;
 
 use macros::EnumVariantCount;
 
+use crate::game;
 use crate::player;
 use crate::objects;
 use crate::Position;
@@ -12,6 +13,7 @@ use crate::Position;
 #[derive(Clone, Copy, Debug, EnumVariantCount)]
 pub enum GraphicGroup {
 	Background,
+	DashIndicator,
 	Standing,
 	Walking,
 	Running,
@@ -40,8 +42,10 @@ pub enum GraphicGroup {
 }
 
 // !!! more robust way to determine the size of GraphicGroup than the (maybe) last enumeration + 1
+// graphic offsets allow decoration space around where the graphic is positioned
 pub const GRAPHIC_OFFSETS: [Position; GraphicGroup::Hold3 as usize + 1] = [
 	Position {x: 0.0, y: 0.0},// Background,
+	Position {x: 0.0, y: 0.0}, // DashIndicator
 	Position {x: 50.0, y: 25.0}, // Standing
 	Position {x: 50.0, y: 25.0},// Walking,
 	Position {x: 50.0, y: 25.0},// Running,
@@ -73,6 +77,9 @@ pub const GRAPHIC_SIZES: [Position; GraphicGroup::Hold3 as usize + 1] = [
 	Position {
 		x: crate::GAME_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Background as usize].x, 
 		y: crate::GAME_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Background as usize].y},// Background,
+	Position {
+		x: game::DASH_INDICATOR_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::DashIndicator as usize].x,
+		y: game::DASH_INDICATOR_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::DashIndicator as usize].y},
 	Position {
 		x: objects::PLAYER_WIDTH as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Standing as usize].x, 
 		y: objects::PLAYER_HEIGHT as f32 + 2.0 * GRAPHIC_OFFSETS[GraphicGroup::Standing as usize].y},// Standing,
@@ -155,6 +162,7 @@ pub const GRAPHIC_SIZES: [Position; GraphicGroup::Hold3 as usize + 1] = [
 pub fn max_graphics(g: GraphicGroup) -> u32 {
 	match g {
 		GraphicGroup::Background => 1,
+		GraphicGroup::DashIndicator => 32,
 		GraphicGroup::Standing => 1,
 		GraphicGroup::Walking => 1,
 		GraphicGroup::Running => 1,

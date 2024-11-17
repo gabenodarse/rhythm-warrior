@@ -49,7 +49,6 @@ const BOOST_PRELINGER_TIME: f32 = 1.2;
 pub const RUN_SPEED: f32 = 550.0; // in pixels per second
 pub const WALK_SPEED: f32 = 250.0; // in pixels per second
 
-pub const MAX_BOOST_DISTANCE: f32 = 4.0 * PLAYER_WIDTH as f32;
 pub const BOOST_GRAPHIC_OFFSET: f32 = PLAYER_WIDTH as f32 / 10.0; // how close the boost graphics are to one another
 
 pub struct Player {
@@ -168,8 +167,7 @@ impl Player {
 			PlayerState::PreSlash => {
 				// boost if in range of target
 				if let Some(ti) = &self.target {
-					let pos_difference = self.bounds.left_x - ti.dest_x;
-					if pos_difference > -MAX_BOOST_DISTANCE && pos_difference < MAX_BOOST_DISTANCE && !ti.dash_to_target {
+					if !ti.dash_to_target {
 						self.boost(time_running);
 					}
 				}
@@ -194,8 +192,7 @@ impl Player {
 			PlayerState::PreSlashDash => {
 				// boost if in range of target
 				if let Some(ti) = &self.target {
-					let pos_difference = self.bounds.left_x - ti.dest_x;
-					if pos_difference > -MAX_BOOST_DISTANCE && pos_difference < MAX_BOOST_DISTANCE && !ti.dash_to_target {
+					if !ti.dash_to_target {
 						self.boost(time_running);
 					}
 				}
@@ -411,7 +408,7 @@ impl Player {
 	fn boost(&mut self, time_running: f32) {
 		let target = if let Some(t) = &self.target { t } else { return; };
 		
-		// if within range where boost is reasonable, then boost
+		// boost from current position to target
 		let pos_difference = target.dest_x - self.bounds.left_x;
 		if pos_difference > 0.0 {
 			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running - self.state.time), flags: 0, arg: 0 };
@@ -479,7 +476,7 @@ impl Player {
 				}
 				let move_speed;
 
-				// either dash, boost, run, or walk
+				// either boost, run, or walk
 				if !ti.dash_to_target && ti.hittable_time <= game_data.time_running {
 					if distance_to_target != 0.0 {
 						self.boost(game_data.time_running);
@@ -569,35 +566,63 @@ impl Player {
 					return;
 				}
 				
-				// boost if in range of target
-				if let Some(ti) = &self.target {
-					let pos_difference = self.bounds.left_x - ti.dest_x;
-					if pos_difference > -MAX_BOOST_DISTANCE && pos_difference < MAX_BOOST_DISTANCE && !ti.dash_to_target {
-						self.boost(time_running);
-					}
-				}
-				
 				let dash_graphic_group = GraphicGroup::Dash0;
 
+				let is_dash_target;
 				let dash_left_x;
 				let dash_right_x;
-				match self.hit_dir {
-					Direction::Right => {
-						self.bounds.left_x = self.bounds.left_x + MIN_DASH_WIDTH as f32;
-						self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
-						dash_left_x = self.bounds.left_x - MIN_DASH_WIDTH as f32;
-						dash_right_x = self.bounds.left_x;
-						self.face_dir = Direction::Right;
+				
+				match self.target.clone() {
+					None => {
+						is_dash_target = false;
 					},
-					Direction::Left => {
-						self.bounds.left_x = self.bounds.left_x - MIN_DASH_WIDTH as f32;
-						self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
-						dash_left_x = self.bounds.right_x;
-						dash_right_x = self.bounds.right_x + MIN_DASH_WIDTH as f32;
-						self.face_dir = Direction::Left;
+					Some(ti) => {
+						if ti.dash_to_target {
+							is_dash_target = true;
+						}
+						else {
+							is_dash_target = false;
+						}
 					}
 				}
 				
+				if is_dash_target {
+					if let Some(ti) = self.target.clone() {
+						// dash from current position to target
+						let pos_difference = ti.dest_x - self.bounds.left_x;
+						
+						if pos_difference > 0.0 {
+							dash_left_x = self.bounds.left_x;
+							dash_right_x = ti.dest_x;
+							self.bounds.left_x = ti.dest_x;
+							self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+						} else {
+							dash_right_x = self.bounds.right_x;
+							self.bounds.left_x = ti.dest_x;
+							self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+							dash_left_x = self.bounds.right_x;
+						}
+					} else {
+						panic!();
+					}
+				}
+				else {
+					match self.face_dir {
+						Direction::Right => {
+							self.bounds.left_x = self.bounds.left_x + MIN_DASH_WIDTH as f32;
+							self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+							dash_left_x = self.bounds.left_x - MIN_DASH_WIDTH as f32;
+							dash_right_x = self.bounds.left_x;
+						},
+						Direction::Left => {
+							self.bounds.left_x = self.bounds.left_x - MIN_DASH_WIDTH as f32;
+							self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+							dash_left_x = self.bounds.right_x;
+							dash_right_x = self.bounds.right_x + MIN_DASH_WIDTH as f32;
+						}
+					}
+				}
+					
 				// push dash to lingering graphics
 				let dash_graphic = Graphic { g: dash_graphic_group, frame: 0, flags: 0, arg: 0 };
 				let mut dash_graphic_x = dash_left_x;

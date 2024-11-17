@@ -36,11 +36,13 @@ use objects::BRICK_SEGMENT_HEIGHT;
 use objects::BRICK_WIDTH;
 use objects::HOLD_HITBOX_WIDTH;
 use player::RUN_SPEED;
-use player::MAX_BOOST_DISTANCE;
 
 const MAX_TIME_BETWEEN_TICKS: f32 = 0.025;
+const MAX_BOOST_DISTANCE: f32 = 4.0 * PLAYER_WIDTH as f32;
 const BRICK_SCORE: i32 = 100;
 const HOLD_SEGMENT_SCORE: i32 = 20;
+pub const DASH_INDICATOR_WIDTH: i32 = 85;
+pub const DASH_INDICATOR_HEIGHT: i32 = 60;
 
 #[derive(Clone, Copy)]
 struct UpcomingBrick {
@@ -62,8 +64,8 @@ pub struct TargetInfo {
 	pub post_hit_x: f32, // where the player left_x should be after hitting the target
 	pub is_hold_note: bool,
 	pub hit_dir: Direction, // direction player must slash in order to hit targets once he arrives at dest_x
-	pub boost_to_target: bool, // whether the player should boost in order to reach dest_x on time
-	pub dash_to_target: bool, // whether the player should dash in order to reach dest_x on time
+	pub boost_to_target: bool, // whether the player should boost in order to reach dest_x on time, should not be true if dash_to_target is true
+	pub dash_to_target: bool, // whether the player should dash in order to reach dest_x on time, should not be true if boost_to_target is true
 	pub hittable_time: f32,
 	pub passed_time: f32
 }
@@ -78,8 +80,8 @@ pub struct Game {
 	target_idx: usize,
 	// uses a vec instead of a btree because std lib btreeset is unindexable
 	current_bricks: VecDeque<Brick>, // current bricks that are on screen or about to appear on screen, ordered
-	scrolled_y: f32,
-	end_y: f32,
+	scrolled_y: f32, // how much y has been scrolled (time 0 has a scrolled y of 0)
+	end_y: f32, // y value of the bottom of the screen plus a 2 second window of bricks scrolling (so bricks offscreen may be loaded early)
 	game_data: GameData, 
 	notes: BTreeSet<BrickData>, // all notes of the song before conversion into bricks
 	graphics: Vec<PositionedGraphic>,
@@ -234,6 +236,25 @@ impl Game {
 		graphics.push(
 			PositionedGraphic::new(Graphic{ g: GraphicGroup::Background, frame: 0, flags: 0, arg: 0}, 0.0, 0.0)
 		);
+		
+		let mut idx = self.target_idx;
+		loop {
+			if let Some(target) = self.targets.get(idx) {
+				if target.appearance_y < self.end_y && target.dash_to_target {
+					let graphic_x = if target.hit_dir == Direction::Right { target.dest_x + PLAYER_WIDTH as f32 - DASH_INDICATOR_WIDTH as f32 } else { target.dest_x };
+					let graphic_y = target.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
+					graphics.push( PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: 0, arg: 0}, graphic_x, graphic_y) );
+				}
+				
+				if target.appearance_y >= self.end_y {
+					break;
+				}
+				
+				idx += 1;
+			} else {
+				break;
+			}
+		}
 		
 		graphics.append(&mut self.player.rendering_instructions(self.game_data.time_running));
 		
@@ -429,7 +450,7 @@ impl Game {
 		let target_hit_dir;
 		let dash_to_target;
 		let boost_to_target;
-		let left_target_x = (group_leftmost - 1) as f32 * BRICK_WIDTH as f32 + (BRICK_WIDTH - PLAYER_WIDTH) as f32;
+		let left_target_x = group_leftmost as f32 * BRICK_WIDTH as f32 - PLAYER_WIDTH as f32;
 		let right_target_x = (group_rightmost + 1) as f32 * BRICK_WIDTH as f32;
 		let dest_x;
 		let post_hit_x;
@@ -448,12 +469,12 @@ impl Game {
 			dest_x = right_target_x;
 			distance_to_target = player_start_x - right_target_x;
 		} else if player_start_x - left_target_x < right_target_x - player_start_x {
-			target_hit_dir = Direction::Left;
-			dest_x = right_target_x;
-			distance_to_target = player_start_x - left_target_x;
-		} else {
 			target_hit_dir = Direction::Right;
 			dest_x = left_target_x;
+			distance_to_target = player_start_x - left_target_x;
+		} else {
+			target_hit_dir = Direction::Left;
+			dest_x = right_target_x;
 			distance_to_target = right_target_x - player_start_x;
 		}
 
@@ -466,7 +487,7 @@ impl Game {
 
 		if distance_to_target > max_run_distance + MAX_BOOST_DISTANCE {
 			dash_to_target = true;
-			boost_to_target = true;
+			boost_to_target = false;
 		}
 		else if distance_to_target > max_run_distance {
 			dash_to_target = false;
