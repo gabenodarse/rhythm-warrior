@@ -15,7 +15,9 @@ use crate::GameData;
 use crate::Input;
 use crate::GraphicGroup;
 use crate::Graphic;
+use crate::GraphicFlags;
 use crate::PositionedGraphic;
+use crate::LingeringGraphic;
 use crate::RenderingInstructions;
 use objects::Object;
 use objects::HitBox;
@@ -43,6 +45,7 @@ const BRICK_SCORE: i32 = 100;
 const HOLD_SEGMENT_SCORE: i32 = 20;
 pub const DASH_INDICATOR_WIDTH: i32 = 85;
 pub const DASH_INDICATOR_HEIGHT: i32 = 60;
+const MISS_EFFECT_TIME: f32 = 0.2;
 
 #[derive(Clone, Copy)]
 struct UpcomingBrick {
@@ -85,6 +88,7 @@ pub struct Game {
 	game_data: GameData, 
 	notes: BTreeSet<BrickData>, // all notes of the song before conversion into bricks
 	graphics: Vec<PositionedGraphic>,
+	lingering_graphics: Vec<LingeringGraphic>, // graphic effects on the game
 	bricks_broken: u8
 }
 
@@ -113,6 +117,7 @@ impl Game {
 			},
 			notes: BTreeSet::new(),
 			graphics: Vec::with_capacity(512), // TODO what should the upper limit be? Make it a hard limit
+			lingering_graphics: Vec::with_capacity(12),
 			bricks_broken: 0
 		};
 	}
@@ -129,9 +134,10 @@ impl Game {
 		let mut target = None; 
 		// if target is on screen and target has not already passed, pass target info to player
 		if let Some(target_unwrapped) = self.targets.get(self.target_idx) {
-			if target_unwrapped.appearance_y > self.end_y && target_unwrapped.passed_time < self.game_data.time_running {
-				target = None; // !!! !!! !!! missed target
-			} else {
+			if target_unwrapped.appearance_y > self.end_y {
+				target = None;
+			}
+			else {
 				target = Some(target_unwrapped.clone());
 			}
 		}
@@ -195,10 +201,8 @@ impl Game {
 		
 		// check for hold brick destruction (second of two times)
 		self.destroy_holds();
-		
-		self.add_to_current_bricks();
-
-		// if there are no bricks remaining in the target, set the target to the next target
+			
+		// update target if all its bricks are destroyed
 		if let Some(highest_brick) = self.current_bricks.get(0) {
 			loop {
 				if self.target_idx >= self.targets.len() {
@@ -218,35 +222,87 @@ impl Game {
 			loop {
 				if self.target_idx >= self.targets.len() {
 					break;
-				} else if self.targets[self.target_idx].appearance_y >= self.end_y {
+				} else if self.targets[self.target_idx].appearance_y > self.end_y {
 					break;
 				} else {
 					self.target_idx += 1;
 				}
 			}
 		}
+		
+		// stun player if a brick has hit the top of the screen
+		if let Some(highest_brick) = self.current_bricks.get(0) {
+			if highest_brick.appearance_y < self.scrolled_y {
+				// destroy all bricks without giving points
+				self.current_bricks = VecDeque::new();
+				
+				// set new target
+				loop {
+					if self.target_idx >= self.targets.len() {
+						break;
+					} else if self.targets[self.target_idx].appearance_y > self.end_y {
+						break;
+					} else {
+						self.target_idx += 1;
+					}
+				}
+				
+				// visual effect
+				let graphic = Graphic{ g: GraphicGroup::MissEffect, frame: 0, flags: 0, arg: 0 };
+				let positioned_graphic = PositionedGraphic::new(graphic, 0.0, 0.0);
+				self.lingering_graphics.push(LingeringGraphic {
+					positioned_graphic,
+					start_t: self.game_data.time_running,
+					end_t: self.game_data.time_running + MISS_EFFECT_TIME
+				});
+				
+				
+				self.player.stun(self.game_data.time_running);
+			}
+		}
+		
+		self.add_to_current_bricks();
 	}
 	
 	// updates the displayed graphics and returns rendering instructions in the form of a pointer
 	pub fn rendering_instructions(&mut self) -> RenderingInstructions {
 		let graphics = &mut self.graphics;
+		let lingering_graphics = &mut self.lingering_graphics;
 		
 		graphics.clear();
 		
+		// push background
 		graphics.push(
 			PositionedGraphic::new(Graphic{ g: GraphicGroup::Background, frame: 0, flags: 0, arg: 0}, 0.0, 0.0)
 		);
 		
+		// push game effects
+		let time_running = self.game_data.time_running;
+		lingering_graphics.retain_mut(|lg| -> bool {
+			if lg.end_t > time_running {
+				let mut pg = lg.positioned_graphic.clone();
+				let proportion_time_passed = (time_running - lg.start_t) / (lg.end_t - lg.start_t);
+				
+				pg.g.flags |= GraphicFlags::Opacity as u8;
+				pg.g.arg = 255 - (proportion_time_passed * 255.0) as u8;
+				graphics.push(pg);
+				return true;
+			} else {
+				return false;
+			}
+		});
+		
+		// push dash indicators
 		let mut idx = self.target_idx;
 		loop {
 			if let Some(target) = self.targets.get(idx) {
-				if target.appearance_y < self.end_y && target.dash_to_target {
+				if target.appearance_y <= self.end_y && target.dash_to_target {
 					let graphic_x = if target.hit_dir == Direction::Right { target.dest_x + PLAYER_WIDTH as f32 - DASH_INDICATOR_WIDTH as f32 } else { target.dest_x };
 					let graphic_y = target.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
 					graphics.push( PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: 0, arg: 0}, graphic_x, graphic_y) );
 				}
 				
-				if target.appearance_y >= self.end_y {
+				if target.appearance_y > self.end_y {
 					break;
 				}
 				
@@ -256,8 +312,11 @@ impl Game {
 			}
 		}
 		
+		// push player graphics
 		graphics.append(&mut self.player.rendering_instructions(self.game_data.time_running));
+		graphics.append(&mut self.player.lg_rendering_instructions(self.game_data.time_running));
 		
+		// push bricks
 		let minutes_per_beat = 1.0 / self.game_data.bpm;
 		let seconds_per_beat = 60.0 * minutes_per_beat;
 		let pixels_per_beat = self.game_data.brick_speed * seconds_per_beat;
@@ -265,8 +324,6 @@ impl Game {
 		for brick in &self.current_bricks {
 			graphics.append(&mut brick.rendering_instructions());
 		}
-		
-		graphics.append(&mut self.player.lg_rendering_instructions(self.game_data.time_running));
 		
 		return RenderingInstructions {
 			num_graphics: graphics.len(),
@@ -301,6 +358,7 @@ impl Game {
 	// takes an input command and passes it forward to be handled
 	pub fn input_command (&mut self, input: Input, time_since_tick: f32) {
 		let input_time = self.game_data.time_running + time_since_tick;
+		
 		self.player.input(input, input_time);
 	}
 	
@@ -520,7 +578,7 @@ impl Game {
 	fn add_to_current_bricks(&mut self) {
 		while(self.upcoming_brick_idx < self.bricks.len()) {
 			let idx = self.upcoming_brick_idx;
-			if self.bricks[idx].appearance_y < self.end_y {
+			if self.bricks[idx].appearance_y <= self.end_y {
 				let brick_type = self.bricks[idx].brick_type;
 				let hold_segments = self.bricks[idx].hold_segments;
 

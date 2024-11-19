@@ -42,6 +42,7 @@ pub const PRE_SLASH_TIME: f32 = 0.06;
 pub const PRE_HOLD_TIME: f32 = 0.16;
 // so slash animation can finish
 pub const POST_SLASH_TIME: f32 = 0.08;
+const STUNNED_TIME: f32 = 0.14;
 const DASH_LINGER_TIME: f32 = 0.3; // how long the dash graphic lingers
 const BOOST_LINGER_TIME: f32 = 0.3;
 const BOOST_PRELINGER_TIME: f32 = 1.2;
@@ -84,6 +85,7 @@ enum PlayerState {
 	SlashDash,
 	PostSlash,
 	Hold, 
+	Stunned
 }
 
 struct TaggedState {
@@ -304,10 +306,21 @@ impl Player {
 		self.hold_positions = new_hold_positions;
 	}
 	
-	// accept an input, handle it only if it isn't already down
+	// stuns the player (from missing a target)
+	pub fn stun(&mut self, time_running: f32) {
+		self.state = TaggedState { time: time_running, state: PlayerState::Stunned }
+	}
+	
+	// accept an input
 	pub fn input(&mut self, input: Input, time_running: f32) {
+		if let PlayerState::Stunned = self.state.state {
+			return;
+		}
+		
+		// handle the input only if it isn't already down
 		if self.inputs_down[input as usize] == false {
 			self.inputs_down[input as usize] = true;
+			
 			match input {
 				Input::Dash => { self.input_dash(time_running); },
 				Input::Slash1 => { self.input_slash(BrickType::Type1, time_running); },
@@ -704,6 +717,13 @@ impl Player {
 				self.face_dir = self.hit_dir;
 				self.state = TaggedState { state: PlayerState::Standing, time: time_running };
 				return;
+			},
+			PlayerState::Stunned => {
+				let time_difference = time_running - t;
+				if time_difference > STUNNED_TIME {
+					self.state = TaggedState { state: PlayerState::Standing, time: time_running };
+				}
+				return;
 			}
 		}
 	}
@@ -811,6 +831,12 @@ impl Player {
 					let hitbox_graphic = Graphic {g: hitbox_graphic_group, frame: 0, flags: 0, arg: 0};
 					positioned_graphics.push(PositionedGraphic::new(hitbox_graphic, hitbox_graphic_x, self.bounds.bottom_y));
 				}
+			},
+			PlayerState::Stunned => {
+				let graphic_group = GraphicGroup::Stunned;
+				let frame = frame_number(time_running - t);
+				let graphic = Graphic { g: graphic_group, frame, flags, arg };
+				positioned_graphics.push(PositionedGraphic::new(graphic, self.bounds.left_x, self.bounds.top_y));
 			}
 		}
 		
