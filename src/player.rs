@@ -19,8 +19,6 @@ use crate::objects::ObjectBounds;
 use crate::objects::BrickType;
 use crate::objects::HitBox;
 
-use crate::brick::Brick;
-
 use crate::game::TargetInfo;
 
 use crate::GROUND_POS;
