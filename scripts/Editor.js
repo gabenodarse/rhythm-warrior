@@ -45,8 +45,8 @@ Editor.prototype.tick = function(){
 	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
 	this.lastTick = now;
 	
-	this.songData.gameData = this.gameObject.game_data();
 	this.gameObject.seek(this.songData.gameData.time_running + timePassed); 
+	this.songData.gameData = this.gameObject.game_data();
 }
 
 Editor.prototype.seek = function(time){

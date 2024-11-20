@@ -153,7 +153,6 @@ function EditorOverlay(overlayParent){
 
 	this.overlayParent;
 	this.div;
-	this.scroller;
 	this.canvas;
 	this.controlsDiv;
 	
@@ -171,6 +170,7 @@ function EditorOverlay(overlayParent){
 	this.selectedBrick; // current selected brick
 	this.xFactor;
 	this.yFactor;
+	this.songTranscriptWidth;
 	
 	// initialize
 	this.overlayParent = overlayParent;
@@ -224,6 +224,8 @@ function EditorOverlay(overlayParent){
 	this.xFactor = 1;
 	this.yFactor = 1;
 
+	this.songTranscriptWidth = 280;
+	
 	this.div.appendChild(this.canvas);
 	this.div.appendChild(this.controlsDiv);
 
@@ -1351,7 +1353,7 @@ EditorOverlay.prototype.update = function(){
 		this.broadRange.value = time / songDuration * 100;
 		this.preciseRange.value = 0;
 	}
-
+	
 	this.draw();
 }
 
@@ -1459,6 +1461,46 @@ EditorOverlay.prototype.draw = function(){
 		ctx.setLineDash([]);
 		ctx.lineWidth = 3;
 		ctx.strokeRect(startX, startY, brickDims.x, endY - startY);
+	}
+	
+	// draw the song data buffer / song transcript
+	{
+		let songBuffer = game.getSongBuffer();
+		let imageDataWidth = this.songTranscriptWidth;
+		let imageDataHeight = wasm.game_dimensions().y;
+		let songTranscriptData = new Uint8ClampedArray(imageDataWidth * imageDataHeight * 4);
+		
+		let bufferData = songBuffer.getChannelData(0);
+		let startingSample = Math.floor(
+			songData.gameData.time_running * songBuffer.sampleRate 
+			- wasm.time_zero_brick_pos() / songData.brickSpeed * songBuffer.sampleRate);
+		let endingSample = Math.floor(startingSample + (wasm.game_dimensions().y / songData.brickSpeed) * songBuffer.sampleRate);
+		
+		// for each sample, draw a 1 pixel point at a corresponding location
+		for(let i = startingSample; i < endingSample; ++i){
+			if(i < 0){ 
+				continue;
+			}
+			else if (i > bufferData.length){
+				break;
+			}
+			
+			let timeFromTop = (i - startingSample) / songBuffer.sampleRate;
+			
+			let x = Math.floor(bufferData[i] * imageDataWidth / 2.0 + (imageDataWidth / 2.0)); // amplitude of the sample set in range 0 - imageDataWidth
+			let y = Math.floor(timeFromTop * songData.brickSpeed); // time of the sample transcribed onto game
+			let dataIdx = Math.floor((y * imageDataWidth * 4) + (x * 4));
+			
+			// set RGBA to 40,40,40,255 (solid black)
+			songTranscriptData[dataIdx] = 40;
+			songTranscriptData[dataIdx + 1] = 40;
+			songTranscriptData[dataIdx + 2] = 40;
+			songTranscriptData[dataIdx + 3] = 255;
+		}
+		
+		// create a new ImageData object for the song transcript, then draw it on the canvas
+		let songTranscriptImageData = new ImageData(songTranscriptData, imageDataWidth);
+		ctx.putImageData(songTranscriptImageData, 0, 0);
 	}
 }
 

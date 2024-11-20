@@ -105,8 +105,6 @@ EventPropagator.prototype.gameLoop = function(){
 		this.tickTimeTracker.startTime(performance.now());
 		this.game.tick();
 		this.tickTimeTracker.endTime(performance.now());
-		
-		this.overlay.update({fps: this.fps, xFactor: this.xFactor, yFactor: this.yFactor});
 
 		requestAnimationFrame(() => {
 			// fps
@@ -117,6 +115,8 @@ EventPropagator.prototype.gameLoop = function(){
 			// if the game is pre-rendered, dispatch an event saying that the render occurred (triggering another pre-render)
 			// (for performance, instead of prerendering before the repaint, prerender when the gameRender event or some other event triggers one)
 			if(this.isPreRendered){
+				this.overlay.update({fps: this.fps, xFactor: this.xFactor, yFactor: this.yFactor});
+				
 				this.isPreRendered = false;
 				let evt = new Event("gameRender");
 				window.dispatchEvent( evt );

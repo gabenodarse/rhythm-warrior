@@ -69,6 +69,10 @@ GameCore.prototype.getSongData = function(){
 	return this.songData;
 }
 
+GameCore.prototype.getSongBuffer = function(){
+	return this.audioBuffer;
+}
+
 GameCore.prototype.songs = function(){
 	let songs = this.database.searchSong();
 	
