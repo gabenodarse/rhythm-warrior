@@ -93,18 +93,27 @@ EventPropagator.prototype.togglePlay = function(){
 }
 
 EventPropagator.prototype.gameLoop = function(){
-	let songData = this.game.getSongData();
 	if(this.stopFlag){
 		this.stopLoop();
-		return;
-	} else if(songData.gameData.time_running > 60) { // !!! !!! !!! end loop at song end
-		this.stopLoop();
-		this.overlay.goToEndGameScreen();
 		return;
 	} else {
 		this.tickTimeTracker.startTime(performance.now());
 		this.game.tick();
 		this.tickTimeTracker.endTime(performance.now());
+		
+		let songData = this.game.getSongData();
+		if(songData.gameData.time_running >= songData.gameData.duration){
+			this.stopLoop();
+			if (!songData.gameData.is_modified) {	
+				this.overlay.goToEndGameScreen();
+				return;
+			}
+			
+			alert("The song data has been modified. \nAny changes made are not saved automatically, please open the master menu and navigate to " 
+				+ "\"save song\" or \"overwrite song\" if you wish to save and download the changes.\n"
+				+ "To go back to the home screen, select \"Quit Song\" from the menu");
+			return;
+		}
 
 		requestAnimationFrame(() => {
 			// fps
@@ -274,6 +283,7 @@ EventPropagator.prototype.handleEvent = function(evt){
 	if(this.isBlocking) return;
 
 	if(this.overlay.isCapturing()){
+		
 		let instruction = this.overlay.passEvent(evt);
 		this.runInstruction(instruction);
 

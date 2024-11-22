@@ -30,6 +30,27 @@ canvas{
 	z-index: 100;
 }
 
+#homescreen{
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100vh;
+	background-color: #6655dd;
+	user-select: none;
+	display: block;
+}
+
+#homescreen h1{
+	margin: 0 auto;
+	font-size: 6em;
+}
+
+#homescreen h2{
+	margin: 0 auto;
+	font-size: 4em;
+}
+
 .game-overlay{
 	position: absolute;
 	top: 0;
@@ -40,20 +61,30 @@ canvas{
 	display: block;
 }
 
-.homescreen{
+.home-songs-div{
 	position: absolute;
-	top: 0;
+	top: 8em;
 	left: 0;
-	width: 100%;
+	width: 50%;
 	height: 100vh;
-	background-color: #5577ff;
-	user-select: none;
-	display: block;
 }
 
-.homescreen h1{
-	margin: 0 auto;
-	font-size: 6em;
+.home-controls-div{
+	position: absolute;
+	top: 8em;
+	left: 50%;
+	width: 50%;
+	height: 100vh;
+}
+
+.home-controls-div p{
+	text-align: left;
+	margin: 0;
+	font-size: 2em;
+}
+
+.home-controls-div p img{
+	height: 2em;
 }
 
 .log-link{
@@ -64,8 +95,8 @@ canvas{
 
 .home-selection{
 	margin: 2% 4% 0 0;
-	height: 25%;
-	width: 35%;
+	height: 16%;
+	width: 80%;
 	font-size: 1.3em;
 	background-color: #ffdd00;
 	text-align: center;

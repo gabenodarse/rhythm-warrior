@@ -67,6 +67,7 @@ pub struct GameData {
 	pub score: i32,
 	pub max_score: i32,
 	pub duration: f32,
+	pub is_modified: bool // boolean indicating whether the game's data (bricks) have been modified since opening
 }
 
 #[wasm_bindgen]

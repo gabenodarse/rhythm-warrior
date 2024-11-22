@@ -51,24 +51,48 @@ function GameOverlay(overlayParent){
 function HomeScreen(overlayParent){
 	this.overlayParent;
 	this.homeScreenDiv;
+	this.songSelectionsDiv;
+	this.controlsDiv;
+	
+	this.mmTitle;
 	this.songSelections;
 	this.selectionIdx;
+	
 	this.logLink;
-	this.mmTitle;
 	
 	this.overlayParent = overlayParent;
 
 	this.homeScreenDiv = document.createElement("div");
-	this.homeScreenDiv.className = "homescreen";
+	this.homeScreenDiv.id = "homescreen";
+	
+	this.mmTitle = document.createElement("h1");
+	this.mmTitle.innerHTML = "Music Mercenary";
+	this.songSelectionsDiv = document.createElement("div");
+	this.songSelectionsDiv.className = "home-songs-div";
+	this.controlsDiv = document.createElement("div");
+	this.controlsDiv.className = "home-controls-div";
 
 	this.logLink = document.createElement("button");
 	this.logLink.className = "log-link";
 	this.logLink.innerHTML = "Log";
 	this.homeScreenDiv.appendChild(this.logLink);
 	
-	this.mmTitle = document.createElement("h1");
-	this.mmTitle.innerHTML = "Music Mercenary";
 	this.homeScreenDiv.appendChild(this.mmTitle);
+	this.homeScreenDiv.appendChild(this.songSelectionsDiv);
+	this.homeScreenDiv.appendChild(this.controlsDiv);
+	
+	this.controlsDiv.innerHTML = 
+		"<h2>Controls</h2>\
+		<p>The controls are Q, W, E, and Enter</p>\
+		<p>Q to hit red notes<img src=\"./assets/images/brick1.png\"></p>\
+		<p>W to hit yellow notes<img src=\"./assets/images/brick2.png\"></p>\
+		<p>E to hit blue notes<img src=\"./assets/images/brick3.png\"></p>\
+		<p>Enter to dash when indicated<img src=\"./assets/images/dash-indicator.png\"><img src=\"./assets/images/brick3.png\"></p>\
+		<p>(Q,W,E) + Enter to hit groups\
+			<img src=\"./assets/images/brick2.png\"><img src=\"./assets/images/brick2.png\"><img src=\"./assets/images/brick2.png\">\
+			</p>\
+		<p>Hold (Q,W,E) to hit hold notes<img src=\"./assets/images/brick1-hold-example.png\"></p>";
+		
 
 	this.songSelections = [];
 	this.update();
@@ -651,7 +675,7 @@ function NewSongDialog(overlayParent, menuParent){
 			else if(duration > 600){
 				duration = 600;
 			}
-		let songStartOffset = parseInt(this.songStartOffsetField.value);
+		let songStartOffset = parseFloat(this.songStartOffsetField.value);
 			if(isNaN(songStartOffset) || songStartOffset < 0){
 				songStartOffset = 0;
 			}
@@ -797,7 +821,7 @@ function ModifySongDialog(overlayParent, menuParent){
 			else if(duration > 600){
 				duration = 600;
 			}
-		let songStartOffset = parseInt(this.songStartOffsetField.value);
+		let songStartOffset = parseFloat(this.songStartOffsetField.value);
 			if(isNaN(songStartOffset) || songStartOffset < 0){
 				songStartOffset = 0;
 			}
@@ -1288,15 +1312,10 @@ HomeScreen.prototype.update = function(){
 		});
 		
 		songs[0]["values"].forEach( (song, idx) => {
-			if(song[idIDX] == 8 && song[nameIDX].toUpperCase() === "HIP SHOP COVER"){
+			if(song[nameIDX].toUpperCase() === "IVERN LOGIN THEME"){
 				let selection = new HomeSelection(song[idIDX], song[nameIDX], song[artistIDX], song[difficultyIDX], song[durationIDX]);
 				this.songSelections.push(selection);
-				this.homeScreenDiv.appendChild(selection.domElement());
-			}
-			if(song[idIDX] == 9 && song[nameIDX].toUpperCase() === "NEW SONG"){
-				let selection = new HomeSelection(song[idIDX], song[nameIDX], song[artistIDX], song[difficultyIDX], song[durationIDX]);
-				this.songSelections.push(selection);
-				this.homeScreenDiv.appendChild(selection.domElement());
+				this.songSelectionsDiv.appendChild(selection.domElement());
 			}
 		});
 	}
@@ -1472,8 +1491,10 @@ EditorOverlay.prototype.draw = function(){
 		
 		let bufferData = songBuffer.getChannelData(0);
 		let startingSample = Math.floor(
-			songData.gameData.time_running * songBuffer.sampleRate 
-			- wasm.time_zero_brick_pos() / songData.brickSpeed * songBuffer.sampleRate);
+			songData.gameData.time_running * songBuffer.sampleRate // time of the song
+			+ songData.startOffset * songBuffer.sampleRate // plus start offset
+			- (wasm.time_zero_brick_pos() + wasm.brick_dimensions().y / 2)  / songData.brickSpeed * songBuffer.sampleRate); // adjusted to notes start position
+
 		let endingSample = Math.floor(startingSample + (wasm.game_dimensions().y / songData.brickSpeed) * songBuffer.sampleRate);
 		
 		// for each sample, draw a 1 pixel point at a corresponding location
@@ -1618,7 +1639,7 @@ EditorOverlay.prototype.handleKeyDown = function(evt){
 				brick.is_triplet, brick.is_trailing, brick.is_leading, brick.is_hold_note);
 			this.selectedBrick = game.selectBrick(brick.beat_pos, brick.x_pos);
 		}
-
+		
 		this.draw();
 		return "pre-render";
 	}
@@ -1657,6 +1678,7 @@ EditorOverlay.prototype.handleMouseDown = function(evt){
 	this.selectedBrick = brick;
 	
 	this.mouseDown = true;
+	
 	this.draw();
 
 	return "stop-loop";

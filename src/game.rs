@@ -87,8 +87,8 @@ pub struct Game {
 	end_y: f32, // y value of the bottom of the screen plus a 2 second window of bricks scrolling (so bricks offscreen may be loaded early)
 	game_data: GameData, 
 	notes: BTreeSet<BrickData>, // all notes of the song before conversion into bricks
-	graphics: Vec<PositionedGraphic>,
-	lingering_graphics: Vec<LingeringGraphic>, // graphic effects on the game
+	rendering_instructions: Vec<PositionedGraphic>,
+	game_graphics: Vec<LingeringGraphic>, // graphic effects on the game (passed to graphics when javascript requests rendering data)
 	bricks_broken: u8
 }
 
@@ -112,10 +112,11 @@ impl Game {
 				score: 0,
 				max_score: 0,
 				duration,
+				is_modified: false
 			},
 			notes: BTreeSet::new(),
-			graphics: Vec::with_capacity(512), // TODO what should the upper limit be? Make it a hard limit
-			lingering_graphics: Vec::with_capacity(12),
+			rendering_instructions: Vec::with_capacity(512), // TODO what should the upper limit be? Make it a hard limit
+			game_graphics: Vec::with_capacity(12),
 			bricks_broken: 0
 		};
 	}
@@ -221,7 +222,7 @@ impl Game {
 					// visual effect
 					let graphic = Graphic{ g: GraphicGroup::MissEffect, frame: 0, flags: 0, arg: 0 };
 					let positioned_graphic = PositionedGraphic::new(graphic, 0.0, 0.0);
-					self.lingering_graphics.push(LingeringGraphic {
+					self.game_graphics.push(LingeringGraphic {
 						positioned_graphic,
 						start_t: self.game_data.time_running,
 						end_t: self.game_data.time_running + MISS_EFFECT_TIME
@@ -233,28 +234,28 @@ impl Game {
 		}
 	}
 	
-	// updates the displayed graphics and returns rendering instructions in the form of a pointer
+	// updates the rendering instructions and returns a pointer to access them
 	pub fn rendering_instructions(&mut self) -> RenderingInstructions {
-		let graphics = &mut self.graphics;
-		let lingering_graphics = &mut self.lingering_graphics;
+		let rendering_instructions = &mut self.rendering_instructions;
+		let game_graphics = &mut self.game_graphics;
 		
-		graphics.clear();
+		rendering_instructions.clear();
 		
 		// push background
-		graphics.push(
+		rendering_instructions.push(
 			PositionedGraphic::new(Graphic{ g: GraphicGroup::Background, frame: 0, flags: 0, arg: 0}, 0.0, 0.0)
 		);
 		
 		// push game effects
 		let time_running = self.game_data.time_running;
-		lingering_graphics.retain_mut(|lg| -> bool {
+		game_graphics.retain_mut(|lg| -> bool {
 			if lg.end_t > time_running {
 				let mut pg = lg.positioned_graphic.clone();
 				let proportion_time_passed = (time_running - lg.start_t) / (lg.end_t - lg.start_t);
 				
 				pg.g.flags |= GraphicFlags::Opacity as u8;
 				pg.g.arg = 255 - (proportion_time_passed * 255.0) as u8;
-				graphics.push(pg);
+				rendering_instructions.push(pg);
 				return true;
 			} else {
 				return false;
@@ -268,7 +269,7 @@ impl Game {
 				if target.appearance_y <= self.end_y && target.dash_to_target {
 					let graphic_x = if target.hit_dir == Direction::Right { target.dest_x + PLAYER_WIDTH as f32 - DASH_INDICATOR_WIDTH as f32 } else { target.dest_x };
 					let graphic_y = target.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
-					graphics.push( PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: 0, arg: 0}, graphic_x, graphic_y) );
+					rendering_instructions.push( PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: 0, arg: 0}, graphic_x, graphic_y) );
 				}
 				
 				if target.appearance_y > self.end_y {
@@ -282,8 +283,8 @@ impl Game {
 		}
 		
 		// push player graphics
-		graphics.append(&mut self.player.rendering_instructions(self.game_data.time_running));
-		graphics.append(&mut self.player.lg_rendering_instructions(self.game_data.time_running));
+		rendering_instructions.append(&mut self.player.rendering_instructions(self.game_data.time_running));
+		rendering_instructions.append(&mut self.player.lg_rendering_instructions(self.game_data.time_running));
 		
 		// push bricks
 		let mut idx = self.target_idx;
@@ -301,15 +302,15 @@ impl Game {
 			let target_y = ti.appearance_y - self.scrolled_y;
 			for brick in &ti.brick_group {
 				let mut brick_graphics = brick.rendering_instructions(target_y);
-				graphics.append(&mut brick_graphics);
+				rendering_instructions.append(&mut brick_graphics);
 			}
 			
 			idx += 1;
 		}
 		
 		return RenderingInstructions {
-			num_graphics: graphics.len(),
-			graphics_ptr: graphics.as_ptr()
+			num_graphics: rendering_instructions.len(),
+			graphics_ptr: rendering_instructions.as_ptr()
 		}
 	}
 	
@@ -349,6 +350,19 @@ impl Game {
 		self.player.end_input(input);
 	}
 	
+	// adds a brick to the song without setting the is_modified flag to true or calling seek()
+	pub fn initial_load_add_brick(&mut self, brick_data: BrickData) {
+		self.notes.insert( brick_data );
+	}
+	
+	// TODO return true/false on success/failure add_brick and remove_brick
+	// adds a brick according to the brick's brick data
+	pub fn add_brick(&mut self, brick_data: BrickData) {
+		self.notes.insert( brick_data );
+		self.game_data.is_modified = true;
+		
+		self.seek(self.game_data.time_running);
+	}
 	// select the brick which overlaps with the given brick pos and x pos
 	pub fn select_brick(&self, beat_pos: i32, x_pos: i32) -> Option<BrickData> {
 		for brick_data in &self.notes {
@@ -366,18 +380,10 @@ impl Game {
 		return None;
 	}
 	
-	// TODO return true/false on success/failure add_brick and remove_brick
-	// adds a brick according to the brick's brick data
-	pub fn add_brick(&mut self, brick_data: BrickData) {
-		self.notes.insert( brick_data );
-		
-		// !!! on initial load, expensive to do this for each brick
-		self.seek(self.game_data.time_running);
-	}
-	
 	// removes the brick equal to brick_data
 	pub fn remove_brick(&mut self, brick_data: BrickData) {
 		self.notes.remove( &brick_data ); // TODO alert/log when a value was already there and the brick wasn't updated
+		self.game_data.is_modified = true;
 		
 		self.seek(self.game_data.time_running);
 	}
@@ -436,6 +442,10 @@ impl Game {
 				group_appearance_y = upcoming_brick.appearance_y;
 				brick_group.push_back( HittableBrick::new(upcoming_brick.brick_type, upcoming_brick.x, upcoming_brick.hold_segments));
 			}
+		}
+		if brick_group.len() > 0 {
+			let last_target = self.create_target_info(player_start_x, player_start_time, brick_group, group_appearance_y);
+			self.targets.push_back(last_target.clone());
 		}
 		
 		for i in 1 .. self.bricks.len() {
@@ -649,6 +659,8 @@ impl Game {
 			// or (probably best) only include targets that are on the gamespace (saves memory, need to create targets during game)
 		self.prepare_song();
 		
+		let time = if time < 0.0 { 0.0 } else { time };
+		
 		self.player = Player::new((BRICK_WIDTH * 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0);
 		self.scrolled_y = self.game_data.brick_speed * time;
 		self.end_y = Game::end_y(self.scrolled_y, self.game_data.brick_speed);
@@ -660,7 +672,7 @@ impl Game {
 		self.target_idx = 0;
 		while(self.target_idx < self.targets.len()) {
 			// if the target can still be hit, let it be the current target
-			if self.targets[self.target_idx].passed_time > time {
+			if self.targets[self.target_idx].end_y > self.scrolled_y {
 				break;
 			}
 			

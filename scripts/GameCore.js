@@ -102,6 +102,7 @@ GameCore.prototype.modifySong = function(name, artist, difficulty, bpm, brickSpe
 	let oldSongID = this.songData.songID;
 	let notes = this.gameObject.bricks();
 
+	// !!! no need to create a whole new game object when modifying some metadata
 	this.gameObject = wasm.Game.new(bpm, brickSpeed, duration);
 
 	notes.forEach( note =>{
@@ -126,9 +127,41 @@ GameCore.prototype.modifySong = function(name, artist, difficulty, bpm, brickSpe
 	}
 }
 
+GameCore.prototype.loadGame = function(bpm, brickSpeed, duration, bricksTable){
+	this.gameObject = wasm.Game.new(bpm, brickSpeed, duration);
+	
+	if(bricksTable[0]){
+		let brickTypeIDX, beatPosIDX, endBeatPosIDX, xPosIDX, isTripletIDX, isTrailingIDX, isLeadingIDX, isHoldNoteIDX;
+		bricksTable[0]["columns"].forEach( (columnName, idx) => {
+			if(columnName.toUpperCase() === "BRICKTYPE"){
+				brickTypeIDX = idx;
+			} else if(columnName.toUpperCase() === "BEATPOS"){
+				beatPosIDX = idx;
+			} else if(columnName.toUpperCase() === "ENDBEATPOS"){
+				endBeatPosIDX = idx;
+			} else if(columnName.toUpperCase() === "XPOS"){
+				xPosIDX = idx;
+			} else if(columnName.toUpperCase() === "ISTRIPLET"){
+				isTripletIDX = idx;
+			} else if(columnName.toUpperCase() === "ISTRAILING"){
+				isTrailingIDX = idx;
+			} else if(columnName.toUpperCase() === "ISLEADING"){
+				isLeadingIDX = idx;
+			} else if(columnName.toUpperCase() === "ISHOLDNOTE"){
+				isHoldNoteIDX = idx;
+			}
+		});
+		
+		bricksTable[0]["values"].forEach( brick => {
+			this.gameObject.initial_load_add_brick(wasm.BrickData.new( 
+				brick[brickTypeIDX], brick[beatPosIDX], brick[endBeatPosIDX], brick[xPosIDX],
+				brick[isTripletIDX], brick[isTrailingIDX], brick[isLeadingIDX], brick[isHoldNoteIDX])); 
+			this.gameObject.seek(0);
+		});
+	}
+}
+
 GameCore.prototype.loadSong = async function(songID){
-	// !!! check if current song has been saved (modified flag?) 
-		// No need to show a check for regular game usage where songs aren't edited
 	// !!! creating a new game to load a new song? Or create a load_song method? wasm garbage collected?
 	this.isSongLoaded = false;
 
@@ -159,35 +192,11 @@ GameCore.prototype.loadSong = async function(songID){
 		}
 	});
 	
-	this.gameObject = wasm.Game.new(bpm, brickSpeed, duration);
+	this.loadGame(bpm, brickSpeed, duration, bricks);
 	
-	if(bricks[0]){
-		let brickTypeIDX, beatPosIDX, endBeatPosIDX, xPosIDX, isTripletIDX, isTrailingIDX, isLeadingIDX, isHoldNoteIDX;
-		bricks[0]["columns"].forEach( (columnName, idx) => {
-			if(columnName.toUpperCase() === "BRICKTYPE"){
-				brickTypeIDX = idx;
-			} else if(columnName.toUpperCase() === "BEATPOS"){
-				beatPosIDX = idx;
-			} else if(columnName.toUpperCase() === "ENDBEATPOS"){
-				endBeatPosIDX = idx;
-			} else if(columnName.toUpperCase() === "XPOS"){
-				xPosIDX = idx;
-			} else if(columnName.toUpperCase() === "ISTRIPLET"){
-				isTripletIDX = idx;
-			} else if(columnName.toUpperCase() === "ISTRAILING"){
-				isTrailingIDX = idx;
-			} else if(columnName.toUpperCase() === "ISLEADING"){
-				isLeadingIDX = idx;
-			} else if(columnName.toUpperCase() === "ISHOLDNOTE"){
-				isHoldNoteIDX = idx;
-			}
-		});
-		
-		bricks[0]["values"].forEach( brick => {
-			this.gameObject.add_brick(wasm.BrickData.new( 
-				brick[brickTypeIDX], brick[beatPosIDX], brick[endBeatPosIDX], brick[xPosIDX],
-				brick[isTripletIDX], brick[isTrailingIDX], brick[isLeadingIDX], brick[isHoldNoteIDX])); 
-		});
+	// !!! !!! !!!
+	if(name.toUpperCase() == "IVERN LOGIN THEME"){
+		filename = "./assets/music/Ivern-Login-Theme.mp3";
 	}
 	
 	this.songData = {
