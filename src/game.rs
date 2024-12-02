@@ -125,28 +125,14 @@ impl Game {
 	pub fn tick(&mut self, mut seconds_passed: f32) {
 		
 		// prevent disproportionally long ticks
-		if seconds_passed > MAX_TIME_BETWEEN_TICKS {
+		if seconds_passed > MAX_TIME_BETWEEN_TICKS { 
 			self.tick(seconds_passed - MAX_TIME_BETWEEN_TICKS);
 			seconds_passed = MAX_TIME_BETWEEN_TICKS;
 		}
 		
-		let mut target = None; 
-		// if target is on screen and target has not already passed, pass target info to player
-		if let Some(target_unwrapped) = self.targets.get(self.target_idx) {
-			if target_unwrapped.appearance_y > self.end_y {
-				target = None;
-			}
-			else {
-				target = Some(target_unwrapped.clone());
-			}
-		}
-		
-		// check for hold brick destruction (first of two times, to account for hold notes which may sneak past hitbox)
-		self.destroy_holds();
-		
 		// check for any actions that happened mid tick. Either action_tick (if the player is slashing) or regular tick
 		let end_tick_time = self.game_data.time_running + seconds_passed;
-		if let Some(action_time) = self.player.check_action(end_tick_time) {
+		if let Some(action_time) = self.player.check_action(self.game_data.time_running, end_tick_time) {
 			let pre_action_time = action_time - self.game_data.time_running;
 			let post_action_time = seconds_passed - pre_action_time;
 			
@@ -157,23 +143,29 @@ impl Game {
 			self.game_data.time_running += pre_action_time;
 			
 			// action tick the player, check for brick destruction
-			let hitbox = self.player.action_tick(&self.game_data, target);
-			self.destroy_bricks(hitbox);
+			let hitbox = self.player.action_tick(&self.game_data);
+			self.destroy_bricks(&hitbox);
 			
 			// scroll screen the rest of the tick time
 			let delta_y = post_action_time * self.game_data.brick_speed;
 			self.scrolled_y += delta_y;
 			self.end_y += delta_y;
 			self.game_data.time_running += post_action_time;
+			
+			// second, forgiveness check for brick destruction (if action occurs in the same tick that notes become hittable, always destroy the bricks)
+			self.destroy_bricks(&hitbox);
 		} else {
+			// tick the player
+			self.player.tick(seconds_passed, &self.game_data);
+						
+			// check for hold brick destruction (first of two times, to account for hold notes which may sneak past hitbox)
+			self.destroy_holds();
+			
 			// scroll screen
 			let delta_y = seconds_passed * self.game_data.brick_speed;
 			self.scrolled_y += delta_y;
 			self.end_y += delta_y;
 			self.game_data.time_running += seconds_passed;
-			
-			// tick the player
-			self.player.tick(seconds_passed, &self.game_data, target);
 		}
 		
 		// check for hold brick destruction (second of two times)
@@ -232,6 +224,18 @@ impl Game {
 				}
 			}
 		}
+		
+		// update player's target
+		let mut target = None; 
+		if let Some(target_unwrapped) = self.targets.get(self.target_idx) {
+			if target_unwrapped.appearance_y > self.end_y {
+				target = None;
+			}
+			else {
+				target = Some(target_unwrapped.clone());
+			}
+		}
+		self.player.update_target(target);
 	}
 	
 	// updates the rendering instructions and returns a pointer to access them
@@ -267,6 +271,19 @@ impl Game {
 		loop {
 			if let Some(target) = self.targets.get(idx) {
 				if target.appearance_y <= self.end_y && target.dash_to_target {
+					let pg;
+					match target.hit_dir {
+						Direction::Left => {
+							let graphic_x = target.dest_x;
+							let graphic_y = target.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
+							pg = PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: GraphicFlags::HorizontalFlip as u8, arg: 0}, graphic_x, graphic_y);
+						},
+						Direction::Right => {
+							let graphic_x = target.dest_x + PLAYER_WIDTH as f32 - DASH_INDICATOR_WIDTH as f32;
+							let graphic_y = target.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
+							pg = PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: 0, arg: 0}, graphic_x, graphic_y);
+						}
+					}
 					let graphic_x = if target.hit_dir == Direction::Right { target.dest_x + PLAYER_WIDTH as f32 - DASH_INDICATOR_WIDTH as f32 } else { target.dest_x };
 					let graphic_y = target.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
 					rendering_instructions.push( PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: 0, arg: 0}, graphic_x, graphic_y) );
@@ -478,7 +495,7 @@ impl Game {
 				group_left_x = brick.x();
 			}
 			if brick.x() + BRICK_WIDTH as f32 > group_right_x {
-				group_right_x = brick.x();
+				group_right_x = brick.x() + BRICK_WIDTH as f32;
 			}
 			if brick.hold_segments() > max_hold_segments {
 				max_hold_segments = brick.hold_segments();
@@ -564,7 +581,7 @@ impl Game {
 	}
 
 	// destroy any bricks that overlap with passed hitboxes
-	fn destroy_bricks(&mut self, hitbox: HitBox) {
+	fn destroy_bricks(&mut self, hitbox: &HitBox) {
 		let score = &mut self.game_data.score;
 		let bricks_broken = &mut self.bricks_broken;
 		let mut new_hold_positions = Vec::new();
@@ -620,7 +637,9 @@ impl Game {
 			}
 		}
 		
-		self.player.update_hold_positions(new_hold_positions);
+		if new_hold_positions.len() > 0 {
+			self.player.update_hold_positions(new_hold_positions);
+		}
 	}
 	
 	// destroy any hold segments that overlap with player hold hitboxes
@@ -678,6 +697,18 @@ impl Game {
 			
 			self.target_idx += 1;
 		}
+		
+		// update player's target
+		let mut target = None; 
+		if let Some(target_unwrapped) = self.targets.get(self.target_idx) {
+			if target_unwrapped.appearance_y > self.end_y {
+				target = None;
+			}
+			else {
+				target = Some(target_unwrapped.clone());
+			}
+		}
+		self.player.update_target(target);
 	}
 	
 	fn end_y(scrolled_y: f32, brick_speed: f32) -> f32 {
