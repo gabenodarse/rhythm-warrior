@@ -19,6 +19,8 @@ use crate::GraphicFlags;
 use crate::PositionedGraphic;
 use crate::LingeringGraphic;
 use crate::RenderingInstructions;
+use crate::AudioInstructions;
+use crate::SoundEffect;
 use objects::Object;
 use objects::HitBox;
 use objects::BrickType;
@@ -87,9 +89,10 @@ pub struct Game {
 	end_y: f32, // y value of the bottom of the screen plus a 2 second window of bricks scrolling (so bricks offscreen may be loaded early)
 	game_data: GameData, 
 	notes: BTreeSet<BrickData>, // all notes of the song before conversion into bricks
-	rendering_instructions: Vec<PositionedGraphic>,
+	rendering_instructions_buf: Vec<PositionedGraphic>,
+	audio_instructions_flags: [bool; 128], // !!! size must be greater than the number of SoundEffects
+	audio_instructions_buf: Vec<u8>,
 	game_graphics: Vec<LingeringGraphic>, // graphic effects on the game (passed to graphics when javascript requests rendering data)
-	bricks_broken: u8
 }
 
 #[wasm_bindgen]
@@ -115,14 +118,16 @@ impl Game {
 				is_modified: false
 			},
 			notes: BTreeSet::new(),
-			rendering_instructions: Vec::with_capacity(512), // TODO what should the upper limit be? Make it a hard limit
-			game_graphics: Vec::with_capacity(12),
-			bricks_broken: 0
+			rendering_instructions_buf: Vec::with_capacity(512), // TODO what should the upper limit be? Make it a hard limit
+			audio_instructions_flags: [false; 128],
+			audio_instructions_buf: Vec::with_capacity(32),
+			game_graphics: Vec::with_capacity(12)
 		};
 	}
 			
 	// tick the game state by the given amount of time
 	pub fn tick(&mut self, mut seconds_passed: f32) {
+		self.audio_instructions_flags = [false; 128];
 		
 		// prevent disproportionally long ticks
 		if seconds_passed > MAX_TIME_BETWEEN_TICKS { 
@@ -238,15 +243,35 @@ impl Game {
 		self.player.update_target(target);
 	}
 	
+	// updates the audio instructions and returns a pointer to access them
+	pub fn audio_instructions(&mut self) -> AudioInstructions {
+		let audio_instructions_buf = &mut self.audio_instructions_buf;
+		audio_instructions_buf.clear();
+		
+		let mut audioKey = 0;
+		for val in self.audio_instructions_flags {
+			if val {
+				audio_instructions_buf.push(audioKey);
+			}
+			
+			audioKey += 1;
+		}
+		
+		return AudioInstructions {
+			num_instructions: audio_instructions_buf.len(),
+			instructions_ptr: audio_instructions_buf.as_ptr()
+		};
+	}
+	
 	// updates the rendering instructions and returns a pointer to access them
 	pub fn rendering_instructions(&mut self) -> RenderingInstructions {
-		let rendering_instructions = &mut self.rendering_instructions;
+		let rendering_instructions_buf = &mut self.rendering_instructions_buf;
 		let game_graphics = &mut self.game_graphics;
 		
-		rendering_instructions.clear();
+		rendering_instructions_buf.clear();
 		
 		// push background
-		rendering_instructions.push(
+		rendering_instructions_buf.push(
 			PositionedGraphic::new(Graphic{ g: GraphicGroup::Background, frame: 0, flags: 0, arg: 0}, 0.0, 0.0)
 		);
 		
@@ -259,7 +284,7 @@ impl Game {
 				
 				pg.g.flags |= GraphicFlags::Opacity as u8;
 				pg.g.arg = 255 - (proportion_time_passed * 255.0) as u8;
-				rendering_instructions.push(pg);
+				rendering_instructions_buf.push(pg);
 				return true;
 			} else {
 				return false;
@@ -286,7 +311,7 @@ impl Game {
 					}
 					let graphic_x = if target.hit_dir == Direction::Right { target.dest_x + PLAYER_WIDTH as f32 - DASH_INDICATOR_WIDTH as f32 } else { target.dest_x };
 					let graphic_y = target.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
-					rendering_instructions.push( PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: 0, arg: 0}, graphic_x, graphic_y) );
+					rendering_instructions_buf.push( PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: 0, arg: 0}, graphic_x, graphic_y) );
 				}
 				
 				if target.appearance_y > self.end_y {
@@ -300,8 +325,8 @@ impl Game {
 		}
 		
 		// push player graphics
-		rendering_instructions.append(&mut self.player.rendering_instructions(self.game_data.time_running));
-		rendering_instructions.append(&mut self.player.lg_rendering_instructions(self.game_data.time_running));
+		rendering_instructions_buf.append(&mut self.player.rendering_instructions(self.game_data.time_running));
+		rendering_instructions_buf.append(&mut self.player.lg_rendering_instructions(self.game_data.time_running));
 		
 		// push bricks
 		let mut idx = self.target_idx;
@@ -319,23 +344,16 @@ impl Game {
 			let target_y = ti.appearance_y - self.scrolled_y;
 			for brick in &ti.brick_group {
 				let mut brick_graphics = brick.rendering_instructions(target_y);
-				rendering_instructions.append(&mut brick_graphics);
+				rendering_instructions_buf.append(&mut brick_graphics);
 			}
 			
 			idx += 1;
 		}
 		
 		return RenderingInstructions {
-			num_graphics: rendering_instructions.len(),
-			graphics_ptr: rendering_instructions.as_ptr()
+			num_graphics: rendering_instructions_buf.len(),
+			graphics_ptr: rendering_instructions_buf.as_ptr()
 		}
-	}
-	
-	// returns the number of bricks broken since the last check
-	pub fn bricks_broken(&mut self) -> u8 {
-		let bb = self.bricks_broken;
-		self.bricks_broken = 0;
-		return bb;
 	}
 	
 	// returns the songs game data
@@ -583,7 +601,6 @@ impl Game {
 	// destroy any bricks that overlap with passed hitboxes
 	fn destroy_bricks(&mut self, hitbox: &HitBox) {
 		let score = &mut self.game_data.score;
-		let bricks_broken = &mut self.bricks_broken;
 		let mut new_hold_positions = Vec::new();
 		
 		if let Some(target) = self.targets.get_mut(self.target_idx) {
@@ -600,7 +617,7 @@ impl Game {
 				
 				if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &brick_bounds) {
 					*score += BRICK_SCORE;
-					*bricks_broken += 1;
+					self.audio_instructions_flags[SoundEffect::NoteHit as usize] = true;
 					
 					if brick.attempt_break() {
 						continue;
@@ -624,7 +641,6 @@ impl Game {
 					};;
 					if objects::intersect(&hitbox.bounds, &segment_brick_bounds) {
 						*score += HOLD_SEGMENT_SCORE;
-						*bricks_broken += 1;
 						if brick.attempt_break() {
 							break;
 						}
@@ -645,7 +661,6 @@ impl Game {
 	// destroy any hold segments that overlap with player hold hitboxes
 	fn destroy_holds(&mut self) {
 		let score = &mut self.game_data.score;
-		let bricks_broken = &mut self.bricks_broken;
 		let hold_hitboxes = self.player.hold_hitboxes();
 		
 		if let Some(target) = self.targets.get_mut(self.target_idx) {
@@ -659,8 +674,8 @@ impl Game {
 				if let Some(segment_brick_bounds) = brick.bounds(target_y) {
 					for hitbox in &hold_hitboxes {
 						if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &segment_brick_bounds) {
+							self.audio_instructions_flags[SoundEffect::NoteSegmentHit as usize] = true;
 							*score += HOLD_SEGMENT_SCORE;
-							*bricks_broken += 1;
 							brick.attempt_break();
 							break;
 						}
@@ -685,7 +700,6 @@ impl Game {
 		self.end_y = Game::end_y(self.scrolled_y, self.game_data.brick_speed);
 		self.game_data.time_running = time;
 		self.game_data.score = 0;
-		self.bricks_broken = 0;
 
 		// set target idx
 		self.target_idx = 0;

@@ -15,17 +15,16 @@ export function GameCore () {
 	
 	// audio
 	this.audioContext;
-	this.popAudioBuffer;
+	this.soundKeys;
+	this.soundBuffers;
 	this.audioSource;
-	this.audioBuffer;
+	this.songBuffer;
 	this.audioTimeSafetyBuffer;
 
 	// set defaults
 	this.isLoaded = false;
 	this.isSongLoaded = false;
 
-	// TODO move to init function?
-	this.audioContext = new AudioContext();
 	this.audioTimeSafetyBuffer = 0.15;
 }
 
@@ -33,16 +32,29 @@ GameCore.prototype.init = async function () {
 	if(this.isLoaded){ return; }
 	
 	let loader = new load.Loader();
-		
+	
+	this.audioContext = new AudioContext();
+	
+	let audioResourceLocations;
+	await fetch("./audio-resources.json")
+		.then(res => res.json())
+		.then(res => { audioResourceLocations = res });
+	
 	// load sounds (not songs)
-		// !!! once there are more sound effects move to loader
+		// !!! move to loader
 		// TODO error handling when it takes too long
-	await fetch("./assets/sounds/pop.wav")
-		.then(res => res.arrayBuffer())
-		.then(res => this.audioContext.decodeAudioData(res))
-		.then(res => this.popAudioBuffer = res)
-		.catch(rej => { throw Error("Error loading audio: " + rej) });
-
+	this.soundKeys = Object.keys(audioResourceLocations);
+	this.soundLocations = Object.values(audioResourceLocations);
+	let numAudioResources = this.soundKeys.length;
+	this.soundBuffers = Object();
+	for(let i = 0; i < numAudioResources; ++i){
+		await fetch("./assets/sounds/" + this.soundLocations[i])
+			.then(res => res.arrayBuffer())
+			.then(res => this.audioContext.decodeAudioData(res))
+			.then(res => this.soundBuffers[this.soundKeys[i]] = res)
+			.catch(rej => { throw Error("Error loading audio: " + rej) });
+	}
+		
 	// !!! can happen same time as graphics are loading
 	this.database = await loader.loadDatabase();
 	
@@ -70,7 +82,7 @@ GameCore.prototype.getSongData = function(){
 }
 
 GameCore.prototype.getSongBuffer = function(){
-	return this.audioBuffer;
+	return this.songBuffer;
 }
 
 GameCore.prototype.songs = function(){
@@ -219,7 +231,7 @@ GameCore.prototype.loadSong = async function(songID){
 	await fetch(filename)
 		.then(res => res.arrayBuffer())
 		.then(res => this.audioContext.decodeAudioData(res))
-		.then(res => { this.audioBuffer = res; }
+		.then(res => { this.songBuffer = res; }
 	);
 	
 	this.isSongLoaded = true;
@@ -231,7 +243,7 @@ GameCore.prototype.loadMP3 = async function(file){
 	// !!! add error handling
 	await file.arrayBuffer()
 		.then(res => this.audioContext.decodeAudioData(res))
-		.then(res => { this.audioBuffer = res; }
+		.then(res => { this.songBuffer = res; }
 	);
 
     this.songData.filename = file;

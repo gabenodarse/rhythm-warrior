@@ -16,12 +16,12 @@ export async function run(){
 	controls[87] = wasm.Input.Slash2; // w
 	controls[69] = wasm.Input.Slash3; // e
 	
-	let gameCore = new GameCore();
-	await gameCore.init();
-	game = gameCore.toGame();
-
+	game = new GameCore();
+	await game.init();
+	game = game.toGame();
+	
 	overlay = new Overlay(game, controls);
+	propagator = new EventPropagator();	
 
-	propagator = new EventPropagator();
 	await propagator.init(game, overlay, controls);
 }

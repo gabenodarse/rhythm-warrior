@@ -150,7 +150,7 @@ export function Loader(dbFilename){
 }
 
 Loader.prototype.init = async function(){
-	await fetch("./resources.json")
+	await fetch("./graphics-resources.json")
 		.then(res => res.json())
 		.then(res => { this.resourceLocations = res });
 }

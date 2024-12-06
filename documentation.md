@@ -83,9 +83,18 @@ contains glue code for interacting with sqlite database
 
 remnant file that is kept around in case it is useful in the future
 
-# resources.json / src/resources.rs / graphics
+# audio-resources.json / audio
 
-each key in the resources.json file represents 1 graphic or animation. \
+each key in audio-resources.json file represents a sound effect from the Game
+their index must correspond exactly with the index in lib.rs of a SoundEffect with the same name
+
+the Game keeps a record of which sound effects should be played
+the record is reset every tick, so the javascript is expected to call to Game every tick requesting which sound effects to play
+the sound effects to play are represented by u8 values indicating the index of the sound effect
+
+# graphics-resources.json / src/resources.rs / graphics
+
+each key in the graphics-resources.json file represents 1 graphic or animation. \
 to add a graphic or animation, add the key to the resources.json file and create an array with the associated images\
 then, modify resources.rs such that: \
 	- keys have a corresponding GraphicGroup. Names must be identical\

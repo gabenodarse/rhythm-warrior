@@ -199,6 +199,7 @@ EventPropagator.prototype.runInstruction = function(instruction){
 		this.tickTimeTracker.reset();
 		this.preRenderTimeTracker.reset();
 		this.frameTimeTracker.reset();
+		
 		this.startFromHomescreen();
 	} 
 	

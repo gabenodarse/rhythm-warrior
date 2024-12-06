@@ -107,6 +107,20 @@ pub struct RenderingInstructions {
 }
 
 #[wasm_bindgen]
+#[repr(u8)]
+#[derive(EnumVariantCount)]
+pub enum SoundEffect {
+	NoteHit,
+	NoteSegmentHit
+}
+
+#[wasm_bindgen]
+pub struct AudioInstructions {
+	pub num_instructions: usize,
+	pub instructions_ptr: *const u8
+}
+
+#[wasm_bindgen]
 #[derive(Clone)]
 pub struct PositionedGraphic {
 	pub g: Graphic,
