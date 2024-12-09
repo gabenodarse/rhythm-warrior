@@ -8,9 +8,10 @@ export function wasmMemory(){
 }
 
 async function start(){
+	window.removeEventListener("click", start);
 	let wasmObj = await wasm.default();
 	wasmMemoryObj = wasmObj.memory;
 	main.run();
 }
 
-window.addEventListener("click", evt => {start();});
+window.addEventListener("click", start);

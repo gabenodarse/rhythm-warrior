@@ -99,21 +99,21 @@ function HomeScreen(overlayParent){
 }
 
 // class for song selections which are attached to the home screen
-function HomeSelection(id, name, artist, difficulty, duration){
+function HomeSelection(songData){
 	this.div;
 	this.highlighted;
 	
-	this.songID;
+	this.songData;
 	this.name;
 	this.artist;
 	this.difficulty;
 	this.duration;
 	
-	this.songID = id;
-	this.name = name;
-	this.artist = artist;
-	this.difficulty = difficulty;
-	this.duration = duration;
+	this.songData = songData;
+	this.name = songData.name;
+	this.artist = songData.artist;
+	this.difficulty = songData.difficulty;
+	this.duration = songData.duration;
 	
 	this.div = document.createElement("div");
 	this.div.className = "home-selection";
@@ -122,9 +122,9 @@ function HomeSelection(id, name, artist, difficulty, duration){
 	this.artistField = document.createElement("p");
 	this.infoField = document.createElement("p");
 	
-	this.nameField.innerHTML = name;
-	this.artistField.innerHTML = artist;
-	this.infoField.innerHTML = `Difficulty: ${difficulty} -- Duration: ${duration}`;
+	this.nameField.innerHTML = this.name;
+	this.artistField.innerHTML = this.artist;
+	this.infoField.innerHTML = `Difficulty: ${this.difficulty} -- Duration: ${this.duration}`;
 	
 	this.div.appendChild(this.nameField);
 	this.div.appendChild(this.artistField);
@@ -415,19 +415,9 @@ function SaveLoadMenu(overlayParent){
 	}, "Save Song");
 
 	this.addSelection(() => { 
-		this.openDialog(new OverwriteSongDialog(this.overlayParent, this));
-		return null;
-	}, "Overwrite Song");
-
-	this.addSelection(() => { 
 		this.openDialog(new LoadSongDialog(this.overlayParent, this));
 		return null;
 	}, "Load Song");
-	
-	this.addSelection(() => {
-		alert("Not yet implemented"); // !!! load database
-		return null;
-	}, "Load database");
 }
 Object.setPrototypeOf(SaveLoadMenu.prototype, Menu.prototype);
 
@@ -593,6 +583,8 @@ function NewSongDialog(overlayParent, menuParent){
 	this.durationField;
 	this.songStartOffsetLabel;
 	this.songStartOffsetField;
+	this.jsonNameLabel;
+	this.jsonNameField;
 	this.fileInput;
 
 	this.formTitle.innerHTML = "New Song";
@@ -615,7 +607,9 @@ function NewSongDialog(overlayParent, menuParent){
 	this.durationField = document.createElement("input");
 	this.songStartOffsetLabel = document.createElement("label");
 	this.songStartOffsetField = document.createElement("input");
-
+	this.jsonNameLabel = document.createElement("label");
+	this.jsonNameField = document.createElement("input");
+	
 	this.nameLabel.innerHTML = "Name: ";
 	this.artistLabel.innerHTML = "Artist: ";
 	this.difficultyLabel.innerHTML = "Difficulty(0-10): ";
@@ -623,6 +617,7 @@ function NewSongDialog(overlayParent, menuParent){
 	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): ";
 	this.durationLabel.innerHTML = "Duration(0-600): ";
 	this.songStartOffsetLabel.innerHTML = "Song start offset (0-6, use 0 if unknown): ";
+	this.jsonNameLabel.innerHTML = "Song data file (json): ";
 
 	this.nameField.defaultValue = "";
 	this.nameField.type = "text";
@@ -638,6 +633,8 @@ function NewSongDialog(overlayParent, menuParent){
 	this.durationField.type = "text";
 	this.songStartOffsetField.defaultValue = "";
 	this.songStartOffsetField.type = "text";
+	this.jsonNameField.defaultValue = "my-song.json";
+	this.jsonNameField.type = "text";
 
 	this.fileInput = document.createElement("input");
 	this.fileInput.innerHTML = "song"
@@ -682,15 +679,19 @@ function NewSongDialog(overlayParent, menuParent){
 			else if(songStartOffset > 6){
 				songStartOffset = 6;
 			}
-		let file = this.fileInput.files[0];
+		let jsonFileName = this.jsonNameField.value;
+			if (jsonFileName.slice(-5) != ".json"){
+				jsonFileName = jsonFileName + ".json";
+			}
+		let songFile = this.fileInput.files[0];
 		
-		game.newSong(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset);
-
-		if(!file){
+		if(!songFile){
 			alert("no audio was uploaded. The previous song's audio will be used.")
+			game.newSong(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset, "", jsonFileName);
 		}
 		else{
-			game.loadMP3(file);
+			game.newSong(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset, songFile.name, jsonFileName);
+			game.loadMP3(songFile);
 		}
 
 		return "wait-song-load";
@@ -716,6 +717,9 @@ function NewSongDialog(overlayParent, menuParent){
 	this.formDiv.appendChild(newLine());
 	this.formDiv.appendChild(this.songStartOffsetLabel);
 	this.formDiv.appendChild(this.songStartOffsetField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.jsonNameLabel);
+	this.formDiv.appendChild(this.jsonNameField);
 	this.formDiv.appendChild(newLine());
 	this.formDiv.appendChild(this.fileInput);
 }
@@ -739,6 +743,8 @@ function ModifySongDialog(overlayParent, menuParent){
 	this.durationField;
 	this.songStartOffsetLabel;
 	this.songStartOffsetField;
+	this.jsonNameLabel;
+	this.jsonNameField;
 	this.fileInput;
 
 	this.formTitle.innerHTML = "Modify Song";
@@ -761,6 +767,10 @@ function ModifySongDialog(overlayParent, menuParent){
 	this.durationField = document.createElement("input");
 	this.songStartOffsetLabel = document.createElement("label");
 	this.songStartOffsetField = document.createElement("input");
+	this.jsonNameLabel = document.createElement("label");
+	this.jsonNameField = document.createElement("input");
+	this.fileInputLabel = document.createElement("label");
+	this.fileInput = document.createElement("input");
 
 	this.nameLabel.innerHTML = "Name: ";
 	this.artistLabel.innerHTML = "Artist: ";
@@ -769,6 +779,7 @@ function ModifySongDialog(overlayParent, menuParent){
 	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): ";
 	this.durationLabel.innerHTML = "Duration(0-600): ";
 	this.songStartOffsetLabel.innerHTML = "Song start offset (0-6): ";
+	this.jsonNameLabel.innerHTML = "Song data file (json): ";
 
 	this.nameField.defaultValue = songData.name;
 	this.nameField.type = "text";
@@ -784,10 +795,11 @@ function ModifySongDialog(overlayParent, menuParent){
 	this.durationField.type = "text";
 	this.songStartOffsetField.defaultValue = songData.startOffset;
 	this.songStartOffsetField.type = "text";
+	this.jsonNameField.defaultValue = songData.jsonname;
+	this.jsonNameField.type = "text";
 
-	this.fileInput = document.createElement("input");
-	this.fileInput.innerHTML = "song"
-	this.fileInput.type = "file"
+	this.fileInputLabel.innerHTML = "Song audio (if updating)";
+	this.fileInput.type = "file";
 
 	this.submitFunction = () => {
 		// validate data
@@ -828,13 +840,21 @@ function ModifySongDialog(overlayParent, menuParent){
 			else if(songStartOffset > 6){
 				songStartOffset = 6;
 			}
-		let file = this.fileInput.files[0];
-
-		if(file){
-			game.loadMP3(file);
+		let jsonFileName = this.jsonNameField.value;
+			if (jsonFileName.slice(-5) != ".json"){
+				jsonFileName = jsonFileName + ".json";
+			}
+			
+		let songFile = this.fileInput.files[0];
+		let songFileName = songData.filename;
+		
+		if(songFile){
+			game.loadMP3(songFile);
+			songFileName = songFile.name;
+			this.fileInputLabel.innerHTML = "Modified ";
 		}
-	
-		game.modifySong(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset);
+		
+		game.modifySong(name, artist, difficulty, bpm, brickSpeed, duration, songStartOffset, songFileName, jsonFileName);
 
 		return null;
 	}
@@ -859,6 +879,12 @@ function ModifySongDialog(overlayParent, menuParent){
 	this.formDiv.appendChild(newLine());
 	this.formDiv.appendChild(this.songStartOffsetLabel);
 	this.formDiv.appendChild(this.songStartOffsetField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.jsonNameLabel);
+	this.formDiv.appendChild(this.jsonNameField);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.fileInputLabel);
+	this.formDiv.appendChild(this.fileInput);
 }
 Object.setPrototypeOf(ModifySongDialog.prototype, GetInputDialog.prototype);
 
@@ -873,6 +899,7 @@ function SaveSongDialog(overlayParent, menuParent){
 	this.brickSpeedLabel;
 	this.durationLabel;
 	this.songStartOffsetLabel;
+	this.jsonNameLabel;
 
 	this.formTitle.innerHTML = "Save Song";
 
@@ -887,6 +914,7 @@ function SaveSongDialog(overlayParent, menuParent){
 	this.brickSpeedLabel = document.createElement("label");
 	this.durationLabel = document.createElement("label");
 	this.songStartOffsetLabel = document.createElement("label");
+	this.jsonNameLabel = document.createElement("label");
 
 	this.nameLabel.innerHTML = "Name: " + songData.name;
 	this.artistLabel.innerHTML = "Artist: " + songData.artist;
@@ -895,6 +923,7 @@ function SaveSongDialog(overlayParent, menuParent){
 	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): " + songData.gameData.brick_speed;
 	this.durationLabel.innerHTML = "Duration(0-600): " + songData.duration;
 	this.songStartOffsetLabel.innerHTML = "Song start offset (0-6): " + songData.startOffset;
+	this.jsonNameLabel.innerHTML = "Song data file (json): " + songData.jsonname;
 
 	this.submitFunction = () => {
 		game.saveSong(songData);
@@ -914,132 +943,45 @@ function SaveSongDialog(overlayParent, menuParent){
 	this.formDiv.appendChild(this.durationLabel);
 	this.formDiv.appendChild(newLine());
 	this.formDiv.appendChild(this.songStartOffsetLabel);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.jsonNameLabel);
 }
 Object.setPrototypeOf(SaveSongDialog.prototype, GetInputDialog.prototype);
-
-// class for creating a dialog to overwrite the current song in the database. extends GetInputDialog
-function OverwriteSongDialog(overlayParent, menuParent){
-	GetInputDialog.call(this, overlayParent, menuParent);
-	
-	this.nameLabel;
-	this.artistLabel;
-	this.difficultyLabel;
-	this.bpmLabel;
-	this.brickSpeedLabel;
-	this.durationLabel;
-	this.songStartOffsetLabel;
-
-	this.formTitle.innerHTML = "Overwrite Song";
-
-	let game = overlayParent.getGame();
-	let songData = game.getSongData();
-	let newLine = () => { return document.createElement("br"); }
-
-	this.nameLabel = document.createElement("label");
-	this.artistLabel = document.createElement("label");
-	this.difficultyLabel = document.createElement("label");
-	this.bpmLabel = document.createElement("label");
-	this.brickSpeedLabel = document.createElement("label");
-	this.durationLabel = document.createElement("label");
-	this.songStartOffsetLabel = document.createElement("label");
-
-	this.nameLabel.innerHTML = "Name: " + songData.name;
-	this.artistLabel.innerHTML = "Artist: " + songData.artist;
-	this.difficultyLabel.innerHTML = "Difficulty(0-10): " + songData.difficulty;
-	this.bpmLabel.innerHTML = "BPM(40-160): " + songData.gameData.bpm;
-	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): " + songData.gameData.brick_speed;
-	this.durationLabel.innerHTML = "Duration(0-600): " + songData.duration;
-	this.songStartOffsetLabel.innerHTML = "Song start offset (0-6): " + songData.startOffset;
-
-	this.submitFunction = () => {
-		game.overwriteSong(songData);
-		return null;
-	}
-
-	this.formDiv.appendChild(this.nameLabel);
-	this.formDiv.appendChild(newLine());
-	this.formDiv.appendChild(this.artistLabel);
-	this.formDiv.appendChild(newLine());
-	this.formDiv.appendChild(this.difficultyLabel);
-	this.formDiv.appendChild(newLine());
-	this.formDiv.appendChild(this.bpmLabel);
-	this.formDiv.appendChild(newLine());
-	this.formDiv.appendChild(this.brickSpeedLabel);
-	this.formDiv.appendChild(newLine());
-	this.formDiv.appendChild(this.durationLabel);
-	this.formDiv.appendChild(newLine());
-	this.formDiv.appendChild(this.songStartOffsetLabel);
-}
-Object.setPrototypeOf(OverwriteSongDialog.prototype, GetInputDialog.prototype);
 
 // class for creating a dialog to load song data from the database. extends GetInputDialog
 function LoadSongDialog(overlayParent, menuParent){
 	GetInputDialog.call(this, overlayParent, menuParent);
 
-	let songSelector;
-	let options;
-
-	let idIDX;
-	let nameIDX;
-	let artistIDX;
-	let difficultyIDX;
-	let durationIDX;
-	let timeCreatedIDX;
-	let timeModifiedIDX;
-
-	this.formTitle.innerHTML = "Load Song";
-
-	songSelector = document.createElement("select");
-	options = [];
-	
 	let game = overlayParent.getGame();
-	let songs = game.songs();
 	
-	if(songs.length != 0){
-		songs[0]["columns"].forEach( (columnName, idx) => {
-			if(columnName.toUpperCase() === "SONGID"){
-				idIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "NAME"){
-				nameIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "ARTIST"){
-				artistIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "DIFFICULTY"){
-				difficultyIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "DURATION"){
-				durationIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "TIMECREATED"){
-				timeCreatedIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "TIMEMODIFIED"){
-				timeModifiedIDX = idx;
-			}
-		});
-		songs[0]["values"].forEach( (song, idx) => {
-			let newOption = document.createElement("option");
-			let timeCreated = new Date(song[timeCreatedIDX]).toString();
-			let timeModified = new Date(song[timeModifiedIDX]).toString();
-			newOption.value = song[idIDX];
-			newOption.innerHTML = `Name: ${song[nameIDX]}, Artist: ${song[artistIDX]}, Difficulty: ${song[difficultyIDX]}, Duration: ${song[durationIDX]}, Time Created: ${timeCreated}, Time Modified: ${timeModified}`;
-			
-			options.push(newOption);
-		});
-	}
+	this.songFileLabel = document.createElement("label");
+	this.songFileLabel.innerHTML = "Song Audio File (MP3 / WAV): ";
+	this.songFileInput = document.createElement("input");
+	this.songFileInput.innerHTML = "Song audio file (mp3/wav)";
+	this.songFileInput.type = "file";
 	
-	options.forEach( o => {
-		songSelector.appendChild(o);
-	});
+	this.jsonFileLabel = document.createElement("label");
+	this.jsonFileLabel.innerHTML = "Song JSON Data File: ";
+	this.jsonFileInput = document.createElement("input");
+	this.jsonFileInput.innerHTML = "Song data file (json)";
+	this.jsonFileInput.type = "file";
+	
+	let newLine = () => { return document.createElement("br"); }
 	
 	this.submitFunction = () => {
-		game.loadSong(parseInt(songSelector.value));
+		let songFile = this.songFileInput.files[0];
+		
+		let jsonFile = this.jsonFileInput.files[0];
+		
+		game.userLoadSong(songFile, jsonFile);
 		return "wait-song-load";
 	};
 	
-	this.formDiv.appendChild(songSelector);
+	this.formDiv.appendChild(this.songFileLabel);
+	this.formDiv.appendChild(this.songFileInput);
+	this.formDiv.appendChild(newLine());
+	this.formDiv.appendChild(this.jsonFileLabel);
+	this.formDiv.appendChild(this.jsonFileInput);
 }
 Object.setPrototypeOf(LoadSongDialog.prototype, GetInputDialog.prototype);
 
@@ -1251,9 +1193,9 @@ HomeScreen.prototype.handleEvent = function(evt){
 		}
 		else if(evt.keyCode == 13){ // enter
 			if(this.songSelections[this.selectionIdx]){
-				let songID = this.songSelections[this.selectionIdx].getSongID();
+				let songData = this.songSelections[this.selectionIdx].getSongData();
 				let game = this.overlayParent.getGame();
-				game.loadSong(songID);
+				game.loadSong(songData);
 	
 				this.overlayParent.removeCapturingComponent();
 				this.overlayParent.goToGameOverlay();
@@ -1287,36 +1229,10 @@ HomeScreen.prototype.update = function(){
 	let timeModifiedIDX;
 	
 	if(songs.length != 0){
-		songs[0]["columns"].forEach( (columnName, idx) => {
-			if(columnName.toUpperCase() === "SONGID"){
-				idIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "NAME"){
-				nameIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "ARTIST"){
-				artistIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "DIFFICULTY"){
-				difficultyIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "DURATION"){
-				durationIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "TIMECREATED"){
-				timeCreatedIDX = idx;
-			}
-			else if(columnName.toUpperCase() === "TIMEMODIFIED"){
-				timeModifiedIDX = idx;
-			}
-		});
-		
-		songs[0]["values"].forEach( (song, idx) => {
-			if(song[nameIDX].toUpperCase() === "IVERN LOGIN THEME"){
-				let selection = new HomeSelection(song[idIDX], song[nameIDX], song[artistIDX], song[difficultyIDX], song[durationIDX]);
-				this.songSelections.push(selection);
-				this.songSelectionsDiv.appendChild(selection.domElement());
-			}
+		songs.forEach( songData => {
+			let selection = new HomeSelection(songData);
+			this.songSelections.push(selection);
+			this.songSelectionsDiv.appendChild(selection.domElement());
 		});
 	}
 	
@@ -1341,8 +1257,8 @@ HomeSelection.prototype.toggleHighlight = function(){
 	}
 }
 
-HomeSelection.prototype.getSongID = function(){
-	return this.songID;
+HomeSelection.prototype.getSongData = function(){
+	return this.songData;
 }
 
 EndGameScreen.prototype.domElement = function(){

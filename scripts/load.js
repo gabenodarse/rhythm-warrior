@@ -1,151 +1,87 @@
 import * as MIDIReader from "./read-MIDI.js";
-import * as sqljs from "../sql-wasm.js";
 import * as wasm from "../pkg/music_mercenary.js";
 import {WebGLGraphics} from "./graphics.js";
 
-export function MMDatabase(database){
+function MMDatabase(database){
 	this.database = database;
 }
 
 // TODO if query fails
-MMDatabase.prototype.loadSong = function(songID){
-	if(typeof(songID) != "number"){
-		throw Error("invalid song ID");
-	}
+// returns the song data and brick data of the specified song
+MMDatabase.prototype.loadSong = async function(songData){
+	// !!! !!! !!! match return value based on songData provided
+	let songJSON = this.database[0];
 	
-	let sql = "SELECT * FROM BRICKS WHERE SongID=" + songID +";";
-	let bricks = this.database.exec(sql);
-	sql = "SELECT * FROM SONGS WHERE SongID=" + songID +";";
-	let song = this.database.exec(sql);
-	
-	return {song: song, bricks: bricks};
+	return songJSON;
 }
 
-// !!! error handling on save and overwrite. Don't want to lose data
+// saves the song (song data and note data) to a json file
+// !!! error handling on save. Don't want to lose data
 	// check song data fields validity and for existence of bricks
 MMDatabase.prototype.saveSong = function(songData, notes){
-	let {name, artist, difficulty, bpm, brickSpeed, duration, startOffset, filename} = songData;
-	let now = new Date().getTime();
-			
-	let sql = "INSERT INTO SONGS \
-		(Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, StartOffset, TimeCreated, TimeModified, Filename) \
-		VALUES (\"" 
-		+ name + "\", \""
-		+ artist + "\", \""
-		+ difficulty + "\", "
-		+ bpm + ", "
-		+ brickSpeed + ", "
-		+ duration + ", "
-		+ startOffset + ", "
-		+ now + ", "
-		+ now + ", \""
-		+ filename + "\"" 
-		+ ");"
-	;
-	
-	this.database.run(sql);
-	let lastInsert = this.database.exec("SELECT last_insert_rowid()");
-	let newSongID = lastInsert[0].values[0];
-	
-	// TODO combine insertion of all notes into 1 large query?
-	notes.forEach( note => {
-		let {brick_type, beat_pos, end_beat_pos, x_pos, is_triplet, is_trailing, is_leading, is_hold_note, approx_time} = note;
-		let sql = `INSERT INTO BRICKS \
-			(SongID, BrickType, BeatPos, EndBeatPos, XPos, IsTriplet, IsTrailing, IsLeading, IsHoldNote, ApproxTime) VALUES \
-			(${newSongID}, ${brick_type}, ${beat_pos}, ${end_beat_pos}, ${x_pos}, ${is_triplet}, ${is_trailing}, ${is_leading}, \
-			${is_hold_note}, ${approx_time});`;
+	let songObject = {
+		name: songData.name, 
+		artist: songData.artist, 
+		difficulty: songData.difficulty, 
+		bpm: songData.bpm, 
+		brickSpeed: songData.brickSpeed, 
+		duration: songData.duration, 
+		startOffset: songData.startOffset, 
+		timeCreated: songData.timeCreated,
+		timeModified: songData.timeModified,
+		filename: songData.filename,
+		jsonname: songData.jsonname};
 		
-		this.database.run(sql);
-	});
-	
-	this.exportDatabase();
-}
-
-MMDatabase.prototype.overwriteSong = function(songData, notes){
-	// TODO if write doesn't work, data isn't saved while old data in database is lost. Problem?
-	let {songID, name, artist, difficulty, bpm, brickSpeed, duration, startOffset, timeCreated, filename} = songData;
-	let now = new Date().getTime();
-			
-	let sql = "INSERT INTO SONGS \
-		(Name, Artist, Difficulty, Bpm, BrickSpeed, Duration, StartOffset, TimeCreated, TimeModified, Filename) \
-		VALUES (\"" 
-		+ name + "\", \""
-		+ artist + "\", \""
-		+ difficulty + "\", "
-		+ bpm + ", "
-		+ brickSpeed + ", "
-		+ duration + ", "
-		+ startOffset + ", "
-		+ timeCreated + ", "
-		+ now + ", \""
-		+ filename + "\"" 
-		+ ");"
-	;
-	
-	this.database.run(sql);
-	let lastInsert = this.database.exec("SELECT last_insert_rowid()");
-	let newSongID = lastInsert[0].values[0];
-	
-	// TODO combine insertion of all notes into 1 large query?
-	notes.forEach( note => {
-		let {brick_type, beat_pos, end_beat_pos, x_pos, is_triplet, is_trailing, is_leading, is_hold_note, approx_time} = note;
-		let sql = `INSERT INTO BRICKS \
-			(SongID, BrickType, BeatPos, EndBeatPos, XPos, IsTriplet, IsTrailing, IsLeading, IsHoldNote, ApproxTime) VALUES \
-			(${newSongID}, ${brick_type}, ${beat_pos}, ${end_beat_pos}, ${x_pos}, ${is_triplet}, ${is_trailing}, ${is_leading}, \
-			${is_hold_note}, ${approx_time});`;
-		
-		this.database.run(sql);
-	});
-	
-	// After everything has been inserted, delete old values set the songID of the new values to the old songID
-	sql = `DELETE FROM SONGS WHERE SONGID=${songID}`;
-	this.database.run(sql);
-	sql = `DELETE FROM BRICKS WHERE SONGID=${songID}`;
-	this.database.run(sql);
-	sql = `UPDATE SONGS SET SONGID=${songID} WHERE SONGID=${newSongID}`;
-	this.database.run(sql);
-	sql = `UPDATE BRICKS SET SONGID=${songID} WHERE SONGID=${newSongID}`;
-	this.database.run(sql);
-	
-	this.exportDatabase();
-}
-
-MMDatabase.prototype.searchSong = function(songData){
-	let sql;
-	if(!songData){
-		sql = "SELECT * FROM SONGS;";
-	}
-	// TODO combine multiple search criteria
-	else{
-		let {name, artist, difficulty} = songData;
-		if(name) sql = "SELECT * FROM SONGS WHERE name=" + name +";";
-		else if(artist) sql = "SELECT * FROM SONGS WHERE artist=" + artist +";";
-		else if(difficulty) sql = "SELECT * FROM SONGS WHERE difficulty=" + difficulty +";";
-		else{
-			throw Error("Invalid song data for search");
-		}
+	songObject.notes = []
+	for(let i = 0; i < notes.length; ++i){
+		songObject.notes[i] = [
+			notes[i].brick_type,
+			notes[i].beat_pos,
+			notes[i].end_beat_pos,
+			notes[i].x_pos,
+			notes[i].is_triplet,
+			notes[i].is_trailing,
+			notes[i].is_leading,
+			notes[i].is_hold_note,
+			notes[i].approx_time
+		];
 	}
 	
-	return this.database.exec(sql);
-}
-
-// !!! if a download doesn't appear, what can you do?
-MMDatabase.prototype.exportDatabase = function(){
-	let file = this.database.export();
-	let data = new Blob([file], {type: "application/vnd.sqlite3"});
-	let textfile = window.URL.createObjectURL(data);
+	let songJSON = JSON.stringify(songObject);
+	let data = new Blob([songJSON], {type: "application/json"});
+	let jsonFile = window.URL.createObjectURL(data);
+	
+	// !!! if a download doesn't appear, what can you do?
 	let link = document.createElement('a');
-	link.setAttribute('download', 'music-mercenary.db');
-	link.href = textfile;
+	link.setAttribute('download', songData.jsonname);
+	link.href = jsonFile;
 	
 	document.body.appendChild(link);
-	
 	link.click();
-	
 	document.body.removeChild(link);
 }
 
-export function Loader(dbFilename){
+// returns all loaded song data (not including note data / game data)
+MMDatabase.prototype.searchSong = function(songData){
+	if(!songData){
+		// !!! !!! !!! return the data of all loaded songs
+		return [{
+			name: this.database[0].name,
+			artist: this.database[0].artist,
+			difficulty: this.database[0].difficulty,
+			bpm: this.database[0].bpm,
+			brickSpeed: this.database[0].brickSpeed,
+			duration: this.database[0].duration,
+			startOffset: this.database[0].startOffset,
+			timeCreated: this.database[0].timeCreated,
+			timeModified: this.database[0].timeModified,
+			filename: this.database[0].filename,
+			jsonname: this.database[0].jsonname
+		}];
+	}
+}
+
+export function Loader(){
 	this.resourceLocations;
 }
 
@@ -153,17 +89,6 @@ Loader.prototype.init = async function(){
 	await fetch("./graphics-resources.json")
 		.then(res => res.json())
 		.then(res => { this.resourceLocations = res });
-}
-
-Loader.prototype.loadDatabase = async function(dbFilename){
-	if(typeof dbFilename != "string"){ dbFilename = "music-mercenary.db"; }
-	
-	let mmdb;
-	await fetch(dbFilename)
-		.then( res => initDB(res) )
-		.then( res => mmdb = new MMDatabase(res));
-	
-	return mmdb;
 }
 
 // load all images from files before returning a WebGLGraphics object from those images
@@ -220,26 +145,21 @@ Loader.prototype.loadGraphics = async function(screenDiv){
 	return p;
 }
 
+Loader.prototype.loadDatabase = async function(){
+	// !!! !!! !!! fetch all songs in song-data directory
+	let mmdb = [];
+	let songJSON;
+	await fetch("./song-data/ivern.json")
+		.then(res => res.json())
+		.then(res => { songJSON = res });
+		
+	mmdb[0] = songJSON;
+	return new MMDatabase(mmdb);
+}
+
 export async function convertMIDI(MIDIFile){
 	let buffer = await MIDIFile.arrayBuffer();
 	let bytes = new Uint8Array(buffer, 0, buffer.byteLength);
 	let notes = MIDIReader.readMIDI(bytes);
 	return notes;
 }
-
-export async function initDB(dbFile){
-	let db;
-	
-	let buffer = await dbFile.arrayBuffer();
-	let bytes = new Uint8Array(buffer, 0, buffer.byteLength);
-	await sqljs.initSqlJs()
-		.then(res => {
-			db = new res.Database(bytes);
-		})
-		.catch(err => {
-			console.log(err);// TODO handle errors
-		});
-	
-	return db;
-}
-
