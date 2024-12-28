@@ -15,11 +15,12 @@ Editor.prototype.start = function (callback) {
 	// "An AudioBufferSourceNode can only be played once; after each call to start(),
 		// you have to create a new node if you want to play the same sound again ...
 		// you can use these nodes in a "fire and forget" manner" - MDN
-	this.audioSource = new AudioBufferSourceNode(this.audioContext, {buffer: this.audioBuffer}); 
+	this.audioSource = new AudioBufferSourceNode(this.audioContext, {buffer: this.songBuffer}); 
 	this.audioSource.connect(this.audioContext.destination);
 	
 	let switchTime = this.audioContext.currentTime + this.audioTimeSafetyBuffer;
 	this.audioSource.start(switchTime, this.gameObject.game_data().time_running + this.songData.startOffset); 
+	
 	// set the last tick time to when the moment the game is set to start
 	this.lastTick = performance.now() + this.audioTimeSafetyBuffer * 1000; 
 	
@@ -45,13 +46,11 @@ Editor.prototype.tick = function(){
 	let timePassed = (now - this.lastTick) / 1000; // convert to seconds
 	this.lastTick = now;
 	
-	this.gameObject.seek(this.songData.gameData.time_running + timePassed); 
-	this.songData.gameData = this.gameObject.game_data();
+	this.gameObject.seek(this.gameObject.game_data().time_running + timePassed);
 }
 
 Editor.prototype.seek = function(time){
 	this.gameObject.seek(time);
-	this.songData.gameData = this.gameObject.game_data();
 }
 
 Editor.prototype.createDefaultBrick = function(beatPos, xPos){

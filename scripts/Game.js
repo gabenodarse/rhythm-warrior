@@ -21,7 +21,8 @@ Game.prototype.start = function (callback) {
 	this.audioSource.connect(this.audioContext.destination);
 	
 	let switchTime = this.audioContext.currentTime + this.audioTimeSafetyBuffer;
-	this.audioSource.start(switchTime, this.gameObject.game_data().time_running + this.songData.startOffset); 
+	this.audioSource.start(switchTime, this.gameObject.game_data().time_running + this.songData.startOffset);
+	
 	// set the last tick time to when the moment the game is set to start
 	this.lastTick = performance.now() + this.audioTimeSafetyBuffer * 1000; 
 	
@@ -48,8 +49,7 @@ Game.prototype.tick = function(){
 	this.lastTick = now;
 	
 	// tick game state
-	this.gameObject.tick(timePassed); 
-	this.songData.gameData = this.gameObject.game_data();
+	this.gameObject.tick(timePassed);
 	
 	let audioInstructions = this.gameObject.audio_instructions();
 	let numInstructions = audioInstructions.num_instructions;

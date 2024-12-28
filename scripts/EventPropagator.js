@@ -102,9 +102,10 @@ EventPropagator.prototype.gameLoop = function(){
 		this.tickTimeTracker.endTime(performance.now());
 		
 		let songData = this.game.getSongData();
-		if(songData.gameData.time_running >= songData.gameData.duration){
+		let gameData = this.game.getGameData();
+		if(gameData.time_running >= gameData.duration){
 			this.stopLoop();
-			if (!songData.gameData.is_modified) {	
+			if (!gameData.is_modified) {	
 				this.overlay.goToEndGameScreen();
 				return;
 			}

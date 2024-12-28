@@ -8,11 +8,21 @@ function MMDatabase(database){
 
 // TODO if query fails
 // returns the song data and brick data of the specified song
-MMDatabase.prototype.loadSong = async function(songData){
-	// !!! !!! !!! match return value based on songData provided
-	let songJSON = this.database[0];
+MMDatabase.prototype.loadSong = function(songData){
+	let foundSong;
 	
-	return songJSON;
+	this.database.forEach( songObject => {
+		if(songObject.bpm == songData.bpm
+		&& songObject.brickSpeed == songData.brickSpeed
+		&& songObject.duration == songData.duration
+		&& songObject.startOffset == songData.startOffset
+		&& songObject.filename == songData.filename
+		&& songObject.jsonname == songData.jsonname){
+			foundSong = songObject;
+		}
+	});
+	
+	return foundSong;
 }
 
 // saves the song (song data and note data) to a json file
@@ -32,7 +42,7 @@ MMDatabase.prototype.saveSong = function(songData, notes){
 		filename: songData.filename,
 		jsonname: songData.jsonname};
 		
-	songObject.notes = []
+	songObject.notes = Array(notes.length);
 	for(let i = 0; i < notes.length; ++i){
 		songObject.notes[i] = [
 			notes[i].brick_type,
@@ -62,23 +72,24 @@ MMDatabase.prototype.saveSong = function(songData, notes){
 }
 
 // returns all loaded song data (not including note data / game data)
-MMDatabase.prototype.searchSong = function(songData){
-	if(!songData){
-		// !!! !!! !!! return the data of all loaded songs
-		return [{
-			name: this.database[0].name,
-			artist: this.database[0].artist,
-			difficulty: this.database[0].difficulty,
-			bpm: this.database[0].bpm,
-			brickSpeed: this.database[0].brickSpeed,
-			duration: this.database[0].duration,
-			startOffset: this.database[0].startOffset,
-			timeCreated: this.database[0].timeCreated,
-			timeModified: this.database[0].timeModified,
-			filename: this.database[0].filename,
-			jsonname: this.database[0].jsonname
-		}];
-	}
+MMDatabase.prototype.searchSong = function(){
+	let songs = [];
+	this.database.forEach( songObject => {
+		songs.push({
+			name: songObject.name,
+			artist: songObject.artist,
+			difficulty: songObject.difficulty,
+			bpm: songObject.bpm,
+			brickSpeed: songObject.brickSpeed,
+			duration: songObject.duration,
+			startOffset: songObject.startOffset,
+			timeCreated: songObject.timeCreated,
+			timeModified: songObject.timeModified,
+			filename: songObject.filename,
+			jsonname: songObject.jsonname
+		});
+	});
+	return songs;
 }
 
 export function Loader(){
@@ -146,14 +157,23 @@ Loader.prototype.loadGraphics = async function(screenDiv){
 }
 
 Loader.prototype.loadDatabase = async function(){
-	// !!! !!! !!! fetch all songs in song-data directory
-	let mmdb = [];
-	let songJSON;
-	await fetch("./song-data/ivern.json")
+	let ahriObject;
+	let ivernObject;
+	
+	let ahriPromise = fetch("./song-data/ahri.json")
 		.then(res => res.json())
-		.then(res => { songJSON = res });
+		.then(res => { ahriObject = res; });
 		
-	mmdb[0] = songJSON;
+	let ivernPromise = fetch("./song-data/ivern.json")
+		.then(res => res.json())
+		.then(res => {ivernObject = res;} );
+	
+	await Promise.all([ivernPromise, ahriPromise]);
+	
+	let mmdb = [];
+	mmdb.push(ahriObject);
+	mmdb.push(ivernObject);
+		
 	return new MMDatabase(mmdb);
 }
 

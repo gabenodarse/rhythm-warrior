@@ -154,10 +154,11 @@ function EndGameScreen(overlayParent){
 	
 	let game = overlayParent.getGame();
 	let songData = game.getSongData();
+	let gameData = game.getGameData();
 	
 	this.textElement1.innerHTML = songData.name + " - " + songData.artist;
 	this.textElement2.innerHTML = "Difficulty: "+ songData.difficulty + " --- time: " + songData.duration;
-	this.scoreTextElement.innerHTML = "Score: " + songData.gameData.score + " / " + songData.gameData.max_score;
+	this.scoreTextElement.innerHTML = "Score: " + gameData.score + " / " + gameData.max_score;
 
 	this.exitTextElement.innerHTML = "Enter to move on";
 
@@ -173,7 +174,9 @@ function EndGameScreen(overlayParent){
 // EditorOverlay class, contains a canvas where editor elements are drawn and the editor's controls
 // !!! range scroller isn't modified when the song is modified
 function EditorOverlay(overlayParent){
-	let songData = overlayParent.getGame().getSongData();
+	let game = overlayParent.getGame();
+	let songData = game.getSongData();
+	let gameData = game.getGameData();
 
 	this.overlayParent;
 	this.div;
@@ -215,7 +218,7 @@ function EditorOverlay(overlayParent){
 	this.broadRange.type = "range";
 	this.broadRange.max = 100;
 	this.broadRange.step = 0.1;
-	this.broadRange.value = songData.gameData.time_running / songData.gameData.duration * 100;
+	this.broadRange.value = gameData.time_running / gameData.duration * 100;
 	
 	this.preciseRange = document.createElement("input");
 	this.preciseRange.className = "editor-precise-range";
@@ -751,6 +754,7 @@ function ModifySongDialog(overlayParent, menuParent){
 
 	let game = overlayParent.getGame();
 	let songData = game.getSongData();
+	let gameData = game.getGameData();
 	let newLine = () => { return document.createElement("br"); }
 
 	this.nameLabel = document.createElement("label");
@@ -787,9 +791,9 @@ function ModifySongDialog(overlayParent, menuParent){
 	this.artistField.type = "text";
 	this.difficultyField.defaultValue = songData.difficulty;
 	this.difficultyField.type = "text";
-	this.bpmField.defaultValue = songData.gameData.bpm;
+	this.bpmField.defaultValue = gameData.bpm;
 	this.bpmField.type = "text";
-	this.brickSpeedField.defaultValue = songData.gameData.brick_speed;
+	this.brickSpeedField.defaultValue = gameData.brick_speed;
 	this.brickSpeedField.type = "text";
 	this.durationField.defaultValue = songData.duration;
 	this.durationField.type = "text";
@@ -905,6 +909,7 @@ function SaveSongDialog(overlayParent, menuParent){
 
 	let game = overlayParent.getGame();
 	let songData = game.getSongData();
+	let gameData = game.getGameData();
 	let newLine = () => { return document.createElement("br"); }
 
 	this.nameLabel = document.createElement("label");
@@ -919,8 +924,8 @@ function SaveSongDialog(overlayParent, menuParent){
 	this.nameLabel.innerHTML = "Name: " + songData.name;
 	this.artistLabel.innerHTML = "Artist: " + songData.artist;
 	this.difficultyLabel.innerHTML = "Difficulty(0-10): " + songData.difficulty;
-	this.bpmLabel.innerHTML = "BPM(40-160): " + songData.gameData.bpm;
-	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): " + songData.gameData.brick_speed;
+	this.bpmLabel.innerHTML = "BPM(40-160): " + gameData.bpm;
+	this.brickSpeedLabel.innerHTML = "Brick Speed(100-5000): " + gameData.brick_speed;
 	this.durationLabel.innerHTML = "Duration(0-600): " + songData.duration;
 	this.songStartOffsetLabel.innerHTML = "Song start offset (0-6): " + songData.startOffset;
 	this.jsonNameLabel.innerHTML = "Song data file (json): " + songData.jsonname;
@@ -1275,11 +1280,13 @@ EndGameScreen.prototype.handleEvent = function(evt){
 }
 
 EditorOverlay.prototype.update = function(){
-	let songData = this.overlayParent.getGame().getSongData();
+	let game = this.overlayParent.getGame();
+	let songData = game.getSongData();
+	let gameData = game.getGameData();
 
-	let songDuration = songData.gameData.duration;
-	let beatInterval = songData.gameData.beat_interval;
-	let time = songData.gameData.time_running;
+	let songDuration = gameData.duration;
+	let beatInterval = gameData.beat_interval;
+	let time = gameData.time_running;
 	
 	// reset the precise range to 0 if the time has changed since the ranges were used
 	let prevT = parseFloat(this.broadRange.value) / 100 * songDuration 
@@ -1302,22 +1309,26 @@ EditorOverlay.prototype.domElement = function(){
 }
 
 EditorOverlay.prototype.timeToY = function(time){
-	let songData = this.overlayParent.getGame().getSongData();
+	let game = this.overlayParent.getGame();
+	let songData = game.getSongData();
+	let gameData = game.getGameData();
 
-	let timeDifference = time - songData.gameData.time_running;
+	let timeDifference = time - gameData.time_running;
 	let currentY = wasm.time_zero_brick_pos();
-	let newY = currentY + timeDifference * songData.gameData.brick_speed;
+	let newY = currentY + timeDifference * gameData.brick_speed;
 	return newY;
 }
 
 EditorOverlay.prototype.yToTime = function(y){
-	let songData = this.overlayParent.getGame().getSongData();
+	let game = this.overlayParent.getGame();
+	let songData = game.getSongData();
+	let gameData = game.getGameData();
 
 	let currentY = wasm.time_zero_brick_pos();
 	let yDifference = y - currentY;
-	let timeDifference = yDifference / songData.gameData.brick_speed;
+	let timeDifference = yDifference / gameData.brick_speed;
 	
-	return songData.gameData.time_running + timeDifference;
+	return gameData.time_running + timeDifference;
 }
 
 EditorOverlay.prototype.xToNotePos = function(x){
@@ -1331,22 +1342,23 @@ EditorOverlay.prototype.notePosToX = function(notePos){
 EditorOverlay.prototype.draw = function(){
 	let game = this.overlayParent.getGame();
 	let songData = game.getSongData();
+	let gameData = game.getGameData();
 
 	let ctx = this.canvas.getContext("2d");
 	ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 	
-	let time = songData.gameData.time_running;
+	let time = gameData.time_running;
 	
 	// get the beat positions that mark when lines should start and stop being drawn
-	let topScreenTime = time - (wasm.ground_pos() / songData.gameData.brick_speed);
-	let bottomScreenTime = time + (wasm.game_dimensions().y / songData.gameData.brick_speed);
-	let beginningBeatPos = wasm.BrickData.closest_beat_pos(topScreenTime, songData.gameData.bpm);
-	let endBeatPos = wasm.BrickData.closest_beat_pos(bottomScreenTime, songData.gameData.bpm);
+	let topScreenTime = time - (wasm.ground_pos() / gameData.brick_speed);
+	let bottomScreenTime = time + (wasm.game_dimensions().y / gameData.brick_speed);
+	let beginningBeatPos = wasm.BrickData.closest_beat_pos(topScreenTime, gameData.bpm);
+	let endBeatPos = wasm.BrickData.closest_beat_pos(bottomScreenTime, gameData.bpm);
 	let screenWidth = wasm.game_dimensions().x;
 	
 	// draw lines at the specified beat positions
 	for(let i = beginningBeatPos; i < endBeatPos; ++i) {
-		let beatTime = wasm.BrickData.approx_time(i, songData.gameData.bpm);
+		let beatTime = wasm.BrickData.approx_time(i, gameData.bpm);
 		let y = this.timeToY(beatTime) + wasm.brick_dimensions().y / 2;
 		if(i % 4 == 0){
 			ctx.fillRect(0, y-1, this.canvas.width, 3);
@@ -1369,15 +1381,15 @@ EditorOverlay.prototype.draw = function(){
 	if(this.selectedBrick){
 		let brickDims = wasm.brick_dimensions();
 		let startX = this.selectedBrick.x_pos * brickDims.x;
-		let startTime = wasm.BrickData.approx_time(this.selectedBrick.beat_pos, songData.gameData.bpm);
-		let endTime = wasm.BrickData.approx_time(this.selectedBrick.end_beat_pos, songData.gameData.bpm);
+		let startTime = wasm.BrickData.approx_time(this.selectedBrick.beat_pos, gameData.bpm);
+		let endTime = wasm.BrickData.approx_time(this.selectedBrick.end_beat_pos, gameData.bpm);
 		let startY = this.timeToY(startTime);
 		let endY = this.timeToY(endTime) + wasm.brick_dimensions().y;
 		if(this.selectedBrick.is_leading || this.selectedBrick.is_trailing){
-			let minutesPerBeat = 1 / songData.gameData.bpm;
+			let minutesPerBeat = 1 / gameData.bpm;
 			let secondsPerBeat = 60 * minutesPerBeat;
 			let secondsPerEighthBeat = secondsPerBeat / 8;
-			let difference = secondsPerEighthBeat * songData.gameData.brick_speed;
+			let difference = secondsPerEighthBeat * gameData.brick_speed;
 			
 			if(this.selectedBrick.is_leading){
 				startY -= difference;
@@ -1407,7 +1419,7 @@ EditorOverlay.prototype.draw = function(){
 		
 		let bufferData = songBuffer.getChannelData(0);
 		let startingSample = Math.floor(
-			songData.gameData.time_running * songBuffer.sampleRate // time of the song
+			gameData.time_running * songBuffer.sampleRate // time of the song
 			+ songData.startOffset * songBuffer.sampleRate // plus start offset
 			- (wasm.time_zero_brick_pos() + wasm.brick_dimensions().y / 2)  / songData.brickSpeed * songBuffer.sampleRate); // adjusted to notes start position
 
@@ -1442,7 +1454,9 @@ EditorOverlay.prototype.draw = function(){
 }
 
 EditorOverlay.prototype.handleEvent = function(evt){
-	let songData = this.overlayParent.getGame().getSongData();
+	let game = this.overlayParent.getGame();
+	let songData = game.getSongData();
+	let gameData = game.getGameData();
 
 	if(evt.type == "keydown" && evt.keyCode == 27){
 		let overlay = this.overlayParent;
@@ -1451,8 +1465,8 @@ EditorOverlay.prototype.handleEvent = function(evt){
 	}
 	
 	else if(evt.type == "input" && (evt.target == this.broadRange || evt.target == this.preciseRange)){
-		let t = parseFloat(this.broadRange.value) / 100 * songData.gameData.duration 
-			+ parseFloat(this.preciseRange.value) * songData.gameData.beat_interval;
+		let t = parseFloat(this.broadRange.value) / 100 * gameData.duration 
+			+ parseFloat(this.preciseRange.value) * gameData.beat_interval;
 			
 		let game = this.overlayParent.getGame();
 		game.seek(t);
@@ -1570,6 +1584,7 @@ EditorOverlay.prototype.handleMouseDown = function(evt){
 	
 	let game = this.overlayParent.getGame();
 	let songData = game.getSongData();
+	let gameData = game.getGameData();
 	let x = evt.clientX - this.canvas.offsetLeft;
 	let y = evt.clientY - this.canvas.offsetTop;
 	
@@ -1577,7 +1592,7 @@ EditorOverlay.prototype.handleMouseDown = function(evt){
 	y = y / this.yFactor;
 	let approxTime = this.yToTime(y);
 	let xPos = this.xToNotePos(x);
-	let beatPos = wasm.BrickData.closest_beat_pos(approxTime, songData.gameData.bpm);
+	let beatPos = wasm.BrickData.closest_beat_pos(approxTime, gameData.bpm);
 	
 	let brick = game.selectBrick(beatPos, xPos);
 	
@@ -1635,6 +1650,7 @@ EditorOverlay.prototype.handleMouseMove = function(evt){
 	if(this.mouseDown && this.selectedBrick){
 		let game = this.overlayParent.getGame();
 		let songData = game.getSongData();
+		let gameData = game.getGameData();
 		let x = evt.clientX - this.canvas.offsetLeft;
 		let y = evt.clientY - this.canvas.offsetTop;
 		
@@ -1642,7 +1658,7 @@ EditorOverlay.prototype.handleMouseMove = function(evt){
 		y = y / this.yFactor;
 		let approxTime = this.yToTime(y);
 		let xPos = this.xToNotePos(x);
-		let beatPos = wasm.BrickData.closest_beat_pos(approxTime, songData.gameData.bpm);
+		let beatPos = wasm.BrickData.closest_beat_pos(approxTime, gameData.bpm);
 		
 		// if the beat pos or the x pos has changed, move the brick
 		if(beatPos != this.selectedBrick.end_beat_pos || xPos != this.selectedBrick.x_pos){
@@ -1680,8 +1696,9 @@ EditorOverlay.prototype.handleMouseMove = function(evt){
 
 EditorOverlay.prototype.handleWheel = function(evt){
 	let game = this.overlayParent.getGame();
-	let time = game.getSongData().gameData.time_running;
-	let brickSpeed = game.getSongData().gameData.brick_speed;
+	let gameData = game.getGameData();
+	let time = gameData.time_running;
+	let brickSpeed = gameData.brick_speed;
 	
 	time += evt.deltaY / brickSpeed;
 	game.seek(time);

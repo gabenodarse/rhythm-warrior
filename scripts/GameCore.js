@@ -60,7 +60,6 @@ GameCore.prototype.init = async function () {
 	
 	this.gameObject = wasm.Game.new();
     this.songData = {};
-    this.songData.gameData = this.gameObject.game_data();
 	
 	this.isLoaded = true;
 }
@@ -74,11 +73,15 @@ GameCore.prototype.getRenderingInstructions = function(){
 }
 
 GameCore.prototype.getScore = function(){
-	return this.songData.gameData.score;
+	return this.gameObject.game_data().score;
 }
 
 GameCore.prototype.getSongData = function(){
 	return this.songData;
+}
+
+GameCore.prototype.getGameData = function(){
+	return this.gameObject.game_data();
 }
 
 GameCore.prototype.getSongBuffer = function(){
@@ -105,8 +108,7 @@ GameCore.prototype.newSong = function(name, artist, difficulty, bpm, brickSpeed,
 		timeCreated: 0,
 		timeModified: 0,
 		filename: songFileName,
-		jsonname: jsonFileName,
-		gameData: this.gameObject.game_data()
+		jsonname: jsonFileName
 	}
 }
 
@@ -117,14 +119,14 @@ GameCore.prototype.modifySong = function(name, artist, difficulty, bpm, brickSpe
 	this.gameObject = wasm.Game.new(bpm, brickSpeed, duration);
 
 	notes.forEach( note =>{
-		let brickType = note[0];
-		let beatPos = note[1];
-		let endBeatPos = note[2];
-		let xPos = note[3];
-		let isTriplet = note[4];
-		let isTrailing = note[5];
-		let isLeading = note[6];
-		let isHoldNote = note[7];
+		let brickType = note.brick_type;
+		let beatPos = note.beat_pos;
+		let endBeatPos = note.end_beat_pos;
+		let xPos = note.x_pos;
+		let isTriplet = note.is_triplet;
+		let isTrailing = note.is_trailing;
+		let isLeading = note.is_leading;
+		let isHoldNote = note.is_hold_note;
 		this.gameObject.initial_load_add_brick(wasm.BrickData.new( 
 			brickType, beatPos, endBeatPos, xPos, isTriplet, isTrailing, isLeading, isHoldNote)); 
 	});
@@ -146,8 +148,7 @@ GameCore.prototype.modifySong = function(name, artist, difficulty, bpm, brickSpe
 		timeCreated: 0,
 		timeModified: 0,
 		filename: songFileName,
-		jsonname: jsonFileName,
-		gameData: this.gameObject.game_data()
+		jsonname: jsonFileName
 	}
 }
 
@@ -155,11 +156,11 @@ GameCore.prototype.loadSong = async function(songData){
 	// !!! creating a new game to load a new song? Or create a load_song method? wasm garbage collected?
 	this.isSongLoaded = false;
 
-	let songJSON = await this.database.loadSong(songData);
+	let songObject = this.database.loadSong(songData);
 	
-	this.gameObject = wasm.Game.new(songJSON.bpm, songJSON.brickSpeed, songJSON.duration);
+	this.gameObject = wasm.Game.new(songObject.bpm, songObject.brickSpeed, songObject.duration);
 	
-	songJSON.notes.forEach( note => {
+	songObject.notes.forEach( note => {
 		let brickType = note[0];
 		let beatPos = note[1];
 		let endBeatPos = note[2];
@@ -175,18 +176,17 @@ GameCore.prototype.loadSong = async function(songData){
 	this.gameObject.seek(0);
 	
 	this.songData = {
-		name: songJSON.name,
-		artist: songJSON.artist,
-		difficulty: songJSON.difficulty,
-		bpm: songJSON.bpm,
-		brickSpeed: songJSON.brickSpeed,
-		duration: songJSON.duration,
-		startOffset: songJSON.startOffset,
-		timeCreated: songJSON.timeCreated,
-		timeModified: songJSON.timeModified,
-		filename: songJSON.filename,
-		jsonname: songJSON.jsonname,
-		gameData: this.gameObject.game_data()
+		name: songObject.name,
+		artist: songObject.artist,
+		difficulty: songObject.difficulty,
+		bpm: songObject.bpm,
+		brickSpeed: songObject.brickSpeed,
+		duration: songObject.duration,
+		startOffset: songObject.startOffset,
+		timeCreated: songObject.timeCreated,
+		timeModified: songObject.timeModified,
+		filename: songObject.filename,
+		jsonname: songObject.jsonname
 	}
 
 	// fetch the mp3
@@ -216,13 +216,13 @@ GameCore.prototype.loadMP3 = async function(file){
 GameCore.prototype.userLoadSong = async function(songAudioFile, songJsonFile){
 	this.isSongLoaded = false;
 
-	let songJSON;
+	let songObject;
 	await songJsonFile.text()
-		.then(res => songJSON = JSON.parse(res));
+		.then(res => songObject = JSON.parse(res));
 	
-	this.gameObject = wasm.Game.new(songJSON.bpm, songJSON.brickSpeed, songJSON.duration);
+	this.gameObject = wasm.Game.new(songObject.bpm, songObject.brickSpeed, songObject.duration);
 	
-	songJSON.notes.forEach( note => {
+	songObject.notes.forEach( note => {
 		let brickType = note[0];
 		let beatPos = note[1];
 		let endBeatPos = note[2];
@@ -238,18 +238,17 @@ GameCore.prototype.userLoadSong = async function(songAudioFile, songJsonFile){
 	this.gameObject.seek(0);
 	
 	this.songData = {
-		name: songJSON.name,
-		artist: songJSON.artist,
-		difficulty: songJSON.difficulty,
-		bpm: songJSON.bpm,
-		brickSpeed: songJSON.brickSpeed,
-		duration: songJSON.duration,
-		startOffset: songJSON.startOffset,
-		timeCreated: songJSON.timeCreated,
-		timeModified: songJSON.timeModified,
+		name: songObject.name,
+		artist: songObject.artist,
+		difficulty: songObject.difficulty,
+		bpm: songObject.bpm,
+		brickSpeed: songObject.brickSpeed,
+		duration: songObject.duration,
+		startOffset: songObject.startOffset,
+		timeCreated: songObject.timeCreated,
+		timeModified: songObject.timeModified,
 		filename: songAudioFile.name,
-		jsonname: songJsonFile.name,
-		gameData: this.gameObject.game_data()
+		jsonname: songJsonFile.name
 	}
 	
 	// !!! add error handling
@@ -261,8 +260,9 @@ GameCore.prototype.userLoadSong = async function(songAudioFile, songJsonFile){
 	this.isSongLoaded = true;
 }
 
-GameCore.prototype.saveSong = function(songData, overwrite){
+GameCore.prototype.saveSong = function(songData){
 	let notes = this.gameObject.bricks();
+	
 	notes.forEach( note => {
 		note.approx_time = wasm.BrickData.approx_time(note.beat_pos, this.songData.bpm);
 	});
@@ -278,7 +278,7 @@ GameCore.prototype.toEditor = function(){
 		return this;
 	}
 	
-	this.gameObject.seek(this.songData.gameData.time_running); 
+	this.gameObject.seek(this.gameObject.game_data().time_running); 
 	Object.setPrototypeOf(this, Editor.prototype);
 	
 	return this;
@@ -292,7 +292,7 @@ GameCore.prototype.toGame = function(){
 		return this;
 	}
 
-    this.gameObject.seek(this.songData.gameData.time_running); 
+    this.gameObject.seek(this.gameObject.game_data().time_running); 
 	Object.setPrototypeOf(this, Game.prototype);
 	
 	return this;
