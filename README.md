@@ -1,4 +1,4 @@
-# music-mercenary
+# rhythm-warrior
 
 Demoed here: <https://gabenodarse.github.io/>
 

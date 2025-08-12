@@ -1,4 +1,4 @@
-import * as wasm from "../pkg/music_mercenary.js";
+import * as wasm from "../pkg/rhythm_warrior.js";
 import * as main from "./main.js";
 
 let wasmMemoryObj;

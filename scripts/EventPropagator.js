@@ -1,7 +1,7 @@
 "use strict";
 
 import * as load from "./load.js";
-import * as wasm from "../pkg/music_mercenary.js";
+import * as wasm from "../pkg/rhythm_warrior.js";
 import {TimeTracker} from "./TimeTracker.js";
 
 // !!! resizing resizes both overlay and screen div, prompt "your screen has been resized. OK to adjust"

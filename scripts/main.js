@@ -1,5 +1,5 @@
 
-import * as wasm from "../pkg/music_mercenary.js";
+import * as wasm from "../pkg/rhythm_warrior.js";
 import {GameCore} from "./GameCore.js";
 import {EventPropagator} from "./EventPropagator.js";
 import {Overlay} from "./Overlay.js";

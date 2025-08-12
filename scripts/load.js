@@ -1,5 +1,5 @@
 import * as MIDIReader from "./read-MIDI.js";
-import * as wasm from "../pkg/music_mercenary.js";
+import * as wasm from "../pkg/rhythm_warrior.js";
 import {WebGLGraphics} from "./graphics.js";
 
 function MMDatabase(database){

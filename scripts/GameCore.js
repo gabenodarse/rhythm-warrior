@@ -1,6 +1,6 @@
 "use strict";
 
-import * as wasm from "../pkg/music_mercenary.js";
+import * as wasm from "../pkg/rhythm_warrior.js";
 import * as load from "./load.js";
 import {Editor} from "./Editor.js";
 import {Game} from "./Game.js";

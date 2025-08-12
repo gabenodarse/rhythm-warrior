@@ -1,5 +1,5 @@
 
-import * as wasm from "../pkg/music_mercenary.js";
+import * as wasm from "../pkg/rhythm_warrior.js";
 
 let g_keyCodeNames = [];
 g_keyCodeNames[32] = "Space";
@@ -54,7 +54,7 @@ function HomeScreen(overlayParent){
 	this.songSelectionsDiv;
 	this.controlsDiv;
 	
-	this.mmTitle;
+	this.rwTitle;
 	this.songSelections;
 	this.selectionIdx;
 	
@@ -65,8 +65,8 @@ function HomeScreen(overlayParent){
 	this.homeScreenDiv = document.createElement("div");
 	this.homeScreenDiv.id = "homescreen";
 	
-	this.mmTitle = document.createElement("h1");
-	this.mmTitle.innerHTML = "Music Mercenary";
+	this.rwTitle = document.createElement("h1");
+	this.rwTitle.innerHTML = "Rhythm Warrior";
 	this.songSelectionsDiv = document.createElement("div");
 	this.songSelectionsDiv.className = "home-songs-div";
 	this.controlsDiv = document.createElement("div");
@@ -77,7 +77,7 @@ function HomeScreen(overlayParent){
 	this.logLink.innerHTML = "Log";
 	this.homeScreenDiv.appendChild(this.logLink);
 	
-	this.homeScreenDiv.appendChild(this.mmTitle);
+	this.homeScreenDiv.appendChild(this.rwTitle);
 	this.homeScreenDiv.appendChild(this.songSelectionsDiv);
 	this.homeScreenDiv.appendChild(this.controlsDiv);
 	

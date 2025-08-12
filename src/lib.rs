@@ -8,7 +8,7 @@
 // Precise ticking even for longer delta times
 // create the data structure to hold objects in order of layer
 
-// music_mercenary.js uses workaround because instantiateStreaming doesn't function correctly (MIME type not working??)
+// rhythm-warrior.js uses workaround because instantiateStreaming doesn't function correctly (MIME type not working??)
 	// https://stackoverflow.com/questions/52239924/webassembly-instantiatestreaming-wrong-mime-type 
 	// -- defaulting to using "instantiate" instead of "instantiateStreaming"
 // Make sure things work in all browsers, especially ESModules
