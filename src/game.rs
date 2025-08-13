@@ -71,8 +71,9 @@ pub struct TargetInfo {
 	pub post_hit_x: f32, // where the player left_x should be after hitting the target
 	pub is_hold_note: bool,
 	pub hit_dir: Direction, // direction player must slash in order to hit targets once he arrives at dest_x
+	// TODO boost_to_target boolean is unnecessary data
 	pub boost_to_target: bool, // whether the player should boost in order to reach dest_x on time, should not be true if dash_to_target is true
-	pub dash_to_target: bool, // whether the player should dash in order to reach dest_x on time, should not be true if boost_to_target is true
+	pub dash_to_target: bool, // whether the player should dash in order to reach dest_x on time
 	pub hittable_time: f32,
 	pub passed_time: f32
 }
@@ -159,7 +160,8 @@ impl Game {
 			
 			// second, forgiveness check for brick destruction (if action occurs in the same tick that notes become hittable, always destroy the bricks)
 			self.destroy_bricks(&hitbox);
-		} else {
+		} 
+		else {
 			// tick the player
 			self.player.tick(seconds_passed, &self.game_data);
 						

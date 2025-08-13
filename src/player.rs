@@ -60,11 +60,16 @@ pub struct Player {
 	face_dir: Direction,
 	hit_dir: Direction,
 	
-	hit_type: Option<BrickType>,
+	hit_type: Option<BrickType>, // updated whenever a slash command is input, discarded when post slash or hold states end
 
 	target: Option<TargetInfo>,
 	hold_positions: Vec<f32>,
+	// !!! !!! !!! in_range is necessary?
 	in_range: bool, // boolean indicating whether the player has dashed to be in range of a dash target
+	
+	//boolean indicating whether the player has already hit the current target
+		// used to make sure the player doesn't boost to the front of the target more than once when only part of a hold was destroyed
+	in_post_hit_pos: bool, 
 	
 	// flag indicating whether to go into a hold (false) or end the slash regularly without holding (true)
 		// set to false when the slash input is taken, set to true when the key up end input is received
@@ -121,6 +126,7 @@ impl Player {
 			target: None,
 			hold_positions: Vec::new(),
 			in_range: false,
+			in_post_hit_pos: false,
 			
 			stop_hold: false,
 			
@@ -192,11 +198,13 @@ impl Player {
 		let hitbox;
 		let time_running = game_data.time_running;
 
+		// either slash or slashdash, otherwise panic
 		match self.state.state {
 			PlayerState::PreSlash => {
 				if let Some(ti) = &self.target {
 					self.hit_dir = ti.hit_dir;
 					// boost if not a dash target
+					// TODO check if the boost range is reasonable based on how much time needs to pass until the target is hittable
 					if !ti.dash_to_target {
 						self.boost(time_running);
 					}
@@ -242,8 +250,10 @@ impl Player {
 						dest_x = ti.post_hit_x;
 						self.face_dir = ti.hit_dir;
 					}
-				} else {
-					// if there is no target, SlashDash the minimum distance
+				}
+				// else there is no target, SlashDash the minimum distance
+				else {
+					
 					match self.hit_dir {
 						Direction::Right => {
 							dest_x = self.bounds.left_x + MIN_DASH_WIDTH as f32;
@@ -312,6 +322,13 @@ impl Player {
 			},
 			_ => panic!()
 		}
+		
+		// if the target was hit (presumably, based on time_running and the player's x) , update in_post_hit_pos
+		if let Some(ti) = &self.target {
+			if self.bounds.left_x == ti.post_hit_x && time_running > ti.hittable_time {
+				self.in_post_hit_pos = true;
+			}
+		}
 	
 		return hitbox;
 	}
@@ -319,6 +336,7 @@ impl Player {
 	pub fn update_target(&mut self, target: Option<TargetInfo>) {
 		if target != self.target {
 			self.in_range = false;
+			self.in_post_hit_pos = false;
 			self.target = target;
 		}
 	}
@@ -458,6 +476,10 @@ impl Player {
 			return;
 		}
 		
+		if self.in_post_hit_pos {
+			return;
+		}
+		
 		// boost from current position to target
 		let pos_difference = target.dest_x - self.bounds.left_x;
 		if pos_difference > 0.0 {
@@ -545,74 +567,79 @@ impl Player {
 	fn move_player(&mut self, seconds_passed: f32, game_data: &GameData) -> PlayerState {
 		let mut state;
 
-		match self.target.clone() {
-			None => {
-				state = PlayerState::Standing;
-			},
-			Some(ti) => {
-				// move based on target info
-				let time_to_target = ti.hittable_time - game_data.time_running;
-				let pos_difference = self.bounds.left_x - ti.dest_x;
-				let distance_to_target;
-				let target_dir;
-				if pos_difference > 0.0 {
-					distance_to_target = pos_difference;
-					target_dir = Direction::Left;
-				} else {
-					distance_to_target = -pos_difference;
-					target_dir = Direction::Right;
-				}
-				let move_speed;
-
-				// either boost, run, or walk
-				if !ti.dash_to_target && ti.hittable_time <= game_data.time_running {
-					if distance_to_target != 0.0 {
-						self.boost(game_data.time_running);
-					}
-
-					move_speed = 0.0;
+		if self.in_post_hit_pos {
+			state = PlayerState::Standing;
+		}
+		else { 
+			match self.target.clone() {
+				None => {
 					state = PlayerState::Standing;
-				}
-				else if distance_to_target > time_to_target * WALK_SPEED {
-					move_speed = RUN_SPEED;
-					state = PlayerState::Running;
-				}
-				else {
-					move_speed = WALK_SPEED;
-					state = PlayerState::Walking;
-				}
+				},
+				Some(ti) => {
+					// move based on target info
+					let time_to_target = ti.hittable_time - game_data.time_running;
+					let pos_difference = self.bounds.left_x - ti.dest_x;
+					let distance_to_target;
+					let target_dir;
+					if pos_difference > 0.0 {
+						distance_to_target = pos_difference;
+						target_dir = Direction::Left;
+					} else {
+						distance_to_target = -pos_difference;
+						target_dir = Direction::Right;
+					}
+					let move_speed;
 
-				// move left or right
-				let mut end_x = self.bounds.left_x;
-				match target_dir {
-					Direction::Left => {
-						end_x -= move_speed * seconds_passed;
-						if end_x <= ti.dest_x {
-							end_x = ti.dest_x;
-							self.hit_dir = ti.hit_dir;
-							self.face_dir = ti.hit_dir;
-							state = PlayerState::Standing;
+					// either boost, run, or walk
+					if !ti.dash_to_target && ti.hittable_time <= game_data.time_running {
+						if distance_to_target != 0.0 {
+							self.boost(game_data.time_running);
 						}
-						else {
-							self.face_dir = Direction::Left;
-						}
-					},
-					Direction::Right => {
-						end_x += move_speed * seconds_passed;
-						if end_x >= ti.dest_x {
-							end_x = ti.dest_x;
-							self.hit_dir = ti.hit_dir;
-							self.face_dir = ti.hit_dir;
-							state = PlayerState::Standing;
-						}
-						else {
-							self.face_dir = Direction::Right;
+
+						move_speed = 0.0;
+						state = PlayerState::Standing;
+					}
+					else if distance_to_target > time_to_target * WALK_SPEED {
+						move_speed = RUN_SPEED;
+						state = PlayerState::Running;
+					}
+					else {
+						move_speed = WALK_SPEED;
+						state = PlayerState::Walking;
+					}
+
+					// move left or right
+					let mut end_x = self.bounds.left_x;
+					match target_dir {
+						Direction::Left => {
+							end_x -= move_speed * seconds_passed;
+							if end_x <= ti.dest_x {
+								end_x = ti.dest_x;
+								self.hit_dir = ti.hit_dir;
+								self.face_dir = ti.hit_dir;
+								state = PlayerState::Standing;
+							}
+							else {
+								self.face_dir = Direction::Left;
+							}
+						},
+						Direction::Right => {
+							end_x += move_speed * seconds_passed;
+							if end_x >= ti.dest_x {
+								end_x = ti.dest_x;
+								self.hit_dir = ti.hit_dir;
+								self.face_dir = ti.hit_dir;
+								state = PlayerState::Standing;
+							}
+							else {
+								self.face_dir = Direction::Right;
+							}
 						}
 					}
-				}
 
-				self.bounds.left_x = end_x;
-				self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+					self.bounds.left_x = end_x;
+					self.bounds.right_x = self.bounds.left_x + PLAYER_WIDTH as f32;
+				}
 			}
 		}
 
@@ -695,7 +722,6 @@ impl Player {
 				return;
 			},
 			PlayerState::SlashDash => {
-				
 				if self.hold_positions.len() > 0 && !self.stop_hold {
 					self.state = TaggedState {state:PlayerState::Hold, time: time_running};
 					return;
@@ -706,11 +732,7 @@ impl Player {
 				return;
 			},
 			PlayerState::PostSlash => {
-				if self.hold_positions.len() > 0 && !self.stop_hold {
-					self.state = TaggedState {state:PlayerState::Hold, time: time_running};
-					return;
-				}
-				
+				// check whether to manually enter hold state based on whether the hold key was lifted and if enough time has passed since the slash
 				let time_difference = time_running - t;
 				if time_difference > POST_SLASH_TIME {
 					if !self.stop_hold  && time_difference > PRE_HOLD_TIME {
@@ -718,7 +740,7 @@ impl Player {
 						return;
 					} else if self.stop_hold {
 						self.state = TaggedState { state: PlayerState::Standing, time: time_running };
-						self.hit_type = None;						
+						self.hit_type = None;				
 					}
 					
 				}
@@ -727,12 +749,14 @@ impl Player {
 				return;
 			},
 			PlayerState::Hold => {
+				// check if the hold has ended
 				if let Some(ht) = self.hit_type {
 					if !self.stop_hold {
 						return;
 					}
 				} 
-
+				
+				self.hit_type = None;
 				self.face_dir = self.hit_dir;
 				self.state = TaggedState { state: PlayerState::Standing, time: time_running };
 				return;
