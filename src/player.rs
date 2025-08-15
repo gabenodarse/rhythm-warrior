@@ -201,13 +201,22 @@ impl Player {
 		// either slash or slashdash, otherwise panic
 		match self.state.state {
 			PlayerState::PreSlash => {
+				// set the hit direction. Also boost if the target is not a dash target
 				if let Some(ti) = &self.target {
-					self.hit_dir = ti.hit_dir;
-					// boost if not a dash target
 					// TODO check if the boost range is reasonable based on how much time needs to pass until the target is hittable
 					if !ti.dash_to_target {
 						self.boost(time_running);
+						self.hit_dir = self.face_dir;
 					}
+					else if self.in_range {
+						self.hit_dir = ti.hit_dir;
+					}
+					else {
+						self.hit_dir = self.face_dir;
+					}
+				}
+				else {
+					self.hit_dir = self.face_dir;
 				}
 
 				// get hitbox
@@ -225,19 +234,31 @@ impl Player {
 				
 				hitbox = HitBox { bounds: hitbox_bounds, brick_type };
 					
+				self.face_dir = self.hit_dir;
 				self.state = TaggedState { state: PlayerState::Slash, time: time_running };
 			},
 			PlayerState::PreSlashDash => {
-				// boost if not a dash target
+				// set the hit direction. Also boost if the target is not a dash target
 				if let Some(ti) = &self.target {
+					// TODO check if the boost range is reasonable based on how much time needs to pass until the target is hittable
 					if !ti.dash_to_target {
 						self.boost(time_running);
+						self.hit_dir = self.face_dir;
 					}
+					else if self.in_range {
+						self.hit_dir = ti.hit_dir;
+					}
+					else {
+						self.hit_dir = self.face_dir;
+					}
+				}
+				else {
+					self.hit_dir = self.face_dir;
 				}
 				
 				let brick_type = if let Some(bt) = self.hit_type { bt } else { panic!() };
 				
-				// find dest_x and set face_dir
+				// find dest_x
 				let dest_x;
 				// if target is a dash target out of range, SlashDash into range.
 					// otherwise SlashDash through the target
@@ -245,23 +266,18 @@ impl Player {
 					if ti.dash_to_target && !self.in_range {
 						self.in_range = true;
 						dest_x = ti.dest_x;
-						self.face_dir = ti.hit_dir
 					} else {
 						dest_x = ti.post_hit_x;
-						self.face_dir = ti.hit_dir;
 					}
 				}
 				// else there is no target, SlashDash the minimum distance
 				else {
-					
 					match self.hit_dir {
 						Direction::Right => {
 							dest_x = self.bounds.left_x + MIN_DASH_WIDTH as f32;
-							self.face_dir = Direction::Right;
 						},
 						Direction::Left => {
 							dest_x = self.bounds.left_x - MIN_DASH_WIDTH as f32;
-							self.face_dir = Direction::Left;
 						}
 					}
 				}
@@ -318,12 +334,13 @@ impl Player {
 				
 				hitbox = HitBox { bounds: hitbox_bounds, brick_type };
 				
+				self.face_dir = self.hit_dir;
 				self.state = TaggedState { state: PlayerState::SlashDash, time: time_running };
 			},
 			_ => panic!()
 		}
 		
-		// if the target was hit (presumably, based on time_running and the player's x) , update in_post_hit_pos
+		// if the target was hit (presumably, based on time_running and the player's x) , update in_post_hit_pos to true
 		if let Some(ti) = &self.target {
 			if self.bounds.left_x == ti.post_hit_x && time_running > ti.hittable_time {
 				self.in_post_hit_pos = true;
@@ -501,7 +518,7 @@ impl Player {
 			
 			self.bounds.left_x = target.dest_x;
 			self.bounds.right_x = target.dest_x + PLAYER_WIDTH as f32;
-			self.hit_dir = target.hit_dir;
+			self.face_dir = target.hit_dir;
 		} else if pos_difference < 0.0 {
 			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running - self.state.time), flags: GraphicFlags::HorizontalFlip as u8, arg: 0 };
 			let mut rendering_instruction = PositionedGraphic::new(graphic, self.bounds.left_x, self.bounds.top_y);
@@ -521,7 +538,7 @@ impl Player {
 			
 			self.bounds.left_x = target.dest_x;
 			self.bounds.right_x = target.dest_x + PLAYER_WIDTH as f32;
-			self.hit_dir = target.hit_dir;
+			self.face_dir = target.hit_dir;
 		}
 	}
 	
@@ -615,7 +632,6 @@ impl Player {
 							end_x -= move_speed * seconds_passed;
 							if end_x <= ti.dest_x {
 								end_x = ti.dest_x;
-								self.hit_dir = ti.hit_dir;
 								self.face_dir = ti.hit_dir;
 								state = PlayerState::Standing;
 							}
@@ -627,7 +643,6 @@ impl Player {
 							end_x += move_speed * seconds_passed;
 							if end_x >= ti.dest_x {
 								end_x = ti.dest_x;
-								self.hit_dir = ti.hit_dir;
 								self.face_dir = ti.hit_dir;
 								state = PlayerState::Standing;
 							}
@@ -713,7 +728,6 @@ impl Player {
 					return;
 				}
 				
-				self.face_dir = self.hit_dir;
 				self.state = TaggedState { state: PlayerState::PostSlash, time: time_running };
 				return;
 			},
@@ -727,7 +741,6 @@ impl Player {
 					return;
 				}
 				
-				self.face_dir = self.hit_dir;
 				self.state = TaggedState { state: PlayerState::PostSlash, time: time_running };
 				return;
 			},
@@ -745,7 +758,6 @@ impl Player {
 					
 				}
 
-				self.face_dir = self.hit_dir;
 				return;
 			},
 			PlayerState::Hold => {
@@ -757,7 +769,6 @@ impl Player {
 				} 
 				
 				self.hit_type = None;
-				self.face_dir = self.hit_dir;
 				self.state = TaggedState { state: PlayerState::Standing, time: time_running };
 				return;
 			},
