@@ -53,7 +53,7 @@ EventPropagator.prototype.init = async function(game, overlay, controls){
 	this.tickTimeTracker = new TimeTracker(30);
 	this.preRenderTimeTracker = new TimeTracker(30);
 	this.frameTimeTracker = new TimeTracker(30);
-	this.fps = "fps 0";
+	this.fps = "fps: ";
 
 	// screen div
 	let gameDim = wasm.game_dimensions();
@@ -118,7 +118,13 @@ EventPropagator.prototype.gameLoop = function(){
 
 		requestAnimationFrame(() => {
 			// fps
-			this.fps = "fps " + Math.round(1000 / this.frameTimeTracker.getMostRecent().pop().average);
+			let fpsVal = 1000 / this.frameTimeTracker.getMostRecent().pop().average;
+			if(Number.isFinite(fpsVal)){
+				this.fps = "fps: " + Math.round(fpsVal);
+			} 
+			else {
+				this.fps = "fps: ";
+			}
 			this.frameTimeTracker.endTime(performance.now()); // record the end time for last frame before recording the start time of this one
 			this.frameTimeTracker.startTime(performance.now());
 

@@ -288,7 +288,7 @@ function FPS(){
 	this.fpsDiv = document.createElement("div");
 	this.fpsDiv.className = "fps";
 	
-	this.fps = 0;
+	this.fps = "fps: ";
 	this.fpsInner = document.createElement("p");
 	
 	this.fpsInner.innerHTML = this.fps;

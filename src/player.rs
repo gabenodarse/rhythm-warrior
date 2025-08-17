@@ -38,7 +38,7 @@ use crate::objects::HOLD_HITBOX_HEIGHT;
 // delays dash/slash by a tiny amount so they can be pressed at the same time. starts animation during delay
 const MIN_PRE_SLASH_TIME: f32 = 0.015;
 const MAX_PRE_SLASH_TIME: f32 = 0.06;
-pub const PRE_HOLD_TIME: f32 = 0.16;
+pub const PRE_HOLD_TIME: f32 = 0.24;
 // so slash animation can finish
 pub const POST_SLASH_TIME: f32 = 0.08;
 const STUNNED_TIME: f32 = 0.14;
@@ -46,8 +46,8 @@ const DASH_LINGER_TIME: f32 = 0.3; // how long the dash graphic lingers
 const BOOST_LINGER_TIME: f32 = 0.3;
 const BOOST_PRELINGER_TIME: f32 = 1.2;
 
-pub const RUN_SPEED: f32 = 550.0; // in pixels per second
-pub const WALK_SPEED: f32 = 250.0; // in pixels per second
+pub const RUN_SPEED: f32 = 440.0; // in pixels per second
+pub const WALK_SPEED: f32 = 240.0; // in pixels per second
 
 pub const BOOST_GRAPHIC_OFFSET: f32 = PLAYER_WIDTH as f32 / 10.0; // how close the boost graphics are to one another
 
