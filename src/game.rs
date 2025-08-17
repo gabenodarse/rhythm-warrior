@@ -71,8 +71,7 @@ pub struct TargetInfo {
 	pub post_hit_x: f32, // where the player left_x should be after hitting the target
 	pub is_hold_note: bool,
 	pub hit_dir: Direction, // direction player must slash in order to hit targets once he arrives at dest_x
-	// TODO boost_to_target boolean is unnecessary data
-	pub boost_to_target: bool, // whether the player should boost in order to reach dest_x on time, should not be true if dash_to_target is true
+	
 	pub dash_to_target: bool, // whether the player should dash in order to reach dest_x on time
 	pub hittable_time: f32,
 	pub passed_time: f32
@@ -84,11 +83,15 @@ pub struct Game {
 	// !!! better data structures than VecDeques. Indexable BTrees
 	bricks: VecDeque<UpcomingBrick>, // all bricks of the song, ordered
 	// uses a vec instead of a btree because std lib btreeset is unindexable
-	targets: VecDeque<TargetInfo>, // all targets of the song, ordered
+	targets: VecDeque<TargetInfo>, // all targets of the song, in increasing order based on appearance y and with only one target for any appearance y
+	// TODO combine target_idx, last_target_missed, scrolled_y, and end_y into some sort of current state struct
+		// current state struck may want to store an updated target (dash or no dash due to last_target_missed boolean)
 	target_idx: usize,
+	last_target_missed: bool, // true when the last target was missed
 	scrolled_y: f32, // how much y has been scrolled (time 0 has a scrolled y of 0)
 	end_y: f32, // y value of the bottom of the screen plus a 2 second window of bricks scrolling (so bricks offscreen may be loaded early)
 	game_data: GameData, 
+	// TODO only store bricks, not the notes
 	notes: BTreeSet<BrickData>, // all notes of the song before conversion into bricks
 	rendering_instructions_buf: Vec<PositionedGraphic>,
 	audio_instructions_flags: [bool; 128], // !!! size must be greater than the number of SoundEffects
@@ -106,6 +109,7 @@ impl Game {
 			bricks: VecDeque::new(), // all bricks of the song, ordered by time they are meant to be played
 			targets: VecDeque::new(),
 			target_idx: 0,
+			last_target_missed: false,
 			scrolled_y: 0.0,
 			end_y: Game::end_y(0.0, brick_speed),
 			game_data: GameData {
@@ -187,8 +191,9 @@ impl Game {
 				}
 			}
 		}
-		if all_destroyed {
+		if all_destroyed && self.target_idx < self.targets.len() {
 			self.target_idx += 1;
+			self.last_target_missed = false;
 		}
 		
 		// stun player if a brick has hit the top of the screen
@@ -228,18 +233,26 @@ impl Game {
 					});
 					
 					self.player.stun(self.game_data.time_running);
+					self.last_target_missed = true;
 				}
 			}
 		}
 		
 		// update player's target
 		let mut target = None; 
-		if let Some(target_unwrapped) = self.targets.get(self.target_idx) {
-			if target_unwrapped.appearance_y > self.end_y {
+		if let Some(ti) = self.targets.get(self.target_idx) {
+			if ti.appearance_y > self.end_y {
 				target = None;
 			}
 			else {
-				target = Some(target_unwrapped.clone());
+				if self.last_target_missed {
+					let mut ti = ti.clone();
+					ti.dash_to_target = false;
+					target = Some(ti.clone());
+				}
+				else {
+					target = Some(ti.clone());
+				}
 			}
 		}
 		self.player.update_target(target);
@@ -293,30 +306,49 @@ impl Game {
 			}
 		});
 		
-		// push dash indicators
-		let mut idx = self.target_idx;
+		// push a dash indicator for the current target
+		if let Some(ti) = self.targets.get(self.target_idx) {
+			if ti.appearance_y <= self.end_y && ti.dash_to_target && !self.last_target_missed && !self.player.check_in_range() {
+				let pg;
+				match ti.hit_dir {
+					Direction::Left => {
+						let graphic_x = ti.dest_x;
+						let graphic_y = ti.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
+						pg = PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: GraphicFlags::HorizontalFlip as u8, arg: 0}, graphic_x, graphic_y);
+					},
+					Direction::Right => {
+						let graphic_x = ti.dest_x + PLAYER_WIDTH as f32 - DASH_INDICATOR_WIDTH as f32;
+						let graphic_y = ti.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
+						pg = PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: 0, arg: 0}, graphic_x, graphic_y);
+					}
+				}
+				
+				rendering_instructions_buf.push( pg );
+			}
+		}
+		// push dash indicators for targets after the current target
+		let mut idx = self.target_idx + 1;
 		loop {
-			if let Some(target) = self.targets.get(idx) {
-				if target.appearance_y <= self.end_y && target.dash_to_target {
+			if let Some(ti) = self.targets.get(idx) {
+				if ti.appearance_y <= self.end_y && ti.dash_to_target {
 					let pg;
-					match target.hit_dir {
+					match ti.hit_dir {
 						Direction::Left => {
-							let graphic_x = target.dest_x;
-							let graphic_y = target.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
+							let graphic_x = ti.dest_x;
+							let graphic_y = ti.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
 							pg = PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: GraphicFlags::HorizontalFlip as u8, arg: 0}, graphic_x, graphic_y);
 						},
 						Direction::Right => {
-							let graphic_x = target.dest_x + PLAYER_WIDTH as f32 - DASH_INDICATOR_WIDTH as f32;
-							let graphic_y = target.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
+							let graphic_x = ti.dest_x + PLAYER_WIDTH as f32 - DASH_INDICATOR_WIDTH as f32;
+							let graphic_y = ti.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
 							pg = PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: 0, arg: 0}, graphic_x, graphic_y);
 						}
 					}
-					let graphic_x = if target.hit_dir == Direction::Right { target.dest_x + PLAYER_WIDTH as f32 - DASH_INDICATOR_WIDTH as f32 } else { target.dest_x };
-					let graphic_y = target.appearance_y - self.scrolled_y + (BRICK_HEIGHT as f32 - DASH_INDICATOR_HEIGHT as f32) / 2.0;
-					rendering_instructions_buf.push( PositionedGraphic::new(Graphic{ g: GraphicGroup::DashIndicator , frame: 0, flags: 0, arg: 0}, graphic_x, graphic_y) );
+					
+					rendering_instructions_buf.push( pg );
 				}
 				
-				if target.appearance_y > self.end_y {
+				if ti.appearance_y > self.end_y {
 					break;
 				}
 				
@@ -330,7 +362,7 @@ impl Game {
 		rendering_instructions_buf.append(&mut self.player.rendering_instructions(self.game_data.time_running));
 		rendering_instructions_buf.append(&mut self.player.lg_rendering_instructions(self.game_data.time_running));
 		
-		// push bricks
+		// push bricks' graphics
 		let mut idx = self.target_idx;
 		loop {
 			if idx >= self.targets.len() {
@@ -489,8 +521,9 @@ impl Game {
 			assert!(self.bricks[i-1] <= self.bricks[i]);
 		}
 
+		// assert targets are in increasing order (based on appearance y) and there is only one target for a given appearance y
 		for i in 1 .. self.targets.len() {
-			assert!(self.targets[i-1] < self.targets[i]);
+			assert!(self.targets[i-1].appearance_y < self.targets[i].appearance_y);
 		}
 
 		let mut max_score = 0;
@@ -525,7 +558,6 @@ impl Game {
 		// variables to fill for target info
 		let target_hit_dir;
 		let dash_to_target;
-		let boost_to_target;
 		let left_target_x = group_left_x - PLAYER_WIDTH as f32;
 		let right_target_x = group_right_x;
 		let dest_x;
@@ -564,15 +596,12 @@ impl Game {
 
 		if distance_to_target > max_run_distance + MAX_BOOST_DISTANCE {
 			dash_to_target = true;
-			boost_to_target = false;
 		}
 		else if distance_to_target > max_run_distance {
 			dash_to_target = false;
-			boost_to_target = true;
 		}
 		else {
 			dash_to_target = false;
-			boost_to_target = false;
 		}
 
 		match target_hit_dir {
@@ -592,7 +621,6 @@ impl Game {
 			post_hit_x,
 			is_hold_note: group_hold, 
 			hit_dir: target_hit_dir, 
-			boost_to_target, 
 			dash_to_target,
 			hittable_time, 
 			passed_time };
@@ -605,9 +633,9 @@ impl Game {
 		let score = &mut self.game_data.score;
 		let mut new_hold_positions = Vec::new();
 		
-		if let Some(target) = self.targets.get_mut(self.target_idx) {
-			let target_y = target.appearance_y - self.scrolled_y;
-			for brick in &mut target.brick_group {
+		if let Some(ti) = self.targets.get_mut(self.target_idx) {
+			let target_y = ti.appearance_y - self.scrolled_y;
+			for brick in &mut ti.brick_group {
 				if brick.is_broken() || brick.is_hold_segment() {
 					continue;
 				}
@@ -665,9 +693,9 @@ impl Game {
 		let score = &mut self.game_data.score;
 		let hold_hitboxes = self.player.hold_hitboxes();
 		
-		if let Some(target) = self.targets.get_mut(self.target_idx) {
-			let target_y = target.appearance_y - self.scrolled_y;
-			for brick in &mut target.brick_group {
+		if let Some(ti) = self.targets.get_mut(self.target_idx) {
+			let target_y = ti.appearance_y - self.scrolled_y;
+			for brick in &mut ti.brick_group {
 				if brick.is_broken() || !brick.is_hold_segment() {
 					continue;
 				}
@@ -698,6 +726,7 @@ impl Game {
 		let time = if time < 0.0 { 0.0 } else { time };
 		
 		self.player = Player::new((BRICK_WIDTH * 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0);
+		self.last_target_missed = false;
 		self.scrolled_y = self.game_data.brick_speed * time;
 		self.end_y = Game::end_y(self.scrolled_y, self.game_data.brick_speed);
 		self.game_data.time_running = time;
@@ -716,14 +745,16 @@ impl Game {
 		
 		// update player's target
 		let mut target = None; 
-		if let Some(target_unwrapped) = self.targets.get(self.target_idx) {
-			if target_unwrapped.appearance_y > self.end_y {
+		if let Some(ti) = self.targets.get(self.target_idx) {
+			if ti.appearance_y > self.end_y {
 				target = None;
 			}
 			else {
-				target = Some(target_unwrapped.clone());
+				target = Some(ti.clone());
 			}
 		}
+		
+		// last_target_missed is false, so just pass the target without checking
 		self.player.update_target(target);
 	}
 	
@@ -749,28 +780,6 @@ impl PartialOrd for UpcomingBrick {
 
 impl Ord for UpcomingBrick {
 	fn cmp(&self, other: &UpcomingBrick) -> Ordering {
-		if self.appearance_y < other.appearance_y { Ordering::Less }
-		else if self.appearance_y == other.appearance_y { Ordering::Equal }
-		else { Ordering::Greater }
-	}
-}
-
-// Equality and Order are determined only on the appearance y of bricks
-impl PartialEq for TargetInfo {
-	fn eq(&self, other: &TargetInfo) -> bool {
-		return self.appearance_y == other.appearance_y;
-	}
-}
-impl Eq for TargetInfo {}
-
-impl PartialOrd for TargetInfo {
-	fn partial_cmp(&self, other: &TargetInfo) -> Option<Ordering> {
-		Some(self.cmp(other))
-	}
-}
-
-impl Ord for TargetInfo {
-	fn cmp(&self, other: &TargetInfo) -> Ordering {
 		if self.appearance_y < other.appearance_y { Ordering::Less }
 		else if self.appearance_y == other.appearance_y { Ordering::Equal }
 		else { Ordering::Greater }

@@ -64,7 +64,6 @@ pub struct Player {
 
 	target: Option<TargetInfo>,
 	hold_positions: Vec<f32>,
-	// !!! !!! !!! in_range is necessary?
 	in_range: bool, // boolean indicating whether the player has dashed to be in range of a dash target
 	
 	//boolean indicating whether the player has already hit the current target
@@ -132,6 +131,10 @@ impl Player {
 			
 			lingering_graphics: Vec::new() // graphics for objects no longer present but still showing, e.g. slashes/dashes that have executed
 		}
+	}
+	
+	pub fn check_in_range(&self) -> bool {
+		return self.in_range;
 	}
 	
 	// checks if an action (Slash or SlashDash) is performed during the tick. If so, returns the time of the action
@@ -351,10 +354,24 @@ impl Player {
 	}
 	
 	pub fn update_target(&mut self, target: Option<TargetInfo>) {
-		if target != self.target {
+		// if the new target has a different appearance y, update the target
+		if let Some(new_ti) = &target {
+			if let Some(prev_ti) = &self.target {
+				if new_ti.appearance_y != prev_ti.appearance_y {
+					self.in_range = false;
+					self.in_post_hit_pos = false;
+					self.target = target;
+					return;
+				}
+			}
+		}
+		
+		// if there is no current target, update the target
+		if let None = self.target {
 			self.in_range = false;
 			self.in_post_hit_pos = false;
 			self.target = target;
+			return;
 		}
 	}
 	
@@ -485,7 +502,7 @@ impl Player {
 		return hitboxes;
 	}
 	
-	// boost from current position to next to target, if close enough
+	// attempts to boost from current position to next to target. If the boost occurs, the face direction is set to the target's hit direction
 	fn boost(&mut self, time_running: f32) {
 		let target = if let Some(t) = &self.target { t } else { return; };
 		
