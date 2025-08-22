@@ -416,7 +416,9 @@ impl Game {
 	
 	// takes key release command and passes it forward to be handled
 	pub fn stop_command (&mut self, input: Input) {
-		self.player.end_input(input);
+		
+		// !!! !!! !!! + time since tick like with input_command
+		self.player.end_input(input, self.game_data.time_running);
 	}
 	
 	// adds a brick to the song without setting the is_modified flag to true or calling seek()

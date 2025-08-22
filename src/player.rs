@@ -403,31 +403,56 @@ impl Player {
 		}
 	}
 	
-	pub fn end_input(&mut self, input: Input) {
+	pub fn end_input(&mut self, input: Input, end_input_time: f32) {
 		self.inputs_down[input as usize] = false;
+		
+		let stop_input;
 		if let Some(hit_type) = self.hit_type {
 			match (input, hit_type) {
 				(Input::Slash1, BrickType::Type1) => {
-					self.stop_hold = true;
-					self.hold_positions = Vec::new();
+					stop_input = true;
 				},
 				(Input::Slash2, BrickType::Type2) => {
-					self.stop_hold = true;
-					self.hold_positions = Vec::new();
+					stop_input = true;
 				},
 				(Input::Slash3, BrickType::Type3) => {
-					self.stop_hold = true;
-					self.hold_positions = Vec::new();
+					stop_input = true;
 				}
-				_ => ()
+				_ => {
+					stop_input = false;
+				}
 			}
 		}
+		else {
+			stop_input = false;
+		}
+		
+		if !stop_input {
+			return;
+		}
+		
+		match self.state.state {
+			PlayerState::Standing | PlayerState::Walking | PlayerState::Running | PlayerState::PreSlash 
+			| PlayerState::PreDash | PlayerState::PreSlashDash | PlayerState::Slash | PlayerState::Dash
+			| PlayerState::SlashDash | PlayerState::PostSlash | PlayerState::Stunned => {
+				self.stop_hold = true;
+				self.hold_positions = Vec::new();
+			},
+			// end the hold state if the input is let go
+			PlayerState::Hold => {
+				self.stop_hold = true;
+				self.hold_positions = Vec::new();
+				self.state = TaggedState { state: PlayerState::Standing, time: end_input_time };
+			}
+		}
+		
 	}
 
 	// inputs a slash command, updating player state
 	fn input_slash (&mut self, brick_type: BrickType, input_time: f32) {
 		match self.state.state {
 			PlayerState::PreSlash => (),
+			PlayerState::PreSlashDash => (),
 			PlayerState::PreDash => {
 				self.stop_hold = false;
 				self.state = TaggedState { time: self.state.time, state: PlayerState::PreSlashDash };
@@ -445,6 +470,7 @@ impl Player {
 	fn input_dash (&mut self, input_time: f32) {
 		match self.state.state {
 			PlayerState::PreDash => (),
+			PlayerState::PreSlashDash => (),
 			PlayerState::PreSlash => {
 				self.state = TaggedState {time: self.state.time, state: PlayerState::PreSlashDash};
 				return;
@@ -710,7 +736,7 @@ impl Player {
 			},
 			PlayerState::PreSlashDash => {
 				if time_running - t > MAX_PRE_SLASH_TIME {
-					panic!(); // preSlashDash turning into slashDash should be handled in action_tick
+					panic!(); // pre slash dash turning into slash dash should be handled in action_tick
 				}
 
 				return;
@@ -727,7 +753,7 @@ impl Player {
 					}
 				}
 				
-				// dash player
+				// dash player the minimum distance
 				match self.face_dir {
 					Direction::Right => {
 						self.dash_player(self.bounds.left_x + MIN_DASH_WIDTH as f32, time_running);
@@ -772,7 +798,7 @@ impl Player {
 						self.state = TaggedState { state: PlayerState::Standing, time: time_running };
 						self.hit_type = None;				
 					}
-					
+					// otherwise just wait until the slash key is released or the pre hold time passes
 				}
 
 				return;
