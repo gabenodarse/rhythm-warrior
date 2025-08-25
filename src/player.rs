@@ -72,7 +72,7 @@ pub struct Player {
 	
 	// flag indicating whether to go into a hold (false) or end the slash regularly without holding (true)
 		// set to false when the slash input is taken, set to true when the key up end input is received
-	stop_hold: bool, 
+	dont_hold: bool, 
 	
 	lingering_graphics: Vec<LingeringGraphic>
 }
@@ -89,6 +89,7 @@ enum PlayerState {
 	SlashDash,
 	PostSlash,
 	Hold, 
+	PostHold,
 	Stunned
 }
 
@@ -127,7 +128,7 @@ impl Player {
 			in_range: false,
 			in_post_hit_pos: false,
 			
-			stop_hold: false,
+			dont_hold: false,
 			
 			lingering_graphics: Vec::new() // graphics for objects no longer present but still showing, e.g. slashes/dashes that have executed
 		}
@@ -135,6 +136,24 @@ impl Player {
 	
 	pub fn check_in_range(&self) -> bool {
 		return self.in_range;
+	}
+	
+	pub fn check_hold(&self, time_running: f32, tick_duration: f32) -> bool {
+		if let PlayerState::Hold = self.state.state {
+			return true;
+		}
+		
+		if let PlayerState::PostHold = self.state.state {
+			let hold_end_t = self.state.time;
+			if hold_end_t >= time_running && time_running + tick_duration >= hold_end_t {
+				return true;
+			}
+			else {
+				panic!(); // hold end time should be some time during the tick
+			}
+		}
+		
+		return false;
 	}
 	
 	// checks if an action (Slash or SlashDash) is performed during the tick. If so, returns the time of the action
@@ -406,6 +425,7 @@ impl Player {
 	pub fn end_input(&mut self, input: Input, end_input_time: f32) {
 		self.inputs_down[input as usize] = false;
 		
+		// check if the input ended is the same as the hit type, if so stop that input
 		let stop_input;
 		if let Some(hit_type) = self.hit_type {
 			match (input, hit_type) {
@@ -431,21 +451,13 @@ impl Player {
 			return;
 		}
 		
-		match self.state.state {
-			PlayerState::Standing | PlayerState::Walking | PlayerState::Running | PlayerState::PreSlash 
-			| PlayerState::PreDash | PlayerState::PreSlashDash | PlayerState::Slash | PlayerState::Dash
-			| PlayerState::SlashDash | PlayerState::PostSlash | PlayerState::Stunned => {
-				self.stop_hold = true;
-				self.hold_positions = Vec::new();
-			},
-			// end the hold state if the input is let go
-			PlayerState::Hold => {
-				self.stop_hold = true;
-				self.hold_positions = Vec::new();
-				self.state = TaggedState { state: PlayerState::Standing, time: end_input_time };
-			}
-		}
+		self.dont_hold = true;
+		self.hold_positions = Vec::new();
 		
+		// end the hold state since the input is let go
+		if let PlayerState::Hold = self.state.state {
+			self.state = TaggedState { state: PlayerState::PostHold, time: end_input_time };
+		}
 	}
 
 	// inputs a slash command, updating player state
@@ -454,12 +466,12 @@ impl Player {
 			PlayerState::PreSlash => (),
 			PlayerState::PreSlashDash => (),
 			PlayerState::PreDash => {
-				self.stop_hold = false;
+				self.dont_hold = false;
 				self.state = TaggedState { time: self.state.time, state: PlayerState::PreSlashDash };
 				self.hit_type = Some(brick_type);
 			},
 			_ => {
-				self.stop_hold = false;
+				self.dont_hold = false;
 				self.state = TaggedState {time: input_time, state: PlayerState::PreSlash};
 				self.hit_type = Some(brick_type);
 			}
@@ -490,6 +502,18 @@ impl Player {
 				return;
 			}
 		}
+	}
+	
+	pub fn hold_end_time(&self) -> Option<f32> {
+		if let PlayerState::Hold = self.state.state {
+			return None;
+		}
+		
+		if let PlayerState::PostHold = self.state.state {
+			return Some(self.state.time);
+		}
+		
+		panic!(); // requests for hold end time when there is no hold is unhandled
 	}
 	
 	pub fn hold_hitboxes(&self) -> Vec<HitBox> {
@@ -766,7 +790,7 @@ impl Player {
 				return;
 			},
 			PlayerState::Slash => {
-				if self.hold_positions.len() > 0 && !self.stop_hold {
+				if self.hold_positions.len() > 0 && !self.dont_hold {
 					self.state = TaggedState {state:PlayerState::Hold, time: time_running};
 					return;
 				}
@@ -779,7 +803,7 @@ impl Player {
 				return;
 			},
 			PlayerState::SlashDash => {
-				if self.hold_positions.len() > 0 && !self.stop_hold {
+				if self.hold_positions.len() > 0 && !self.dont_hold {
 					self.state = TaggedState {state:PlayerState::Hold, time: time_running};
 					return;
 				}
@@ -791,10 +815,10 @@ impl Player {
 				// check whether to manually enter hold state based on whether the hold key was lifted and if enough time has passed since the slash
 				let time_difference = time_running - t;
 				if time_difference > POST_SLASH_TIME {
-					if !self.stop_hold  && time_difference > PRE_HOLD_TIME {
+					if !self.dont_hold  && time_difference > PRE_HOLD_TIME {
 						self.state = TaggedState {state:PlayerState::Hold, time: time_running};
 						return;
-					} else if self.stop_hold {
+					} else if self.dont_hold {
 						self.state = TaggedState { state: PlayerState::Standing, time: time_running };
 						self.hit_type = None;				
 					}
@@ -804,15 +828,21 @@ impl Player {
 				return;
 			},
 			PlayerState::Hold => {
-				// check if the hold has ended
 				if let Some(ht) = self.hit_type {
-					if !self.stop_hold {
-						return;
-					}
+					return;
 				} 
 				
-				self.hit_type = None;
-				self.state = TaggedState { state: PlayerState::Standing, time: time_running };
+				panic!(); // if there is no hit type the player should not be in hold state. 
+				return;
+			},
+			PlayerState::PostHold => {
+				if t < time_running || t - time_running > seconds_passed {
+					panic!(); // t should always be sometime between the game time and the end of the tick
+				};
+				
+				let move_time = seconds_passed - (t - time_running);
+				let new_state = self.move_player(move_time, game_data);
+				self.state = TaggedState { state: new_state, time: time_running };
 				return;
 			},
 			PlayerState::Stunned => {
@@ -836,7 +866,7 @@ impl Player {
 		
 		let t = self.state.time;
 		match self.state.state {
-			PlayerState::Standing | PlayerState::PreDash | PlayerState::Dash => {
+			PlayerState::Standing | PlayerState::PreDash | PlayerState::Dash | PlayerState::PostHold => {
 				let graphic_group = GraphicGroup::Standing;
 				let graphic = Graphic { g: graphic_group, frame: 0, flags, arg };
 				positioned_graphics.push(PositionedGraphic::new(graphic, self.bounds.left_x, self.bounds.top_y));

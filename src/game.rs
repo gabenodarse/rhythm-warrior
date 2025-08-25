@@ -87,7 +87,7 @@ pub struct Game {
 	// TODO combine target_idx, last_target_missed, scrolled_y, and end_y into some sort of current state struct
 		// current state struck may want to store an updated target (dash or no dash due to last_target_missed boolean)
 	target_idx: usize,
-	last_target_missed: bool, // true when the last target was missed
+	last_target_missed: bool, // true when the last target was missed, used to turn dash targets into regular targets post stun
 	scrolled_y: f32, // how much y has been scrolled (time 0 has a scrolled y of 0)
 	end_y: f32, // y value of the bottom of the screen plus a 2 second window of bricks scrolling (so bricks offscreen may be loaded early)
 	game_data: GameData, 
@@ -146,6 +146,9 @@ impl Game {
 			let pre_action_time = action_time - self.game_data.time_running;
 			let post_action_time = seconds_passed - pre_action_time;
 			
+			// destroy any holds that may have been hit in the short span from the beginning of the tick until the action
+			self.destroy_holds(seconds_passed);
+			
 			// scroll screen to the time of action
 			let delta_y = pre_action_time * self.game_data.brick_speed;
 			self.scrolled_y += delta_y;
@@ -166,11 +169,11 @@ impl Game {
 			self.destroy_bricks(&hitbox);
 		} 
 		else {
+			// destroy any holds that may have been hit during the tick
+			self.destroy_holds(seconds_passed);
+			
 			// tick the player
 			self.player.tick(seconds_passed, &self.game_data);
-						
-			// check for hold brick destruction (first of two times, to account for hold notes which may sneak past hitbox)
-			self.destroy_holds();
 			
 			// scroll screen
 			let delta_y = seconds_passed * self.game_data.brick_speed;
@@ -178,9 +181,6 @@ impl Game {
 			self.end_y += delta_y;
 			self.game_data.time_running += seconds_passed;
 		}
-		
-		// check for hold brick destruction (second of two times)
-		self.destroy_holds();
 			
 		// update target if all its bricks are destroyed
 		let mut all_destroyed = true;
@@ -408,17 +408,17 @@ impl Game {
 	}
 	
 	// takes an input command and passes it forward to be handled
-	pub fn input_command (&mut self, input: Input, time_since_tick: f32) {
+	pub fn input_command(&mut self, input: Input, time_since_tick: f32) {
 		let input_time = self.game_data.time_running + time_since_tick;
 		
 		self.player.input(input, input_time);
 	}
 	
 	// takes key release command and passes it forward to be handled
-	pub fn stop_command (&mut self, input: Input) {
+	pub fn stop_command(&mut self, input: Input, time_since_tick: f32) {
+		let stop_input_time = self.game_data.time_running + time_since_tick;
 		
-		// !!! !!! !!! + time since tick like with input_command
-		self.player.end_input(input, self.game_data.time_running);
+		self.player.end_input(input, stop_input_time);
 	}
 	
 	// adds a brick to the song without setting the is_modified flag to true or calling seek()
@@ -690,27 +690,48 @@ impl Game {
 		}
 	}
 	
-	// destroy any hold segments that overlap with player hold hitboxes
-	fn destroy_holds(&mut self) {
-		let score = &mut self.game_data.score;
-		let hold_hitboxes = self.player.hold_hitboxes();
+	// destroy any hold segments that overlap with player hold hitboxes or will overlap during the hold duration
+	fn destroy_holds(&mut self, tick_duration: f32) {
+		// check if the player is performing a hold
+		if !self.player.check_hold(self.game_data.time_running, tick_duration) {
+			return;
+		}
 		
+		// get the hold end time and hitboxes
+		let hold_time = if let Some(t) = self.player.hold_end_time() { t - self.game_data.time_running } else { tick_duration };
+		let hold_hitboxes = self.player.hold_hitboxes();
+		let score = &mut self.game_data.score;
+		
+		// if there is a current target and it has hold segments which intersect the hold hitbox (over the duration), destroy those segments
 		if let Some(ti) = self.targets.get_mut(self.target_idx) {
 			let target_y = ti.appearance_y - self.scrolled_y;
+			
 			for brick in &mut ti.brick_group {
-				if brick.is_broken() || !brick.is_hold_segment() {
-					continue;
-				}
-				
 				let brick_type = brick.brick_type();
-				if let Some(segment_brick_bounds) = brick.bounds(target_y) {
-					for hitbox in &hold_hitboxes {
-						if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &segment_brick_bounds) {
-							self.audio_instructions_flags[SoundEffect::NoteSegmentHit as usize] = true;
-							*score += HOLD_SEGMENT_SCORE;
-							brick.attempt_break();
-							break;
+				let mut brick_survived = false;
+				// loop if the hold brick is still unbroken or until it survives all hitboxes
+				loop {
+					if brick.is_broken() || !brick.is_hold_segment() || brick_survived {
+						break;
+					}
+					
+					if let Some(segment_brick_bounds) = brick.bounds(target_y) {
+						let mut modified_brick_bounds = segment_brick_bounds;
+						modified_brick_bounds.top_y -= hold_time * self.game_data.brick_speed;
+						brick_survived = true;
+						
+						for hitbox in &hold_hitboxes {
+							if hitbox.brick_type == brick_type && objects::intersect(&hitbox.bounds, &modified_brick_bounds) {
+								self.audio_instructions_flags[SoundEffect::NoteSegmentHit as usize] = true;
+								*score += HOLD_SEGMENT_SCORE;
+								brick.attempt_break();
+								brick_survived = false;
+								break;
+							}
 						}
+					}
+					else {
+						panic!(); // if the brick is unbroken it should have bounds
 					}
 				}
 			}
@@ -719,7 +740,7 @@ impl Game {
 	
 	// seeks (changes the song time) to the time specified. resets song
 	pub fn seek(&mut self, time: f32) {
-		// !!! find way to avoid flushing and repopulating bricks/targets on every seek
+		// !!! maybe can avoid flushing and repopulating bricks/targets on every seek
 			// each target's brick_group needs to be reset somehow
 			// duplicate targets (one unbroken and one destroyable?)
 			// or (probably best) only include targets that are on the gamespace (saves memory, need to create targets during game)
@@ -733,7 +754,8 @@ impl Game {
 		self.end_y = Game::end_y(self.scrolled_y, self.game_data.brick_speed);
 		self.game_data.time_running = time;
 		self.game_data.score = 0;
-
+		self.game_graphics = Vec::with_capacity(12);
+		
 		// set target idx
 		self.target_idx = 0;
 		while(self.target_idx < self.targets.len()) {
