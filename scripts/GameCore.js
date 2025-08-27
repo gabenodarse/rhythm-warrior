@@ -8,6 +8,7 @@ import {Game} from "./Game.js";
 export function GameCore () {
 	// members
 	this.gameObject;
+	this.wasmMemoryObj;
 	this.database; 
 	this.songData;
 	this.isLoaded;
@@ -28,8 +29,10 @@ export function GameCore () {
 	this.audioTimeSafetyBuffer = 0.15;
 }
 
-GameCore.prototype.init = async function () {
+GameCore.prototype.init = async function (wasmMemoryObj) {
 	if(this.isLoaded){ return; }
+	
+	this.wasmMemoryObj = wasmMemoryObj;
 	
 	let loader = new load.Loader();
 	

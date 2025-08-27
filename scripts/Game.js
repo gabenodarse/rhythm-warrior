@@ -1,7 +1,6 @@
 "use strict";
 
 import {GameCore} from "./GameCore.js";
-import {wasmMemory} from "./index.js";
 
 export function Game () {
 	this.lastTick; // time since the game last ticked
@@ -53,7 +52,7 @@ Game.prototype.tick = function(){
 	
 	let audioInstructions = this.gameObject.audio_instructions();
 	let numInstructions = audioInstructions.num_instructions;
-	let u8buf = new Uint8Array(wasmMemory().buffer, audioInstructions.instructions_ptr, numInstructions);
+	let u8buf = new Uint8Array(this.wasmMemoryObj.buffer, audioInstructions.instructions_ptr, numInstructions);
 	let i = 0;
 	
 	while(i < numInstructions){

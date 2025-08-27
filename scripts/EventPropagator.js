@@ -8,6 +8,7 @@ import {TimeTracker} from "./TimeTracker.js";
 	// resizing retains aspect ratio, attempts to size sidebar to accommodate
 	
 export function EventPropagator(){
+	this.wasmMemoryObj;
 	this.game;
 	this.overlay;
 	this.controls;
@@ -37,7 +38,8 @@ export function EventPropagator(){
 	this.loop;
 }
 
-EventPropagator.prototype.init = async function(game, overlay, controls){
+EventPropagator.prototype.init = async function(wasmMemoryObj, game, overlay, controls){
+	this.wasmMemoryObj = wasmMemoryObj;
 	this.game = game;
 	this.overlay = overlay;
 	this.controls = controls;
@@ -68,7 +70,11 @@ EventPropagator.prototype.init = async function(game, overlay, controls){
 		.then( () => loader.loadGraphics(this.screenDiv))
 		.then( res => this.graphics = res )
 		.catch( rej => { throw Error("Error initializing loader / loading assets: " + rej ) });
-	
+
+	this.handleResize();
+}
+
+EventPropagator.prototype.addListeners = function(){
 	window.addEventListener("keydown", evt => { this.handleEvent(evt) });
 	window.addEventListener("keyup", evt => { this.handleEvent(evt) });
 	window.addEventListener("mousedown", evt => {this.handleEvent(evt)});
@@ -79,8 +85,6 @@ EventPropagator.prototype.init = async function(game, overlay, controls){
 	window.addEventListener("input", evt => { this.handleEvent(evt) });
 	window.addEventListener("resize", () => {this.handleResize()});
 	window.addEventListener("gameRender", evt => { this.handleGameRender(evt) });
-
-	this.handleResize();
 }
 
 EventPropagator.prototype.togglePlay = function(){
@@ -263,7 +267,7 @@ EventPropagator.prototype.preRender = function(){
 	let instructions = this.game.getRenderingInstructions();
 	
 	this.preRenderTimeTracker.startTime(performance.now());
-	this.graphics.preRender(instructions);
+	this.graphics.preRender(instructions, this.wasmMemoryObj);
 	this.preRenderTimeTracker.endTime(performance.now());
 }
 

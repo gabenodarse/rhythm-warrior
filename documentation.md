@@ -42,11 +42,24 @@ contains the Brick class. Information on bricks travelling up the screen
 
 # javascript scripts
 
+## entry point
+index.js makes a call to main.run(), which is considered the entry point. index.js should not contain other code.
+main.run() creates the overlay, which shows a pre-initialization screen to wait for user input. Once input is received, the full initialization can happen
+	the wait is necessary because, on some/all browsers, some components are not allowed to load without user input
+the full initialization sequence is contained in main.js initFunction()
+	first, the wasm memory object is loaded and initialized, which may require an asynchronous wait
+	second, the controls object is initialized
+	third, the Game object is loaded and initialized, which may require an asynchronous wait
+	fourth, the EventPropagator object is loaded and initialized, which may require an asynchronous wait
+	fifth, the Overlay initializes its game aspects, which comprise most of the overlay
+	sixth, the EventPropagator adds its event listeners, to listen for regular user input (as opposed to the initial user input required to initialize)
+
+
 ## conventions
 
-classes are uppercase snake case.\
+classes are uppercase camel case.\
 files with an uppercase name hold a class of the same name. Files with a lower case name hold multiple classes/functions. \
-snake case is used for variables/functions. variables/functions coming from the wasm binding retain their snake case from the rust source\
+camel case is used for variables/functions. variables/functions coming from the wasm binding retain their snake case from the rust source\
 class members are supposed to be directly accessed only by the class itself. External functions should only access/modify a classes members through the classes methods.\
 class members are often named at the head of the class before being initialized
 

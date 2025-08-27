@@ -1,6 +1,5 @@
 
 import * as wasm from "../pkg/rhythm_warrior.js";
-import {wasmMemory} from "./index.js";
 
 // TODO
 	// implement webGPU when it becomes an option
@@ -125,7 +124,7 @@ WebGLGraphics.prototype.resize = function(xFactor, yFactor){
 	this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 }
 
-WebGLGraphics.prototype.preRender = function(instructions){
+WebGLGraphics.prototype.preRender = function(instructions, wasmMemoryObj){
 	const gl = this.gl;
 	const positionBuffer = this.positionBuffer;
 	const textures = this.textures;
@@ -138,8 +137,8 @@ WebGLGraphics.prototype.preRender = function(instructions){
 
 	// move and make textures visible
 	let len = instructions.num_graphics * 3;
-	let f32buf = new Float32Array(wasmMemory().buffer, instructions.graphics_ptr, len);
-	let u8buf = new Uint8Array(wasmMemory().buffer, instructions.graphics_ptr, len*4);
+	let f32buf = new Float32Array(wasmMemoryObj.buffer, instructions.graphics_ptr, len);
+	let u8buf = new Uint8Array(wasmMemoryObj.buffer, instructions.graphics_ptr, len*4);
 	let i = 0;
 	while(i < len){
 		let graphicIdx = u8buf[i*4];

@@ -9,7 +9,7 @@ g_keyCodeNames[13] = "Enter";
 // TODO all these classes have a DOMelement function, can make them all inherit from a DOMWrapper class
 
 // main overlay class. all overlay elements are children, directly or nested
-export function Overlay(game, controlsMap){
+export function Overlay(){
 	this.game;
 	this.controlsMap;
 
@@ -18,15 +18,9 @@ export function Overlay(game, controlsMap){
 	this.capturingComponent;
 	this.currentOverlay;
 	
-	this.game = game;
-	this.controlsMap = controlsMap;
-
 	this.overlayDiv = document.createElement("div");
 	this.overlayDiv.id = "overlay";
-
 	document.getElementById("screen").appendChild(this.overlayDiv);
-
-	this.goToHomeScreen();
 }
 
 // class for the overlay active when the game is running
@@ -989,6 +983,22 @@ function LoadSongDialog(overlayParent, menuParent){
 	this.formDiv.appendChild(this.jsonFileInput);
 }
 Object.setPrototypeOf(LoadSongDialog.prototype, GetInputDialog.prototype);
+
+Overlay.prototype.preInit = function(initFunction){
+	let clickListener = () => {
+		window.removeEventListener("click", clickListener);
+		initFunction();
+	};
+	
+	window.addEventListener("click", clickListener);
+}
+
+Overlay.prototype.initGame = function(game, controlsMap){
+	this.game = game;
+	this.controlsMap = controlsMap;
+	
+	this.goToHomeScreen();
+}
 
 Overlay.prototype.goToGameOverlay = function(){
 	this.removeCurrentOverlay();
