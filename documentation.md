@@ -43,17 +43,19 @@ contains the Brick class. Information on bricks travelling up the screen
 # javascript scripts
 
 ## entry point
-index.js makes a call to main.run(), which is considered the entry point. index.js should not contain other code.
-main.run() creates the overlay, which shows a pre-initialization screen to wait for user input. Once input is received, the full initialization can happen
+index.js makes a call to main.run(), which is considered the entry point. index.js should not contain other code.\
+main.run() creates the overlay, which shows a pre-initialization screen to wait for user input. Once input is received, the full initialization can happen\
 	the wait is necessary because, on some/all browsers, some components are not allowed to load without user input
-the full initialization sequence is contained in main.js initFunction()
-	first, the wasm memory object is loaded and initialized, which may require an asynchronous wait
-	second, the controls object is initialized
-	third, the Game object is loaded and initialized, which may require an asynchronous wait
-	fourth, the EventPropagator object is loaded and initialized, which may require an asynchronous wait
-	fifth, the Overlay initializes its game aspects, which comprise most of the overlay
-	sixth, the EventPropagator adds its event listeners, to listen for regular user input (as opposed to the initial user input required to initialize)
-
+the full initialization sequence is contained in main.js initFunction()\
+	- first, the wasm memory object is loaded and initialized, which requires an asynchronous wait\
+	- second, the controls object is initialized\
+	- third, the Game object is loaded and initialized, which requires an asynchronous wait\
+	- fourth, the EventPropagator object is loaded and initialized, including graphics, which requires an asynchronous wait\
+	- fifth, the Game object fetches its audio files and stores them in buffers, which requies an asynchronous wait\
+	- sixth, the Overlay initializes its game aspects, which comprise most of the overlay\
+	- seventh, the EventPropagator adds its event listeners, to listen for regular user input (as opposed to the initial user input required to initialize)\
+during the initialization process, the load/fetch progress is roughly tracked and displayed back to the user\
+all fetching should occur during the initialization, except in the load/save portions of the menu where the user may upload their own files
 
 ## conventions
 
@@ -74,12 +76,13 @@ plays and pauses audio
 
 contains Overlay class, which contains majority of DOM components overlayed on top of the game\
 contains logic for interacting with overlay (components such as menu and home screen) and instructions for what happens when interactions occur\
-overlay components are destroyed and reconstructed
+overlay components are destroyed and reconstructed\
+returns run instructions back to the event propagator after handling events
 
 ## scripts/EventPropagator.js
 
 contains EventPropagator class, which effectively is an umbrella over both the game and overlay\
-passes events to the overlay when an overlay element is set to capture events\
+passes events to the overlay when an overlay element is set to capture events, receives run instructions in return\
 updates overlay based on game state\
 contains the fundamental game loop
 

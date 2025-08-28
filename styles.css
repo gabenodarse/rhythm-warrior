@@ -30,6 +30,15 @@ canvas{
 	z-index: 100;
 }
 
+#pre-init-screen{
+	width: 100%;
+	height: 100vh;
+	position: absolute;
+	left: 0;
+	top: 0;
+	background-color: #ccccee;
+}
+
 #homescreen{
 	position: absolute;
 	top: 0;

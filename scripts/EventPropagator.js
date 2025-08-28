@@ -70,11 +70,11 @@ EventPropagator.prototype.init = async function(wasmMemoryObj, game, overlay, co
 		.then( () => loader.loadGraphics(this.screenDiv))
 		.then( res => this.graphics = res )
 		.catch( rej => { throw Error("Error initializing loader / loading assets: " + rej ) });
-
-	this.handleResize();
 }
 
 EventPropagator.prototype.addListeners = function(){
+	this.handleResize(); // to account for any resizes that happened before the listener was added
+	
 	window.addEventListener("keydown", evt => { this.handleEvent(evt) });
 	window.addEventListener("keyup", evt => { this.handleEvent(evt) });
 	window.addEventListener("mousedown", evt => {this.handleEvent(evt)});
