@@ -27,16 +27,34 @@ canvas{
 	left: 0;
 	top: 0;
 	font-family: Arial;
+	font-size: 4vh;
 	z-index: 100;
 }
 
 #pre-init-screen{
 	width: 100%;
-	height: 100vh;
+	height: 100%;
 	position: absolute;
 	left: 0;
 	top: 0;
 	background-color: #ccccee;
+}
+
+#pre-init-screen .progress-background{
+	position: absolute;
+	left: 38%;
+	height: 6%;
+	width: 24%;
+	background-color: #acaccc;
+}
+
+#pre-init-screen .progress{
+	position: absolute;
+	left: 0;
+	top: 0;
+	height: 100%;
+	width: 0;
+	background-color: #c6006b;
 }
 
 #homescreen{
@@ -110,12 +128,12 @@ canvas{
 	margin: 0 2% 2vh 2%;
 	height: 14vh;
 	width: 96%;
-	background-color: #ffdd00;
+	background-color: #acaccc;
 	text-align: center;
 }
 
 .highlighted-home-selection{
-	outline: 4px solid cyan;
+	outline: 4px solid #c6006b;
 }
 
 .end-game-screen{
@@ -135,7 +153,7 @@ canvas{
 }
 
 .end-game-screen-text-div{
-	background-color: #9999ff;
+	background-color: #acaccc;
 }
 
 .editor-overlay{
@@ -274,6 +292,7 @@ canvas{
 	#overlay{
 		width: 100vw;
 		height: 62.5vw;
+		font-size: 2.8vw;
 	}
 
 	#homescreen{

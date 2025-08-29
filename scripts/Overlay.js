@@ -1012,12 +1012,17 @@ Overlay.prototype.updatePreInit = function(progressAmt){
 		
 		let txt = document.createElement("p");
 		txt.innerHTML = "Loading";
-		this.preInitScreen.appendChild(txt);
 		
-		let progressBar = document.createElement("progress");
-		progressBar.value = progressAmt;
-		progressBar.max = 1;
-		this.preInitScreen.appendChild(progressBar);
+		let progressBackground = document.createElement("div");
+		progressBackground.className = "progress-background";
+		
+		let progressBar = document.createElement("div");
+		progressBar.className = "progress";
+		progressBar.style.width = (progressAmt * 100).toString() + "%";
+		
+		this.preInitScreen.appendChild(txt);
+		this.preInitScreen.appendChild(progressBackground);
+		progressBackground.appendChild(progressBar);
 	}
 }
 
