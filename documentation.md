@@ -1,27 +1,28 @@
 # Documentation:
 
 # Game mechanics
-(Q,W,E) slashes bricks, Enter dashes\
-Slash destroys the brick immediately in front of the player\
-Enter is used to dash, when indicated, to reach bricks that are far away\
-(Q,W,E) + Enter at the same time performs a slash dash, both dashing and slashing. This is used to destroy a group of bricks (not all immediately in front of player)\
-Hold (Q,W,E) to hit hold notes. Hold (Q,W,E) after a slash dash to destroy group hold notes.\
-If you miss a note, you will be "stunned" and all notes on the screen will disappear, and you will have to wait a little bit for new notes
+- (Q,W,E) slashes bricks, Enter dashes\
+- Slash destroys the brick immediately in front of the player\
+- Enter is used to dash, when indicated, to reach bricks that are far away\
+- (Q,W,E) + Enter at the same time performs a slash dash, both dashing and slashing. This is used to destroy a group of bricks (not all immediately in front of player)\
+- Hold (Q,W,E) to hit hold notes. Hold (Q,W,E) after a slash dash to destroy group hold notes.\
+- If you miss a note, you will be "stunned" and all notes on the screen will disappear, and you will have to wait a little bit for new notes
 
-The game's tick rate is at least faster than 25 ms between ticks. If more than 25ms occurs between ticks, that time is cut up into 25ms intervals.\
-slash actions occur at 15 ms after they are input in most instances. \
-	The exception is when the target is a group of notes. When the target is a group of notes\
-	the slash may occur at up to 60 ms after the input time (the 60 ms delay allows slash and dash inputs to be input "together").\
-	If both the slash and dash command are received, the action occurs as early as possible\
+- The game's tick rate is at least faster than 25 ms between ticks. If more than 25ms occurs between ticks, that time is cut up into 25ms intervals.\
+- slash actions occur at 15 ms after they are input in most instances. 
+	The exception is when the target is a group of notes. When the target is a group of notes
+	the slash may occur at up to 60 ms after the input time (the 60 ms delay allows slash and dash inputs to be input "together").
+	If both the slash and dash command are received, the action occurs as early as possible
 	(at the beginning of the tick that the complementary input was received, but at least 15 ms after the first of the two inputs)\
-dash actions occur immediately after they are received, with as little delay as possible (when there is a dash target with dash indicator)\
+- dash actions occur immediately after they are received, with as little delay as possible (when there is a dash target with dash indicator)
 	If the player has already dashed to the dash indicator, or if there is no dash indicator, then the delay is the same as slash (15-60ms)\
-slash and dash actions are input at as precise times as possible, which means in between ticks. When the action is taken in between ticks, when the tick occurs,\
-	the tick is split into the time before the action and the time following the action. The action strikes bricks both at the split time and at the end of the tick,\
-	so that if the bricks become hittable in the same tick that the action is done, they are always hit.\
-on hold notes, the hold state begins immediately after the tick that the slash occured\
-	holds are always set to start at the beginning of ticks, because the slash that preceded the hold hits at the end of its tick\
-after being stunned, you will not be required to dash to the first new notes
+- slash and dash actions are input at as precise times as possible, which means in between ticks. When the action is taken in between ticks, when the tick occurs,
+	the tick is split into the time before the action and the time following the action. The action strikes bricks both at the split time and at the end of the tick,
+	so that if the bricks become hittable in the same tick that the action is done, they are always hit
+	(even if the slash was very slightly early, if the graphic overlaps with the brick on the slash tick, the brick is destroyed).\
+- on hold notes, the hold state begins immediately after the tick that the slash occured
+	holds are always set to start at the beginning of ticks, because the slash that preceded the hold includes a hit at the end of its tick\
+- after being stunned, you will not be required to dash to the first new notes. The player will walk/run and arrive in time to hit them.
 
 # Rust source code
 

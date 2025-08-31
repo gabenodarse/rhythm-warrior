@@ -359,7 +359,7 @@ impl Player {
 				self.face_dir = self.hit_dir;
 				self.state = TaggedState { state: PlayerState::SlashDash, time: time_running };
 			},
-			_ => panic!()
+			_ => panic!() // action tick should only occur when player is in preslash or preslashdash
 		}
 		
 		// if the target was hit (presumably, based on time_running and the player's x) , update in_post_hit_pos to true
@@ -513,7 +513,7 @@ impl Player {
 			return Some(self.state.time);
 		}
 		
-		panic!(); // requests for hold end time when there is no hold is unhandled
+		panic!(); // requests for hold end time when there is no hold is unhandled. use self.player.check_hold
 	}
 	
 	pub fn hold_hitboxes(&self) -> Vec<HitBox> {
@@ -648,7 +648,7 @@ impl Player {
 	}
 	
 	// runs to the target, may boost
-	fn move_player(&mut self, seconds_passed: f32, game_data: &GameData) -> PlayerState {
+	fn move_player(&mut self, seconds_passed: f32, start_t: f32) -> PlayerState {
 		let mut state;
 
 		if self.in_post_hit_pos {
@@ -661,7 +661,7 @@ impl Player {
 				},
 				Some(ti) => {
 					// move based on target info
-					let time_to_target = ti.hittable_time - game_data.time_running;
+					let time_to_target = ti.hittable_time - start_t;
 					let pos_difference = self.bounds.left_x - ti.dest_x;
 					let distance_to_target;
 					let target_dir;
@@ -675,9 +675,9 @@ impl Player {
 					let move_speed;
 
 					// either boost, run, or walk
-					if !ti.dash_to_target && ti.hittable_time <= game_data.time_running {
+					if !ti.dash_to_target && ti.hittable_time <= start_t {
 						if distance_to_target != 0.0 {
-							self.boost(game_data.time_running);
+							self.boost(start_t);
 						}
 
 						move_speed = 0.0;
@@ -738,17 +738,17 @@ impl Player {
 		let t = self.state.time;
 		match self.state.state {
 			PlayerState::Standing => {
-				let new_state = self.move_player(seconds_passed, game_data);
+				let new_state = self.move_player(seconds_passed, time_running);
 				self.state = TaggedState { state: new_state, time: t };
 				return;
 			},
 			PlayerState::Walking => {
-				let new_state = self.move_player(seconds_passed, game_data);
+				let new_state = self.move_player(seconds_passed, time_running);
 				self.state = TaggedState { state: new_state, time: t };
 				return;
 			},
 			PlayerState::Running => {
-				let new_state = self.move_player(seconds_passed, game_data);
+				let new_state = self.move_player(seconds_passed, time_running);
 				self.state = TaggedState { state: new_state, time: t };
 				return;
 			},
@@ -795,7 +795,7 @@ impl Player {
 					return;
 				}
 				
-				self.state = TaggedState { state: PlayerState::PostSlash, time: time_running };
+				self.state = TaggedState { state: PlayerState::PostSlash, time: t };
 				return;
 			},
 			PlayerState::Dash => {	
@@ -808,18 +808,21 @@ impl Player {
 					return;
 				}
 				
-				self.state = TaggedState { state: PlayerState::PostSlash, time: time_running };
+				self.state = TaggedState { state: PlayerState::PostSlash, time: t };
 				return;
 			},
 			PlayerState::PostSlash => {
 				// check whether to manually enter hold state based on whether the hold key was lifted and if enough time has passed since the slash
-				let time_difference = time_running - t;
+				let time_difference = time_running + seconds_passed - t;
 				if time_difference > POST_SLASH_TIME {
 					if !self.dont_hold  && time_difference > PRE_HOLD_TIME {
-						self.state = TaggedState {state:PlayerState::Hold, time: time_running};
+						self.state = TaggedState {state:PlayerState::Hold, time: t + PRE_HOLD_TIME};
 						return;
 					} else if self.dont_hold {
-						self.state = TaggedState { state: PlayerState::Standing, time: time_running };
+						let get_up_time = t + POST_SLASH_TIME;
+						let move_time = time_difference - POST_SLASH_TIME;
+						let new_state = self.move_player(move_time, get_up_time);
+						self.state = TaggedState { state: new_state, time: time_running };
 						self.hit_type = None;				
 					}
 					// otherwise just wait until the slash key is released or the pre hold time passes
@@ -836,19 +839,20 @@ impl Player {
 				return;
 			},
 			PlayerState::PostHold => {
-				if t < time_running || t - time_running > seconds_passed {
+				if t < time_running || t > time_running + seconds_passed {
 					panic!(); // t should always be sometime between the game time and the end of the tick
 				};
 				
 				let move_time = seconds_passed - (t - time_running);
-				let new_state = self.move_player(move_time, game_data);
+				let new_state = self.move_player(move_time, t);
 				self.state = TaggedState { state: new_state, time: time_running };
 				return;
 			},
 			PlayerState::Stunned => {
-				let time_difference = time_running - t;
+				let time_difference = time_running + seconds_passed - t;
 				if time_difference > STUNNED_TIME {
-					self.state = TaggedState { state: PlayerState::Standing, time: time_running };
+					self.state = TaggedState { state: PlayerState::Standing, time: t + STUNNED_TIME };
+					// TODO should possibly move once the stun time is over?
 				}
 				return;
 			}
