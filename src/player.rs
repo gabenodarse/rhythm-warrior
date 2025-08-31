@@ -46,8 +46,9 @@ const DASH_LINGER_TIME: f32 = 0.3; // how long the dash graphic lingers
 const BOOST_LINGER_TIME: f32 = 0.3;
 const BOOST_PRELINGER_TIME: f32 = 1.2;
 
-pub const RUN_SPEED: f32 = 440.0; // in pixels per second
-pub const WALK_SPEED: f32 = 240.0; // in pixels per second
+pub const SPRINT_SPEED: f32 = 580.0; // in pixels per second
+pub const RUN_SPEED: f32 = 400.0; // in pixels per second
+pub const WALK_SPEED: f32 = 220.0; // in pixels per second
 
 pub const BOOST_GRAPHIC_OFFSET: f32 = PLAYER_WIDTH as f32 / 10.0; // how close the boost graphics are to one another
 
@@ -81,6 +82,7 @@ enum PlayerState {
 	Standing,
 	Walking,
 	Running,
+	Sprinting,
 	PreSlash,
 	PreDash,
 	PreSlashDash,
@@ -554,9 +556,9 @@ impl Player {
 	
 	// attempts to boost from current position to next to target. If the boost occurs, the face direction is set to the target's hit direction
 	fn boost(&mut self, time_running: f32) {
-		let target = if let Some(t) = &self.target { t } else { return; };
+		let target = if let Some(t) = self.target.clone() { t } else { return; };
 		
-		if target.hittable_time > time_running {
+		if target.hittable_time > time_running + F32_ZERO {
 			return;
 		}
 		
@@ -568,40 +570,18 @@ impl Player {
 		let pos_difference = target.dest_x - self.bounds.left_x;
 		if pos_difference > 0.0 {
 			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running - self.state.time), flags: 0, arg: 0 };
-			let mut rendering_instruction = PositionedGraphic::new(graphic, self.bounds.left_x, self.bounds.top_y);
-			let mut remaining_pos_difference = pos_difference;
-			
-			while remaining_pos_difference > BOOST_GRAPHIC_OFFSET { 
-				let mut positioned_graphic = rendering_instruction.clone();
-				positioned_graphic.g.g = GraphicGroup::Running;
-				self.lingering_graphics.push( LingeringGraphic {
-					positioned_graphic: positioned_graphic,
-					start_t: time_running - BOOST_PRELINGER_TIME,
-					end_t: time_running + BOOST_LINGER_TIME
-				});
-				remaining_pos_difference -= BOOST_GRAPHIC_OFFSET;
-				rendering_instruction.x += BOOST_GRAPHIC_OFFSET;
-			}
+			let graphic_start_x = self.bounds.left_x;
+			let graphic_end_x = graphic_start_x + pos_difference;
+			self.add_boost_graphics(graphic, graphic_start_x, graphic_end_x, time_running);
 			
 			self.bounds.left_x = target.dest_x;
 			self.bounds.right_x = target.dest_x + PLAYER_WIDTH as f32;
 			self.face_dir = target.hit_dir;
 		} else if pos_difference < 0.0 {
 			let graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(time_running - self.state.time), flags: GraphicFlags::HorizontalFlip as u8, arg: 0 };
-			let mut rendering_instruction = PositionedGraphic::new(graphic, self.bounds.left_x, self.bounds.top_y);
-			let mut remaining_pos_difference = -pos_difference;
-			
-			while remaining_pos_difference > BOOST_GRAPHIC_OFFSET { 
-				let mut positioned_graphic = rendering_instruction.clone();
-				positioned_graphic.g.g = GraphicGroup::Running;
-				self.lingering_graphics.push( LingeringGraphic {
-					positioned_graphic: positioned_graphic,
-					start_t: time_running - BOOST_PRELINGER_TIME,
-					end_t: time_running + BOOST_LINGER_TIME
-				});
-				remaining_pos_difference -= BOOST_GRAPHIC_OFFSET;
-				rendering_instruction.x -= BOOST_GRAPHIC_OFFSET;
-			}
+			let graphic_start_x = self.bounds.left_x + pos_difference;
+			let graphic_end_x = self.bounds.left_x;
+			self.add_boost_graphics(graphic, graphic_start_x, graphic_end_x, time_running);
 			
 			self.bounds.left_x = target.dest_x;
 			self.bounds.right_x = target.dest_x + PLAYER_WIDTH as f32;
@@ -674,14 +654,18 @@ impl Player {
 					}
 					let move_speed;
 
-					// either boost, run, or walk
+					// either boost, sprint, run, or walk
 					if !ti.dash_to_target && ti.hittable_time <= start_t {
-						if distance_to_target != 0.0 {
+						if distance_to_target >= F32_ZERO {
 							self.boost(start_t);
 						}
 
 						move_speed = 0.0;
 						state = PlayerState::Standing;
+					}
+					else if distance_to_target > time_to_target * RUN_SPEED {
+						move_speed = SPRINT_SPEED;
+						state = PlayerState::Sprinting; 
 					}
 					else if distance_to_target > time_to_target * WALK_SPEED {
 						move_speed = RUN_SPEED;
@@ -692,6 +676,28 @@ impl Player {
 						state = PlayerState::Walking;
 					}
 
+					// add boost graphics if the player is sprinting
+					if let PlayerState::Sprinting = state {
+						let graphic;
+						let graphic_start_x;
+						let graphic_end_x;
+						match target_dir{
+							Direction::Left => {
+								graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(start_t - self.state.time), 
+									flags: GraphicFlags::HorizontalFlip as u8, arg: 0 };
+								graphic_start_x = self.bounds.left_x - move_speed * seconds_passed;
+								graphic_end_x = self.bounds.left_x;
+							},
+							Direction::Right => {
+								graphic = Graphic{ g: GraphicGroup::Running, frame: frame_number(start_t - self.state.time), flags: 0, arg: 0 };
+								graphic_start_x = self.bounds.left_x;
+								graphic_end_x = self.bounds.left_x + move_speed * seconds_passed;
+							}
+						}
+						
+						self.add_boost_graphics(graphic, graphic_start_x, graphic_end_x, start_t);
+					}
+					
 					// move left or right
 					let mut end_x = self.bounds.left_x;
 					match target_dir {
@@ -748,6 +754,11 @@ impl Player {
 				return;
 			},
 			PlayerState::Running => {
+				let new_state = self.move_player(seconds_passed, time_running);
+				self.state = TaggedState { state: new_state, time: t };
+				return;
+			},
+			PlayerState::Sprinting => {
 				let new_state = self.move_player(seconds_passed, time_running);
 				self.state = TaggedState { state: new_state, time: t };
 				return;
@@ -859,6 +870,21 @@ impl Player {
 		}
 	}
 	
+	fn add_boost_graphics(&mut self, graphic: Graphic, start_x: f32, end_x: f32, graphic_t: f32){
+		let mut graphic_x = start_x;
+		
+		while graphic_x <= end_x { 
+			let pg = PositionedGraphic::new(graphic, graphic_x, self.bounds.top_y);
+			self.lingering_graphics.push( LingeringGraphic {
+				positioned_graphic: pg,
+				start_t: graphic_t - BOOST_PRELINGER_TIME,
+				end_t: graphic_t + BOOST_LINGER_TIME
+			});
+			
+			graphic_x += BOOST_GRAPHIC_OFFSET;
+		}
+	}
+	
 	// rendering instruction for the player
 	pub fn rendering_instructions(&self, time_running: f32) -> Vec<PositionedGraphic> {
 		let flags = match self.face_dir {
@@ -881,7 +907,7 @@ impl Player {
 				let graphic = Graphic { g: graphic_group, frame, flags, arg };
 				positioned_graphics.push(PositionedGraphic::new(graphic, self.bounds.left_x, self.bounds.top_y));
 			}
-			PlayerState::Running => {
+			PlayerState::Running | PlayerState::Sprinting => {
 				let graphic_group = GraphicGroup::Running;
 				let frame = frame_number(time_running - t);
 				let graphic = Graphic { g: graphic_group, frame, flags, arg };
