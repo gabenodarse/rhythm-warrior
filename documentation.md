@@ -21,7 +21,9 @@
 	so that if the bricks become hittable in the same tick that the action is done, they are always hit
 	(even if the slash was very slightly early, if the graphic overlaps with the brick on the slash tick, the brick is destroyed).\
 - on hold notes, the hold state begins immediately after the tick that the slash occured
-	holds are always set to start at the beginning of ticks, because the slash that preceded the hold includes a hit at the end of its tick\
+	holds are always set to start at the beginning of ticks, because the slash that preceded the hold includes a hit at the end of its tick.
+	The hold end time is recorded at the precise time of the hold release. The hold hitbox is active until the hold end time, 
+	and bricks are checked for any collision during the duration of the hold.
 - after being stunned, you will not be required to dash to the first new notes. The player will walk/run and arrive in time to hit them.
 
 # Rust source code

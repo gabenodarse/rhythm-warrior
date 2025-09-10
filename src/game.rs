@@ -40,10 +40,11 @@ use objects::BRICK_SEGMENT_HEIGHT;
 use objects::BRICK_SEGMENT_GAP;
 use objects::BRICK_WIDTH;
 use objects::HOLD_HITBOX_WIDTH;
-use player::RUN_SPEED;
+use player::SPRINT_SPEED;
 
 const MAX_TIME_BETWEEN_TICKS: f32 = 0.025;
 const MAX_BOOST_DISTANCE: f32 = 4.0 * PLAYER_WIDTH as f32;
+const EARLY_ARRIVAL_DISTANCE: f32 = BRICK_HEIGHT as f32 / 2.0;
 const BRICK_SCORE: i32 = 100;
 const HOLD_SEGMENT_SCORE: i32 = 10;
 pub const DASH_INDICATOR_WIDTH: i32 = 85;
@@ -105,7 +106,7 @@ impl Game {
 		console_error_panic_hook::set_once();
 		
 		return Game {
-			player: Player::new((BRICK_WIDTH * 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0),
+			player: Player::new((BRICK_WIDTH * 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0, EARLY_ARRIVAL_DISTANCE / brick_speed),
 			bricks: VecDeque::new(), // all bricks of the song, ordered by time they are meant to be played
 			targets: VecDeque::new(),
 			target_idx: 0,
@@ -594,7 +595,7 @@ impl Game {
 		hittable_time = group_appearance_y / self.game_data.brick_speed - ground_pos_time; // brick rises above ground
 		passed_time = group_end_y / self.game_data.brick_speed - ground_pos_time + player_height_time; // brick rises above player head
 		let time_until_target = hittable_time - player_start_time;
-		let max_run_distance = time_until_target * RUN_SPEED;
+		let max_run_distance = time_until_target * SPRINT_SPEED;
 
 		if distance_to_target > max_run_distance + MAX_BOOST_DISTANCE {
 			dash_to_target = true;
@@ -748,7 +749,7 @@ impl Game {
 		
 		let time = if time < 0.0 { 0.0 } else { time };
 		
-		self.player = Player::new((BRICK_WIDTH * 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0);
+		self.player = Player::new((BRICK_WIDTH * 2) as f32 - objects::PLAYER_WIDTH as f32 / 2.0, EARLY_ARRIVAL_DISTANCE / self.game_data.brick_speed);
 		self.last_target_missed = false;
 		self.scrolled_y = self.game_data.brick_speed * time;
 		self.end_y = Game::end_y(self.scrolled_y, self.game_data.brick_speed);

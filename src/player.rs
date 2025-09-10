@@ -55,6 +55,7 @@ pub const BOOST_GRAPHIC_OFFSET: f32 = PLAYER_WIDTH as f32 / 10.0; // how close t
 pub struct Player {
 	state: TaggedState,
 	bounds: ObjectBounds,
+	early_arrival_margin: f32, // time in seconds to arrive early to a target
 	
 	// !!! this way of getting the size of the enum is flimsy. Would prefer enum_variant_count!(Input)
 	inputs_down: [bool; Input::Slash3 as usize + 1], 
@@ -109,7 +110,7 @@ impl Object for Player {
 
 impl Player {
 	
-	pub fn new(x: f32) -> Player {
+	pub fn new(x: f32, early_arrival_margin: f32) -> Player {
 		Player {
 			state: TaggedState { time: 0.0, state: PlayerState::Standing },
 			bounds: ObjectBounds {
@@ -118,6 +119,7 @@ impl Player {
 				right_x: x + PLAYER_WIDTH as f32, 
 				bottom_y: GROUND_POS as f32
 			},
+			early_arrival_margin,
 			
 			inputs_down: [false; Input::Slash3 as usize + 1],
 			face_dir: Direction::Right,
@@ -218,6 +220,7 @@ impl Player {
 	}
 	
 	// perform a slash or slash dash if the state is correct (in preslash or preslashdash), returns hitbox and updates state
+		// only PreSlash and PreSlashDash are valid states for this function, and the state is updated to PostSlash
 	pub fn action_tick (&mut self, game_data: &GameData) -> HitBox {
 		let hitbox;
 		let time_running = game_data.time_running;
@@ -366,7 +369,7 @@ impl Player {
 		
 		// if the target was hit (presumably, based on time_running and the player's x) , update in_post_hit_pos to true
 		if let Some(ti) = &self.target {
-			if self.bounds.left_x == ti.post_hit_x && time_running > ti.hittable_time {
+			if self.bounds.left_x == ti.post_hit_x && time_running >= ti.hittable_time {
 				self.in_post_hit_pos = true;
 			}
 		}
@@ -558,7 +561,7 @@ impl Player {
 	fn boost(&mut self, time_running: f32) {
 		let target = if let Some(t) = self.target.clone() { t } else { return; };
 		
-		if target.hittable_time > time_running + F32_ZERO {
+		if target.hittable_time > time_running + self.early_arrival_margin {
 			return;
 		}
 		
@@ -655,7 +658,7 @@ impl Player {
 					let move_speed;
 
 					// either boost, sprint, run, or walk
-					if !ti.dash_to_target && ti.hittable_time <= start_t {
+					if !ti.dash_to_target && ti.hittable_time - self.early_arrival_margin <= start_t {
 						if distance_to_target >= F32_ZERO {
 							self.boost(start_t);
 						}
@@ -856,7 +859,7 @@ impl Player {
 				
 				let move_time = seconds_passed - (t - time_running);
 				let new_state = self.move_player(move_time, t);
-				self.state = TaggedState { state: new_state, time: time_running };
+				self.state = TaggedState { state: new_state, time: t };
 				return;
 			},
 			PlayerState::Stunned => {
