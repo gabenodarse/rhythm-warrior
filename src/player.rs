@@ -523,35 +523,39 @@ impl Player {
 	
 	pub fn hold_hitboxes(&self) -> Vec<HitBox> {
 		let mut hitboxes = Vec::new();
-		if let PlayerState::Hold = self.state.state {
-			let brick_type = if let Some(bt) = self.hit_type {bt} else {panic!()};
+		
+		match self.state.state {
+			PlayerState::Hold | PlayerState::PostHold => {
+				let brick_type = if let Some(bt) = self.hit_type {bt} else {panic!()}; // if player is holding there should be a hit type
 			
-			if self.hold_positions.len() > 0 {
-				for hp in &self.hold_positions {
+				if self.hold_positions.len() > 0 {
+					for hp in &self.hold_positions {
+						let bounds = ObjectBounds { 
+							left_x: *hp, 
+							right_x: *hp + HOLD_HITBOX_WIDTH as f32, 
+							top_y: GROUND_POS,
+							bottom_y: GROUND_POS + HOLD_HITBOX_HEIGHT as f32
+						};
+						
+						hitboxes.push(HitBox { bounds, brick_type });
+					}
+				} else {
+					let hitbox_x = match self.hit_dir {
+						Direction::Left => {self.bounds.left_x - BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0},
+						Direction::Right => {self.bounds.right_x + BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0}
+					};
+					
 					let bounds = ObjectBounds { 
-						left_x: *hp, 
-						right_x: *hp + HOLD_HITBOX_WIDTH as f32, 
+						left_x: hitbox_x, 
+						right_x: hitbox_x + HOLD_HITBOX_WIDTH as f32, 
 						top_y: GROUND_POS,
 						bottom_y: GROUND_POS + HOLD_HITBOX_HEIGHT as f32
 					};
 					
 					hitboxes.push(HitBox { bounds, brick_type });
 				}
-			} else {
-				let hitbox_x = match self.hit_dir {
-					Direction::Left => {self.bounds.left_x - BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0},
-					Direction::Right => {self.bounds.right_x + BRICK_WIDTH as f32 / 2.0 - HOLD_HITBOX_WIDTH as f32 / 2.0}
-				};
-				
-				let bounds = ObjectBounds { 
-					left_x: hitbox_x, 
-					right_x: hitbox_x + HOLD_HITBOX_WIDTH as f32, 
-					top_y: GROUND_POS,
-					bottom_y: GROUND_POS + HOLD_HITBOX_HEIGHT as f32
-				};
-				
-				hitboxes.push(HitBox { bounds, brick_type });
-			}
+			},
+			_ => {}
 		}
 
 		return hitboxes;
